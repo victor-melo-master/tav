@@ -67,7 +67,8 @@ tav/
 ### 0. Requisitos
 
 - Node.js ≥ 20
-- Docker y Docker Compose
+- PostgreSQL 15+ nativo en local (Homebrew, Postgres.app, etc.)
+- Docker y Docker Compose **solo para el despliegue en el VPS**, no para desarrollo local
 - Flutter ≥ 3.6 (solo para la app móvil)
 
 ### 1. Variables de entorno
@@ -79,24 +80,49 @@ cp apps/api/.env.example apps/api/.env
 cp apps/admin/.env.example apps/admin/.env
 ```
 
-### 2. Docker (Postgres + API)
+### 2. Base de datos local (Postgres nativo)
+
+```bash
+# Crear rol y bases (solo la primera vez)
+psql -d postgres -c "CREATE ROLE tav WITH SUPERUSER LOGIN PASSWORD 'tav';"
+psql -d postgres -c "CREATE DATABASE tav OWNER tav;"
+psql -d postgres -c "CREATE DATABASE tav_test OWNER tav;"
+```
+
+### 3. Docker (Postgres + API) — solo para despliegue
 
 ```bash
 docker compose up -d                    # levanta Postgres y la API
 curl http://localhost:3001/health       # → {"status":"ok","timestamp":"..."}
 ```
 
-### 3. API en modo desarrollo (opcional, sin Docker)
+### 4. API en modo desarrollo
 
 ```bash
 cd apps/api
 npm install
 npx prisma generate
-npx prisma migrate dev
+npx prisma migrate dev                  # aplica migraciones a la base tav
+npm run seed                            # carga datos de desarrollo
+npm run db:verify                       # verifica que saldoCents = suma de movimientos
 npm run start:dev                       # http://localhost:3001
 ```
 
-### 4. Panel admin
+#### Base de tests
+
+```bash
+cd apps/api
+npm run db:test:setup                  # aplica migraciones sobre tav_test
+```
+
+#### Resetear la base de desarrollo
+
+```bash
+cd apps/api
+npm run db:reset                       # prisma migrate reset --force + seed
+```
+
+### 5. Panel admin
 
 ```bash
 cd apps/admin
@@ -104,7 +130,7 @@ npm install
 npm run dev                             # http://localhost:3000
 ```
 
-### 5. App móvil
+### 6. App móvil
 
 ```bash
 cd apps/mobile
