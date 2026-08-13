@@ -3,6 +3,13 @@ import { MetodoCobro } from '@prisma/client';
 /**
  * DTOs del núcleo contable. Todo monto es BigInt de centavos.
  * Las tasas no son dinero: viajan como string decimal ("285.400000").
+ *
+ * IMPORTANTE — campos de autoría (creadaPorId, registradoPorId):
+ * Estos campos son INTERNOS del servicio. Nunca viajan en el cuerpo de la
+ * petición HTTP. El controlador los inyecta a partir del JWT del usuario
+ * autenticado (req.user.sub). Los DTOs de la capa HTTP (Fase 4) NO los
+ * incluyen; class-validator con forbidNonWhitelisted los rechaza si un
+ * cliente intenta enviarlos.
  */
 
 export interface BeneficiarioDto {
@@ -26,7 +33,8 @@ export interface RegistrarOperacionDto {
   monedaDestino: string; // "BS"
   beneficiario: BeneficiarioDto;
   comprobanteUrl?: string;
-  creadaPorId: string; // el cajero, o el admin si la registró por él
+  /** INTERNO — el controlador lo inyecta desde el JWT. Nunca del body. */
+  creadaPorId: string;
 }
 
 export interface RegistrarCobroDto {
@@ -39,7 +47,8 @@ export interface RegistrarCobroDto {
   tasaAplicada?: string | null; // obligatoria si moneda === 'BS'
   comprobanteUrl?: string;
   nota?: string;
-  registradoPorId: string; // quién lo asienta en el libro
+  /** INTERNO — el controlador lo inyecta desde el JWT. Nunca del body. */
+  registradoPorId: string;
 }
 
 export type EstadoSemaforo = 'verde' | 'ambar' | 'rojo';

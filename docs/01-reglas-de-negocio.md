@@ -203,7 +203,10 @@ Mientras no se decidan, el código mantiene el comportamiento actual y los tests
     no comprueba que `totalCents == montoOrigenCents + comisionCents`.
     Debe validarse en la capa HTTP en la Fase 4.
 
-13. **Identidad del actor.** `cajeroId` y `cobradorId` sí se validan desde la Fase 2
-    (`CajeroNoValidoException`, `CobradorNoValidoException`), pero `creadaPorId`
-    y `actorId` todavía no se comprueban contra `Usuario`. Cerrarlo en la Fase 3,
-    cuando esos valores pasen a salir del JWT y no del cuerpo de la petición.
+13. **Identidad del actor — RESUELTO en Fase 3.** `creadaPorId` y `actorId`
+    salen del JWT del usuario autenticado (`req.user.sub`), nunca del cuerpo
+    de la petición. Los DTOs del ledger los marcan como `INTERNO` y la capa
+    HTTP (Fase 4) con `forbidNonWhitelisted` los rechaza si un cliente intenta
+    enviarlos. No hace falta validarlos contra `Usuario`: si el JWT es válido,
+    el `sub` existe. `cajeroId` y `cobradorId` se validan desde la Fase 2
+    (`CajeroNoValidoException`, `CobradorNoValidoException`).

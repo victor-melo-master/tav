@@ -28,6 +28,16 @@ model Usuario {
   creadoAt     DateTime @default(now())
   creadoPorId  String?
 
+  // Logout real: incrementar tokenVersion invalida todos los tokens emitidos
+  // antes del incremento. El JWT lleva la versión con la que se firmó; refresh
+  // y loginPin rechazan si no coincide con la del usuario en BD.
+  tokenVersion  Int      @default(0)
+
+  // Bloqueo del PIN: tras 5 fallos consecutivos, pinBloqueadoAt se fija y el
+  // usuario debe entrar con contraseña para desbloquear.
+  pinIntentos    Int       @default(0)
+  pinBloqueadoAt DateTime?
+
   perfilCajero   PerfilCajero?
   perfilCobrador PerfilCobrador?
 
