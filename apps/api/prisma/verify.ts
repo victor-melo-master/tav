@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 async function main() {
   const cajeros = await prisma.perfilCajero.findMany({
     include: {
-      movimientos: { orderBy: { creadoAt: 'asc' } },
+      movimientos: { orderBy: { seq: 'asc' } },
     },
   });
 
@@ -32,8 +32,18 @@ async function main() {
       }
     }
 
+    // Verificar deudaDesde: null si saldo=0, not null si saldo>0
+    if (saldoCache === 0n && cajero.deudaDesde !== null) {
+      console.error(`✗ ${cajero.usuarioId}: saldoCents=0 pero deudaDesde=${cajero.deudaDesde} (debería ser null)`);
+      errores++;
+    }
+    if (saldoCache > 0n && cajero.deudaDesde === null) {
+      console.error(`✗ ${cajero.usuarioId}: saldoCents=${saldoCache} pero deudaDesde=null (debería tener fecha)`);
+      errores++;
+    }
+
     const pct = cajero.limiteCents > 0n ? Number(saldoCache * 100n / cajero.limiteCents) : 0;
-    console.log(`✓ ${cajero.usuarioId}: saldo=${saldoCache} suma=${sumaMovimientos} (${pct}% del límite)`);
+    console.log(`✓ ${cajero.usuarioId}: saldo=${saldoCache} suma=${sumaMovimientos} deudaDesde=${cajero.deudaDesde?.toISOString() ?? 'null'} (${pct}% del límite)`);
   }
 
   if (errores > 0) {

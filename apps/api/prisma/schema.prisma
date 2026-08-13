@@ -175,6 +175,7 @@ enum TipoMovimiento {
 /// Corregir = insertar un movimiento de reverso.
 model Movimiento {
   id              String   @id @default(uuid())
+  seq             BigInt  @default(autoincrement())
   cajeroId        String
   cajero          PerfilCajero @relation(fields: [cajeroId], references: [usuarioId])
 
@@ -188,6 +189,7 @@ model Movimiento {
   registradoPorId String
   creadoAt        DateTime @default(now())
 
+  @@index([cajeroId, seq])
   @@index([cajeroId, creadoAt])
   @@index([origenTipo, origenId])
 }

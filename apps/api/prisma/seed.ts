@@ -367,7 +367,7 @@ async function main() {
   // ── Verificación final: imprimir saldos ──
   for (let i = 0; i < cajeros.length; i++) {
     const perfil = await prisma.perfilCajero.findUniqueOrThrow({ where: { usuarioId: cajeros[i].perfilId } });
-    const movs = await prisma.movimiento.findMany({ where: { cajeroId: cajeros[i].perfilId }, orderBy: { creadoAt: 'asc' } });
+    const movs = await prisma.movimiento.findMany({ where: { cajeroId: cajeros[i].perfilId }, orderBy: { seq: 'asc' } });
     const suma = movs.reduce((acc, m) => acc + m.montoUsdCents, 0n);
     const pct = perfil.limiteCents > 0n ? Number(perfil.saldoCents * 100n / perfil.limiteCents) : 0;
     console.log(`  ${cajeros[i].spec.nombre}: saldo=${perfil.saldoCents} suma=${suma} ${perfil.saldoCents === suma ? '✓' : '✗ DESCUADRE'} (${pct}%)`);
