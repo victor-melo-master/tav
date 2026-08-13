@@ -108,6 +108,29 @@ npm run db:verify                       # verifica que saldoCents = suma de movi
 npm run start:dev                       # http://localhost:3001
 ```
 
+#### Usuarios del seed (contraseña `tav1234` para todos)
+
+| Rol | Teléfono | Nombre |
+|---|---|---|
+| Admin | +584120000001 | Iván Rojas |
+| Cobrador | +584120000002 | Carlos Pérez (Centro) |
+| Cobrador | +584120000003 | Luis Gómez (Este) |
+| Cajero | +584120000010 | José Blanco (bloqueado 100%) |
+| Cajero | +584120000011 | Ana Rodríguez (88% cupo) |
+| Cajero | +584120000012 | Pedro Mendoza (8 días deuda) |
+| Cajero | +584120000013 | María Torres (sin conexión 4 días) |
+| Cajero | +584120000014 | Carlos Ruiz (al día) |
+| Cajero | +584120000015 | Sofía Díaz (al día, saldo 0) |
+| Cajero | +584120000016 | Luis Hernández (al día, saldo bajo) |
+| Cajero | +584120000017 | Elena Vargas (deuda moderada) |
+
+```bash
+# Verificar login con curl
+curl -X POST http://localhost:3001/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"telefono":"+584120000010","password":"tav1234"}'
+```
+
 #### Base de tests
 
 ```bash

@@ -1,5 +1,6 @@
 import { PrismaClient, Rol, TipoMovimiento, MetodoCobro, EstadoOperacion, EstadoCierre } from '@prisma/client';
 import * as crypto from 'crypto';
+import argon2 from 'argon2';
 const randomUUID = crypto.randomUUID;
 
 const prisma = new PrismaClient();
@@ -10,11 +11,16 @@ const now = new Date();
 const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
 const hoursAgo = (n: number) => new Date(now.getTime() - n * 60 * 60 * 1000);
 
-const PASS_HASH = 'argon2-placeholder'; // PENDIENTE DE DEFINIR: hash real con argon2 en Fase 3
+// Contraseña de desarrollo para todos los usuarios del seed.
+// En producción las cuentas las crea el admin con contraseñas individuales.
+const DEV_PASSWORD = 'tav1234';
 
 // ───────────────────────── estructura del seed ─────────────────────────
 
 async function main() {
+  // Hash real con argon2 — mismo algoritmo que usa auth.service.ts en runtime.
+  const PASS_HASH = await argon2.hash(DEV_PASSWORD);
+
   // Limpiar todo en orden de dependencias
   await prisma.auditLog.deleteMany();
   await prisma.aviso.deleteMany();
