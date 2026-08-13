@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'config/app_config.dart';
+
 void main() {
   runApp(const TavApp());
 }
@@ -18,7 +20,7 @@ class TavApp extends StatelessWidget {
       ),
       home: const Scaffold(
         body: Center(
-          child: Text('TAV'),
+          child: Text('TAV — ${AppConfig.apiBaseUrl}'),
         ),
       ),
     );
