@@ -15,18 +15,25 @@
  * el test. Un test en rojo es información.
  */
 
-import { PrismaClient, MetodoCobro } from '@prisma/client';
+import { PrismaClient, MetodoCobro, Cobro } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { LedgerService } from '../src/ledger/ledger.service';
 import { SemaforoService } from '../src/ledger/semaforo.service';
+import type { RegistrarOperacionDto, RegistrarCobroDto } from '../src/ledger/ledger.dto';
+import {
+  LedgerException,
+  SinCupoException,
+  CobradorNoValidoException,
+  CierreNoAbiertoException,
+} from '../src/ledger/ledger.exceptions';
 
 // ─────────────────────────── entorno ───────────────────────────
 
 const TEST_URL = 'postgresql://tav:tav@localhost:5432/tav_test?schema=public';
 
 const prisma = new PrismaClient({ datasources: { db: { url: TEST_URL } } });
-const ledger = new LedgerService(prisma as any);
-const semaforo = new SemaforoService(prisma as any);
+const ledger = new LedgerService(prisma);
+const semaforo = new SemaforoService(prisma);
 
 // Actor/admin dummy para los campos *PorId que no tienen FK en el schema
 // (creadaPorId, registradoPorId, anuladoPorId, resueltaPorId). Si alguno
@@ -125,7 +132,7 @@ function opDto(opts: {
   comisionCents?: bigint;
   tasaAplicada?: string;
   creadaPorId?: string;
-}): any {
+}): RegistrarOperacionDto {
   return {
     clientUuid: opts.clientUuid ?? uuid(),
     cajeroId: opts.cajeroId,
@@ -157,7 +164,7 @@ function cobroDto(opts: {
   tasaAplicada?: string | null;
   cobradorId?: string | null;
   clientUuid?: string;
-}): any {
+}): RegistrarCobroDto {
   return {
     clientUuid: opts.clientUuid ?? uuid(),
     cajeroId: opts.cajeroId,
@@ -206,15 +213,8 @@ async function folioOpSeq(): Promise<bigint> {
   return BigInt(r[0].last_value);
 }
 
-async function folioCobroSeq(): Promise<bigint> {
-  const r = await prisma.$queryRawUnsafe<[{ last_value: bigint }]>(
-    `SELECT last_value FROM "folio_cobro_seq"`,
-  );
-  return BigInt(r[0].last_value);
-}
-
 function codeOf(e: unknown): string {
-  return (e as any)?.code ?? '';
+  return e instanceof LedgerException ? e.code : '';
 }
 
 // ─────────────────────────── setup/teardown ───────────────────────────
@@ -281,19 +281,19 @@ describe('Bloque 1 — los siete obligatorios del plan', () => {
     ).rejects.toMatchObject({ code: 'SIN_CUPO' });
 
     // payload del contrato: {disponible, requerido, faltante} en bigint
-    let err: any;
+    let err: SinCupoException | undefined;
     try {
       await ledger.registrarOperacion(
         opDto({ cajeroId: c.id, totalCents: 150_000n, clientUuid: uuid() }),
       );
       throw new Error('no lanzó');
     } catch (e) {
-      err = e;
+      err = e as SinCupoException;
     }
-    expect(err.code).toBe('SIN_CUPO');
-    expect(BigInt(err.payload.disponible)).toBe(100_000n);
-    expect(BigInt(err.payload.requerido)).toBe(150_000n);
-    expect(BigInt(err.payload.faltante)).toBe(50_000n);
+    expect(err!.code).toBe('SIN_CUPO');
+    expect(BigInt(err!.payload.disponible)).toBe(100_000n);
+    expect(BigInt(err!.payload.requerido)).toBe(150_000n);
+    expect(BigInt(err!.payload.faltante)).toBe(50_000n);
 
     // no se creó operación, ni movimiento, ni se consumió folio, ni cambió saldo
     expect(await prisma.operacion.count()).toBe(opsAntes);
@@ -314,7 +314,7 @@ describe('Bloque 1 — los siete obligatorios del plan', () => {
     const rechazados = resultados.filter((r) => r.status === 'rejected');
     expect(cumplidos).toHaveLength(1);
     expect(rechazados).toHaveLength(1);
-    expect(codeOf((rechazados[0] as any).reason)).toBe('SIN_CUPO');
+    expect(codeOf(rechazados[0].reason)).toBe('SIN_CUPO');
 
     expect(await prisma.operacion.count()).toBe(1);
     expect(await prisma.movimiento.count()).toBe(1);
@@ -363,10 +363,12 @@ describe('Bloque 1 — los siete obligatorios del plan', () => {
     expect((await perfil(c.id)).saldoCents).toBe(50_000n);
 
     const anulado = await ledger.anular('cobro', cobro.id, 'cobro mal registrado', ACTOR);
+    // anular devuelve Operacion | Cobro; aquí sabemos que es un Cobro.
+    const cobroAnulado = anulado as Cobro;
 
-    expect((anulado as any).anuladoAt).not.toBeNull();
-    expect((anulado as any).motivoAnulacion).toBe('cobro mal registrado');
-    expect((anulado as any).anuladoPorId).toBe(ACTOR);
+    expect(cobroAnulado.anuladoAt).not.toBeNull();
+    expect(cobroAnulado.motivoAnulacion).toBe('cobro mal registrado');
+    expect(cobroAnulado.anuladoPorId).toBe(ACTOR);
 
     // saldo vuelve EXACTO al valor anterior al cobro (mismo bigint, sin reconversión)
     expect((await perfil(c.id)).saldoCents).toBe(saldoAntesCobro);
@@ -460,9 +462,10 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
 
     // ambos resuelven: uno yaExistia false, el otro true, mismo id
     expect(res.every((r) => r.status === 'fulfilled')).toBe(true);
-    const ids = res.map((r) => (r as any).value.operacion.id);
+    const cumplidos = res as PromiseFulfilledResult<{ operacion: { id: string }; yaExistia: boolean }>[];
+    const ids = cumplidos.map((r) => r.value.operacion.id);
     expect(ids[0]).toBe(ids[1]);
-    const yaEx = res.map((r) => (r as any).value.yaExistia).sort();
+    const yaEx = cumplidos.map((r) => r.value.yaExistia).sort();
     expect(yaEx).toEqual([false, true]);
     expect(await prisma.operacion.count()).toBe(1);
     expect((await perfil(c.id)).saldoCents).toBe(30_000n);
@@ -525,7 +528,8 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
 
     expect(res.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect(res.filter((r) => r.status === 'rejected')).toHaveLength(1);
-    expect(codeOf((res.find((r) => r.status === 'rejected') as any).reason)).toBe('YA_ANULADO');
+    const rechazado = res.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
+    expect(codeOf(rechazado!.reason)).toBe('YA_ANULADO');
     // un solo reverso_abono
     expect(
       await prisma.movimiento.count({ where: { tipo: 'reverso_abono', cajeroId: c.id } }),
@@ -553,16 +557,16 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
     const amp = await crearAmpliacionAprobada(c.id, 20_000n);
 
     // 31.000 falla: disponible = 10.000 + 20.000 = 30.000 → faltante 1.000
-    let err: any;
+    let err: SinCupoException | undefined;
     try {
       await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 31_000n }));
       throw new Error('no lanzó');
     } catch (e) {
-      err = e;
+      err = e as SinCupoException;
     }
-    expect(err.code).toBe('SIN_CUPO');
-    expect(BigInt(err.payload.disponible)).toBe(30_000n);
-    expect(BigInt(err.payload.faltante)).toBe(1_000n);
+    expect(err!.code).toBe('SIN_CUPO');
+    expect(BigInt(err!.payload.disponible)).toBe(30_000n);
+    expect(BigInt(err!.payload.faltante)).toBe(1_000n);
 
     // 25.000 pasa (25.000 ≤ 30.000) y consume la ampliación
     const { operacion } = await ledger.registrarOperacion(
@@ -679,17 +683,17 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
     const cobrosAntes = await prisma.cobro.count();
     const movsAntes = await prisma.movimiento.count({ where: { cajeroId: c.id } });
 
-    let err: any;
+    let err: CobradorNoValidoException | undefined;
     try {
       await ledger.registrarCobro(
         cobroDto({ cajeroId: c.id, montoCents: 10_000n, cobradorId: 'cobrador-inexistente' }),
       );
       throw new Error('no lanzó');
     } catch (e) {
-      err = e;
+      err = e as CobradorNoValidoException;
     }
-    expect(err.code).toBe('COBRADOR_NO_VALIDO');
-    expect(err.cobradorId).toBe('cobrador-inexistente');
+    expect(err!.code).toBe('COBRADOR_NO_VALIDO');
+    expect(err!.cobradorId).toBe('cobrador-inexistente');
     // no se creó cobro ni movimiento
     expect(await prisma.cobro.count()).toBe(cobrosAntes);
     expect(await prisma.movimiento.count({ where: { cajeroId: c.id } })).toBe(movsAntes);
@@ -737,7 +741,8 @@ describe('Hallazgos adicionales (bugs fuera de los 12 casos del contrato)', () =
     // Ambos deben fulfilled con el mismo id (uno yaExistia true). Hoy el segundo
     // rechaza con SIN_CUPO.
     expect(res.every((r) => r.status === 'fulfilled')).toBe(true);
-    const ids = res.map((r) => (r as any).value?.operacion?.id);
+    const cumplidos = res as PromiseFulfilledResult<{ operacion: { id: string }; yaExistia: boolean }>[];
+    const ids = cumplidos.map((r) => r.value?.operacion?.id);
     expect(ids[0]).toBe(ids[1]);
     expect(await prisma.operacion.count()).toBe(1);
     expect((await perfil(c.id)).saldoCents).toBe(60_000n);
@@ -762,7 +767,7 @@ describe('PENDIENTE DE DEFINIR — comportamiento actual, sujeto a decisión del
     //   del semáforo depende de esto.
     const c = await crearCajero({ limiteCents: 100_000n });
 
-    const { operacion } = await ledger.registrarOperacion(
+    await ledger.registrarOperacion(
       opDto({ cajeroId: c.id, totalCents: 60_000n }),
     );
     const fechaCargoOriginal = (await perfil(c.id)).deudaDesde!;
@@ -838,18 +843,18 @@ describe('PENDIENTE DE DEFINIR — comportamiento actual, sujeto a decisión del
     const cobrosAntes = await prisma.cobro.count();
     const movsAntes = await prisma.movimiento.count({ where: { cajeroId: c.id } });
 
-    let err: any;
+    let err: CierreNoAbiertoException | undefined;
     try {
       await ledger.registrarCobro(
         cobroDto({ cajeroId: c.id, montoCents: 5_000n, cobradorId: cob.id }),
       );
       throw new Error('no lanzó');
     } catch (e) {
-      err = e;
+      err = e as CierreNoAbiertoException;
     }
-    expect(err.code).toBe('CIERRE_NO_ABIERTO');
-    expect(err.cierreId).toBe(cierre.id);
-    expect(err.estado).toBe('enviado');
+    expect(err!.code).toBe('CIERRE_NO_ABIERTO');
+    expect(err!.cierreId).toBe(cierre.id);
+    expect(err!.estado).toBe('enviado');
     // no se creó cobro ni movimiento
     expect(await prisma.cobro.count()).toBe(cobrosAntes);
     expect(await prisma.movimiento.count({ where: { cajeroId: c.id } })).toBe(movsAntes);

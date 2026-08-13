@@ -9,6 +9,12 @@ process.env.JWT_REFRESH_EXPIRES_IN = '30d';
 // Serialización global de BigInt: los montos salen como string en el JSON.
 // En producción esto vive en main.ts, pero los tests no ejecutan main.ts —
 // crean la app con Test.createTestingModule, así que hay que parchearlo aquí.
-(BigInt.prototype as any).toJSON = function () {
+// La augmentación de interfaz evita el cast a `any` (ver main.ts para el detalle).
+declare global {
+  interface BigInt {
+    toJSON(): string;
+  }
+}
+BigInt.prototype.toJSON = function () {
   return this.toString();
 };

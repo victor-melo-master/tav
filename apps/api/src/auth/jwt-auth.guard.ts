@@ -4,10 +4,12 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { JwtPayload } from './auth.types';
 
 /**
  * Guard global: protege toda ruta que no tenga @Public().
@@ -40,7 +42,7 @@ export class JwtAuthGuard implements CanActivate {
     const token = this.extractToken(request);
     if (!token) throw new UnauthorizedException('Token no proporcionado');
 
-    let payload: { sub: string; rol: string; nombre: string };
+    let payload: JwtPayload;
     try {
       payload = await this.jwtService.verifyAsync(token);
     } catch {
@@ -60,7 +62,7 @@ export class JwtAuthGuard implements CanActivate {
     return true;
   }
 
-  private extractToken(request: any): string | null {
+  private extractToken(request: Request): string | null {
     const [type, token] = request.headers?.authorization?.split(' ') ?? [];
     return type === 'Bearer' && token ? token : null;
   }

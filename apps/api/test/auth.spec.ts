@@ -15,7 +15,7 @@
 import { Test } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import argon2 from 'argon2';
 import { AppModule } from '../src/app.module';
 import { JwtService } from '@nestjs/jwt';
@@ -46,7 +46,7 @@ async function crearUsuario(opts: {
   limiteCents?: bigint;
 }): Promise<{ id: string; telefono: string; password: string }> {
   const passwordHash = await argon2.hash(opts.password);
-  const data: any = {
+  const data: Prisma.UsuarioCreateInput = {
     rol: opts.rol,
     nombre: opts.nombre ?? opts.rol,
     telefono: opts.telefono,
@@ -145,7 +145,7 @@ describe('Auth — token expirado', () => {
     // firmar un token que ya expiró (expira en 1 segundo, esperamos)
     const token = await jwtService.signAsync(
       { sub: u.id, rol: 'cajero', nombre: 'cajero' },
-      { expiresIn: '1s' as any },
+      { expiresIn: '1s' },
     );
     await new Promise((r) => setTimeout(r, 1500));
 
@@ -196,7 +196,7 @@ describe('Auth — refresh', () => {
   test('refresh con token firmado con otro secreto devuelve 401', async () => {
     const otroJwt = new JwtService({
       secret: 'otro-secreto-totalmente-diferente',
-    } as any);
+    });
 
     const token = await otroJwt.signAsync({ sub: 'x', rol: 'cajero', nombre: 'x' });
 

@@ -9,7 +9,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     try {
       await this.$connect();
       this.logger.log('Connected to database');
-    } catch (error) {
+    } catch (_error) {
       this.logger.warn('Database not available — API starts but DB operations will fail');
     }
   }

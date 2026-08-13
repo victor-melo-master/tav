@@ -1,4 +1,4 @@
-import { PrismaClient, Rol, TipoMovimiento, MetodoCobro, EstadoOperacion } from '@prisma/client';
+import { PrismaClient, Rol, TipoMovimiento, MetodoCobro, EstadoOperacion, EstadoCierre } from '@prisma/client';
 import * as crypto from 'crypto';
 const randomUUID = crypto.randomUUID;
 
@@ -79,7 +79,7 @@ async function main() {
   });
 
   // ── Tasas ──
-  const tasaUsdtBs = await prisma.tasa.create({
+  await prisma.tasa.create({
     data: {
       id: randomUUID(),
       par: 'USDT_BS',
@@ -89,7 +89,7 @@ async function main() {
     },
   });
 
-  const tasaUsdBs = await prisma.tasa.create({
+  await prisma.tasa.create({
     data: {
       id: randomUUID(),
       par: 'USD_BS',
@@ -252,7 +252,7 @@ async function main() {
     const fechaCierre = new Date(fecha);
     fechaCierre.setHours(0, 0, 0, 0);
     let cierre = await prisma.cierre.findFirst({
-      where: { cobradorId, fecha: fechaCierre, estado: 'abierto' as any },
+      where: { cobradorId, fecha: fechaCierre, estado: EstadoCierre.abierto },
     });
 
     if (!cierre) {
@@ -261,7 +261,7 @@ async function main() {
           id: randomUUID(),
           cobradorId,
           fecha: fechaCierre,
-          estado: 'abierto' as any,
+          estado: EstadoCierre.abierto,
         },
       });
     }

@@ -199,9 +199,11 @@ Mientras no se decidan, el código mantiene el comportamiento actual y los tests
 11. **Dos ampliaciones aprobadas al mismo tiempo.** Hoy se usa solo la más antigua y
     nunca se suman. El flujo del admin debería impedir que existan dos activas.
 
-12. **Validación aritmética de la operación.** El ledger asienta lo que le mandan:
-    no comprueba que `totalCents == montoOrigenCents + comisionCents`.
-    Debe validarse en la capa HTTP en la Fase 4.
+12. **Validación aritmética de la operación — RESUELTO en Fase 4.** El ledger
+    asienta lo que le mandan: no comprueba que `totalCents == montoOrigenCents +
+    comisionCents`. Esta validación vive ahora en el DTO HTTP
+    (`CrearOperacionDto` con `@Validate(CoherenciaAritmeticaConstraint)`): un
+    DTO incoherente se rechaza con 400 antes de tocar la base de datos.
 
 13. **Identidad del actor — RESUELTO en Fase 3.** `creadaPorId` y `actorId`
     salen del JWT del usuario autenticado (`req.user.sub`), nunca del cuerpo

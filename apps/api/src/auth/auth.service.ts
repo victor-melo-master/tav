@@ -5,22 +5,28 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import argon2 from 'argon2';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto, RefreshDto, SetPinDto, LoginPinDto } from './dto/login.dto';
 import { PinBloqueadoException } from './auth.exceptions';
+import { JwtPayload } from './auth.types';
+import type { StringValue } from 'ms';
 
 /**
- * Payload del JWT: mínimo indispensable para autorizar sin consultar la BD
- * en cada petición. El rol viaja aquí para que el RolesGuard decida sin I/O.
- * tokenVersion permite invalidar todas las sesiones de un usuario: logout
- * y logout-all la incrementan, y refresh/loginPin rechazan si no coincide.
+ * Usuario con sus perfiles incluidos (para login y me).
+ * Prisma genera este tipo a partir del `include` del findUnique.
  */
-interface JwtPayload {
-  sub: string; // Usuario.id
-  rol: string; // 'cajero' | 'cobrador' | 'admin'
-  nombre: string;
-  tokenVersion: number;
-}
+type UsuarioConPerfiles = Prisma.UsuarioGetPayload<{
+  include: { perfilCajero: true; perfilCobrador: true };
+}>;
+
+/**
+ * Usuario sin campos sensibles: lo que se devuelve al cliente.
+ */
+type UsuarioPublico = Omit<UsuarioConPerfiles, 'passwordHash' | 'pinHash'>;
+
+/** Mínimo para firmar un JWT: quien es y qué versión de token tiene. */
+type UsuarioParaToken = Pick<UsuarioConPerfiles, 'id' | 'rol' | 'nombre' | 'tokenVersion'>;
 
 const MAX_INTENTOS_PIN = 5;
 
@@ -38,7 +44,7 @@ export class AuthService {
 
   // ─────────────────────────── LOGIN ───────────────────────────
 
-  async login(dto: LoginDto): Promise<{ accessToken: string; refreshToken: string; usuario: any }> {
+  async login(dto: LoginDto): Promise<{ accessToken: string; refreshToken: string; usuario: UsuarioPublico }> {
     const usuario = await this.prisma.usuario.findUnique({
       where: { telefono: dto.telefono },
       include: { perfilCajero: true, perfilCobrador: true },
@@ -102,7 +108,7 @@ export class AuthService {
 
   // ─────────────────────────── ME ───────────────────────────
 
-  async me(userId: string): Promise<any> {
+  async me(userId: string): Promise<UsuarioPublico> {
     const usuario = await this.prisma.usuario.findUniqueOrThrow({
       where: { id: userId },
       include: { perfilCajero: true, perfilCobrador: true },
@@ -192,12 +198,12 @@ export class AuthService {
     }
   }
 
-  private async emitirTokensYUsuario(usuario: any): Promise<{ accessToken: string; refreshToken: string; usuario: any }> {
+  private async emitirTokensYUsuario(usuario: UsuarioConPerfiles): Promise<{ accessToken: string; refreshToken: string; usuario: UsuarioPublico }> {
     const tokens = await this.emitirTokens(usuario);
     return { ...tokens, usuario: this.perfilPublico(usuario) };
   }
 
-  private async emitirTokens(usuario: any): Promise<{ accessToken: string; refreshToken: string }> {
+  private async emitirTokens(usuario: UsuarioParaToken): Promise<{ accessToken: string; refreshToken: string }> {
     const payload: JwtPayload = {
       sub: usuario.id,
       rol: usuario.rol,
@@ -206,7 +212,11 @@ export class AuthService {
     };
     const accessToken = await this.jwtService.signAsync(payload);
     const refreshToken = await this.jwtService.signAsync(payload, {
-      expiresIn: this.refreshExpiresIn as any,
+      // JwtSignOptions.expiresIn es `number | StringValue` (template literal
+      // type de `ms`). Un string genérico no es asignable, aunque en runtime
+      // sea lo mismo. El cast es seguro: refreshExpiresIn viene de
+      // JWT_REFRESH_EXPIRES_IN con formato de duración de ms ("30d", "7d").
+      expiresIn: this.refreshExpiresIn as StringValue,
     });
     return { accessToken, refreshToken };
   }
@@ -223,8 +233,8 @@ export class AuthService {
    * Quita campos sensibles (passwordHash, pinHash) antes de devolver el usuario.
    * BigInt se serializa como string (ver main.ts).
    */
-  private perfilPublico(usuario: any): any {
-    const { passwordHash, pinHash, ...resto } = usuario;
+  private perfilPublico(usuario: UsuarioConPerfiles): UsuarioPublico {
+    const { passwordHash: _ph, pinHash: _pin, ...resto } = usuario;
     return resto;
   }
 }
