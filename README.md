@@ -1,0 +1,68 @@
+# TAV
+
+Casa de cambio y remesas que opera **a crédito** con revendedores (*cajeros*).
+Tres roles, un solo libro de cuentas compartido.
+
+> El dinero de la app es ficticio: no se mueve plata por aquí.
+> Todo pago real ocurre por fuera. La app existe para que todos miren el mismo número.
+
+---
+
+## Empieza por aquí
+
+| Archivo | Qué es |
+|---|---|
+| **`AGENTS.md`** | Reglas que ningún agente de IA puede romper. Léelo primero. |
+| `docs/01-reglas-de-negocio.md` | Lo que dijo el cliente. Lo que no está ahí, no está decidido. |
+| `docs/02-modelo-de-datos.md` | Schema Prisma y las dos transacciones críticas. |
+| `docs/03-plan-de-construccion.md` | Las 8 fases, con los prompts listos para Windsurf. |
+| `design/index.html` | Prototipos navegables y sistema de diseño. **Ábrelo en el navegador.** |
+
+---
+
+## Los tres roles
+
+**Cajero** — revendedor. Opera a crédito, tiene un límite que fija el admin.
+Al topar el límite se le bloquean las transacciones: eso lo obliga a pagar sin que nadie lo llame.
+
+**Cobrador** — recorre zonas cobrando. Registra cada cobro al instante, cierra su día
+y entrega el efectivo. Varios cobradores comparten una sola lista de deudores.
+
+**Admin** — uno solo. Fija límites, aprueba ampliaciones, verifica los cierres diarios.
+
+Cajero y cobrador viven en **la misma app móvil**; el rol decide qué ve al entrar.
+El admin usa un panel web.
+
+---
+
+## Stack
+
+```
+apps/api      NestJS + Prisma + PostgreSQL 16 + Socket.IO
+apps/mobile   Flutter · cajero y cobrador en un binario · Drift para offline
+apps/admin    Next.js 15 + shadcn/ui
+```
+
+Despliegue con Docker Compose en VPS propio. Menos de 50 usuarios: no hace falta más.
+
+---
+
+## Arrancar en local
+
+```bash
+docker compose up -d          # Postgres
+cd apps/api && npm install && npx prisma migrate dev && npm run seed && npm run start:dev
+cd apps/admin && npm install && npm run dev
+cd apps/mobile && flutter pub get && flutter run
+```
+
+---
+
+## Las tres reglas que más se rompen
+
+1. **Los montos son enteros de centavos.** Nunca decimales.
+2. **`movimientos` es de solo-inserción.** Corregir es insertar un reverso, no editar ni borrar.
+3. **El límite de crédito se valida en la base de datos**, dentro de una transacción
+   con `FOR UPDATE`. Que el botón esté gris en Flutter no es una validación.
+
+El resto está en `AGENTS.md`.

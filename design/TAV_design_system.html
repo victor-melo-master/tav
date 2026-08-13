@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TAV — Sistema de diseño</title>
+<style>
+:root{
+  --navy:#0B1B33;
+  --blue:#1F6FEB; --blue-600:#1558C7; --blue-50:#EAF2FE;
+  --green:#4CAF50; --green-600:#2E7D32; --green-50:#EAF7EB;
+  --gold:#D9A441; --gold-700:#8A6010; --gold-50:#FBF3E3;
+  --red:#E5484D; --red-700:#B42318; --red-50:#FDECEC;
+  --bg:#F4F5F7; --surface:#FFFFFF; --line:#E5E8EC; --line-2:#EFF1F4;
+  --ink:#101828; --ink-2:#475467; --ink-3:#667085; --ink-4:#98A2B3;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sh:0 1px 2px rgba(16,24,40,.05),0 8px 24px rgba(16,24,40,.06);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,sans-serif;
+  background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;display:flex}
+
+/* NAV */
+nav{width:246px;flex:0 0 246px;height:100vh;position:sticky;top:0;background:var(--navy);
+  padding:26px 16px;overflow-y:auto}
+nav .bk{display:flex;align-items:center;gap:8px;color:#7FB4FF;text-decoration:none;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;margin-bottom:22px}
+nav .bk:hover{color:#fff}
+nav .ttl{color:#fff;font-size:16px;font-weight:680;letter-spacing:-.01em;margin:0 0 3px}
+nav .ver{color:#6B84A3;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;margin-bottom:22px}
+nav a.s{display:block;color:#AFC4DA;text-decoration:none;font-size:13px;padding:7px 10px;border-radius:8px;line-height:1.3}
+nav a.s:hover{background:rgba(255,255,255,.07);color:#fff}
+nav a.s.on{background:var(--blue);color:#fff;font-weight:600}
+nav .gp{color:#5F7897;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;
+  text-transform:uppercase;margin:20px 0 6px;padding-left:10px}
+
+main{flex:1;min-width:0;padding:0 0 90px}
+.hd{background:var(--surface);border-bottom:1px solid var(--line);padding:52px 46px 40px}
+.hd h1{font-size:38px;margin:0 0 12px;letter-spacing:-.03em}
+.hd p{color:var(--ink-3);font-size:15px;line-height:1.65;max-width:66ch;margin:0}
+.in{padding:0 46px}
+section{padding:48px 0 6px;scroll-margin-top:0}
+h2{font-size:24px;letter-spacing:-.02em;margin:0 0 6px;display:flex;align-items:baseline;gap:12px}
+h2 em{font-family:var(--mono);font-size:11px;font-style:normal;color:var(--ink-4);letter-spacing:.1em}
+.lead{color:var(--ink-3);font-size:14.5px;line-height:1.7;margin:0 0 26px;max-width:76ch}
+h3.sub{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);margin:34px 0 14px}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:24px;box-shadow:var(--sh)}
+.gr{display:grid;gap:14px}
+code{font-family:var(--mono);font-size:12px;background:var(--bg);border:1px solid var(--line);
+  padding:2px 6px;border-radius:5px;color:var(--ink-2)}
+
+/* COLOR */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:14px}
+.sw{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--sh)}
+.sw .chip{height:78px;display:flex;align-items:flex-end;padding:9px 12px;font-family:var(--mono);font-size:11px;font-weight:600}
+.sw .meta{padding:12px 13px 14px}
+.sw .nm{font-size:13.5px;font-weight:650;margin-bottom:2px}
+.sw .hx{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);text-transform:uppercase}
+.sw .use{font-size:11.5px;color:var(--ink-3);line-height:1.5;margin-top:8px;border-top:1px solid var(--line-2);padding-top:8px}
+.ratio{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;font-weight:700;
+  padding:3px 7px;border-radius:5px;margin-top:8px;margin-right:5px}
+.pass{background:var(--green-50);color:var(--green-600)}
+.fail{background:var(--red-50);color:var(--red-700)}
+.warn{background:var(--gold-50);color:var(--gold-700)}
+
+/* TABLA */
+table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--surface);
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--sh)}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);
+  padding:12px 16px;background:#FAFBFC;border-bottom:1px solid var(--line);font-weight:700}
+td{padding:13px 16px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+td.m{font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+
+/* TIPO */
+.tp{display:flex;align-items:baseline;gap:22px;padding:15px 0;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+.tp:last-child{border-bottom:none}
+.tp .sp{font-family:var(--mono);font-size:11px;color:var(--ink-4);width:150px;flex:0 0 150px;letter-spacing:.03em}
+
+/* ESPACIADO */
+.sp-row{display:flex;align-items:center;gap:16px;padding:9px 0}
+.sp-bar{background:var(--blue);height:16px;border-radius:3px}
+.rad{display:flex;gap:16px;flex-wrap:wrap}
+.rad div{text-align:center}
+.rad i{display:block;width:76px;height:60px;background:var(--blue-50);border:1.5px solid var(--blue);margin-bottom:7px}
+
+/* COMPONENTES */
+.demo{background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:26px;display:flex;
+  flex-wrap:wrap;gap:14px;align-items:flex-start}
+.demo.col{flex-direction:column}
+.demo.dark{background:var(--navy);border-color:#1B3557}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:52px;padding:0 26px;
+  border-radius:14px;font-size:15px;font-weight:650;cursor:pointer;border:1px solid transparent;font-family:inherit}
+.btn-p{background:var(--blue);color:#fff;box-shadow:0 6px 16px rgba(31,111,235,.28)}
+.btn-d{background:var(--navy);color:#fff}
+.btn-g{background:var(--green-600);color:#fff;box-shadow:0 6px 16px rgba(46,125,50,.24)}
+.btn-o{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.btn-t{background:transparent;color:var(--blue)}
+.btn-x{background:#DDE2E8;color:#9AA5B2}
+.inp{width:100%;max-width:330px;height:50px;border:1px solid var(--line);border-radius:12px;background:#fff;
+  padding:0 14px;font-size:15px;font-family:inherit;color:var(--ink);display:flex;align-items:center}
+.inp.ph{color:var(--ink-3)}
+.inp.fc{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-50)}
+.inp.er{border-color:var(--red);box-shadow:0 0 0 3px var(--red-50)}
+.cp{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:650;padding:4px 10px;border-radius:999px}
+.c-green{background:var(--green-50);color:#256B2A}
+.c-gold{background:var(--gold-50);color:var(--gold-700)}
+.c-red{background:var(--red-50);color:var(--red-700)}
+.c-blue{background:var(--blue-50);color:var(--blue-600)}
+.c-gray{background:#F1F3F6;color:var(--ink-2)}
+.mini{width:330px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--sh)}
+.li{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line-2)}
+.li:last-child{border-bottom:none}
+.av{width:42px;height:42px;border-radius:12px;background:var(--blue-50);display:flex;align-items:center;justify-content:center;flex:0 0 42px}
+.li .tx{flex:1;min-width:0}
+.li .tx b{display:block;font-size:14px;font-weight:600}
+.li .tx span{font-size:12px;color:var(--ink-3)}
+.li .rt{text-align:right}
+.li .rt b{display:block;font-size:14px;font-weight:650}
+.li .rt span{font-size:11px;color:var(--ink-3)}
+svg.i{width:20px;height:20px;stroke:var(--ink);stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}
+svg.i.b{stroke:var(--blue)} svg.i.w{stroke:#fff} svg.i.g{stroke:var(--green-600)} svg.i.m{stroke:var(--ink-4)}
+.prog{height:7px;border-radius:99px;background:#E9ECF1;overflow:hidden;margin-top:12px}
+.prog i{display:block;height:100%;border-radius:99px}
+.icons{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}
+.ic{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 6px;text-align:center}
+.ic span{display:block;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:7px;word-break:break-all}
+pre{background:var(--navy);color:#D8E5F5;border-radius:14px;padding:20px 22px;overflow-x:auto;
+  font-family:var(--mono);font-size:12.2px;line-height:1.68;margin:0}
+pre .k{color:#7FB4FF} pre .s{color:#8ED97C} pre .c{color:#6B84A3}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.rule{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--line-2);font-size:13.8px;line-height:1.6}
+.rule:last-child{border-bottom:none}
+.rule i{flex:0 0 22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:11px;font-weight:700;margin-top:1px}
+.rule.do i{background:var(--green-50);color:var(--green-600)}
+.rule.dont i{background:var(--red-50);color:var(--red-700)}
+@media(max-width:980px){nav{display:none}.hd,.in{padding-left:22px;padding-right:22px}.cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<svg style="display:none">
+<symbol id="ic-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="ic-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+<symbol id="ic-wallet" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1"/><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3"/><path d="M21 10h-4a2 2 0 0 0 0 4h4z"/></symbol>
+<symbol id="ic-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></symbol>
+<symbol id="ic-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M10.5 20a2 2 0 0 0 3 0"/></symbol>
+<symbol id="ic-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="ic-check" viewBox="0 0 24 24"><path d="M4.5 12.5 9.5 17.5 20 7"/></symbol>
+<symbol id="ic-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol>
+<symbol id="ic-up" viewBox="0 0 24 24"><path d="M12 17V5M7 10l5-5 5 5"/><path d="M4 19h16"/></symbol>
+<symbol id="ic-down" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5"/><path d="M4 20h16"/></symbol>
+<symbol id="ic-alert" viewBox="0 0 24 24"><path d="M12 3 1.8 20h20.4z"/><path d="M12 10v4M12 17.2h.01"/></symbol>
+<symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.3l3.2 2"/></symbol>
+<symbol id="ic-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.8 9.3c-.5-.8-1.6-1.2-2.8-1.2-1.6 0-2.7.8-2.7 1.9 0 2.7 5.6 1.4 5.6 4.1 0 1.2-1.2 2-2.9 2-1.3 0-2.4-.5-2.9-1.3"/></symbol>
+<symbol id="ic-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></symbol>
+<symbol id="ic-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></symbol>
+<symbol id="ic-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5"/><path d="M17 5.5a3.5 3.5 0 0 1 0 6.5M18.5 20c0-2.4-.8-3.9-2-4.9"/></symbol>
+<symbol id="ic-lock" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+<symbol id="ic-chat" viewBox="0 0 24 24"><path d="M21 11.5c0 4.1-4 7.5-9 7.5-1 0-2-.1-2.9-.4L4 21l1.3-3.6C3.9 16 3 13.9 3 11.5 3 7.4 7 4 12 4s9 3.4 9 7.5z"/></symbol>
+<symbol id="ic-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.6-3.1 8.3-7.5 9.5-4.4-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+<symbol id="ic-refresh" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 0 1 14.6-6M20.5 12a8.5 8.5 0 0 1-14.6 6"/><path d="M18 2.5V6h-3.5M6 21.5V18h3.5"/></symbol>
+<symbol id="ic-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+</svg>
+
+<nav>
+  <a class="bk" href="index.html">← Volver a la entrega</a>
+  <div class="ttl">Sistema de diseño</div>
+  <div class="ver">TAV · v1.1</div>
+  <div class="gp">Fundamentos</div>
+  <a class="s" href="#marca">Marca</a>
+  <a class="s" href="#color">Color</a>
+  <a class="s" href="#semaforo">Semáforo de crédito</a>
+  <a class="s" href="#tipografia">Tipografía</a>
+  <a class="s" href="#espacio">Espaciado y radios</a>
+  <a class="s" href="#elevacion">Elevación</a>
+  <a class="s" href="#iconos">Iconografía</a>
+  <div class="gp">Componentes</div>
+  <a class="s" href="#botones">Botones</a>
+  <a class="s" href="#campos">Campos</a>
+  <a class="s" href="#chips">Chips y estados</a>
+  <a class="s" href="#listas">Listas y tarjetas</a>
+  <a class="s" href="#nav">Navegación</a>
+  <div class="gp">Reglas</div>
+  <a class="s" href="#numeros">Números y moneda</a>
+  <a class="s" href="#voz">Tono de voz</a>
+  <a class="s" href="#flutter">Notas para Flutter</a>
+</nav>
+
+<main>
+  <div class="hd">
+    <h1>Sistema de diseño TAV</h1>
+    <p>Las piezas con las que está construido el prototipo del cliente y con las que se construirán los perfiles de Operador y Administrador. Todos los ratios de contraste de esta página fueron calculados, no estimados.</p>
+  </div>
+
+  <div class="in">
+
+  <!-- MARCA -->
+  <section id="marca">
+    <h2>Marca <em>01</em></h2>
+    <p class="lead">El isotipo es un hexágono de nodos con una planta al centro: red y crecimiento. En la app se usa completo solo en splash y bienvenida; dentro de la aplicación basta el hexágono o el monograma.</p>
+    <div class="demo dark" style="gap:44px;align-items:center">
+      <svg viewBox="0 0 100 100" fill="none" style="width:86px">
+        <path d="M50 8 86 29v42L50 92 14 71V29z" stroke="#4E9BFF" stroke-width="3.6"/>
+        <circle cx="50" cy="8" r="5" fill="#4E9BFF"/><circle cx="86" cy="29" r="5" fill="#4E9BFF"/>
+        <circle cx="86" cy="71" r="5" fill="#4E9BFF"/><circle cx="50" cy="92" r="5" fill="#4E9BFF"/>
+        <circle cx="14" cy="71" r="5" fill="#4E9BFF"/><circle cx="14" cy="29" r="5" fill="#4E9BFF"/>
+        <path d="M50 74V36M50 44c-8-10-17-8-17-8s2 13 17 13M50 38c7-11 16-10 16-10s-1 13-16 14" stroke="#6FCB4A" stroke-width="4.6" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div style="color:#fff;font-size:30px;font-weight:700;letter-spacing:.32em;margin-left:.32em">TAV</div>
+        <div style="color:#8FB4E8;font-size:11px;letter-spacing:.16em;margin-top:7px">CAMBIO · REMESAS · CONFIANZA</div>
+      </div>
+      <div style="width:56px;height:56px;border-radius:18px;background:#1F6FEB;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:19px;letter-spacing:.06em">TAV</div>
+    </div>
+    <div class="box" style="margin-top:16px">
+      <div class="rule do"><i>✓</i><span>Área de respiro mínima alrededor del isotipo: la mitad de su altura.</span></div>
+      <div class="rule do"><i>✓</i><span>Tamaño mínimo del isotipo en pantalla: 24 px de alto.</span></div>
+      <div class="rule dont"><i>✕</i><span>No recolorear la planta ni el hexágono con los colores de estado (verde de éxito, rojo de error).</span></div>
+      <div class="rule dont"><i>✕</i><span>No poner el isotipo azul sobre fondos azules o de bajo contraste; sobre claro va la versión navy.</span></div>
+    </div>
+  </section>
+
+  <!-- COLOR -->
+  <section id="color">
+    <h2>Color <em>02</em></h2>
+    <p class="lead">El blanco y el gris son los fondos. El azul se reserva para acciones, el navy para superficies de dinero, y el verde, ámbar y rojo son exclusivamente semánticos: nunca decorativos. Cada muestra indica su ratio de contraste real y si cumple <b>WCAG AA</b> (4.5:1 para texto normal, 3:1 para gráficos y texto grande).</p>
+
+    <h3 class="sub">Superficies y texto</h3>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#FFFFFF;color:#101828;border-bottom:1px solid var(--line)">surface</div>
+        <div class="meta"><div class="nm">Superficie</div><div class="hx">#FFFFFF</div>
+          <div class="use">Tarjetas, campos, barras de navegación.</div></div></div>
+      <div class="sw"><div class="chip" style="background:#F4F5F7;color:#101828">bg</div>
+        <div class="meta"><div class="nm">Fondo</div><div class="hx">#F4F5F7</div>
+          <div class="use">Fondo de todas las pantallas. Nunca blanco puro de fondo: quita jerarquía a las tarjetas.</div></div></div>
+      <div class="sw"><div class="chip" style="background:#E5E8EC;color:#101828">line</div>
+        <div class="meta"><div class="nm">Borde</div><div class="hx">#E5E8EC</div>
+          <div class="use">Bordes de 1px. Divisores internos usan #EFF1F4.</div></div></div>
+      <div class="sw"><div class="chip" style="background:#101828;color:#fff">ink</div>
+        <div class="meta"><div class="nm">Tinta</div><div class="hx">#101828</div>
+          <div class="use">Títulos y cifras.</div><span class="ratio pass">17.75:1 AAA</span></div></div>
+      <div class="sw"><div class="chip" style="background:#475467;color:#fff">ink-2</div>
+        <div class="meta"><div class="nm">Tinta 2</div><div class="hx">#475467</div>
+          <div class="use">Cuerpo de texto, etiquetas de campo.</div><span class="ratio pass">7.69:1 AAA</span></div></div>
+      <div class="sw"><div class="chip" style="background:#667085;color:#fff">ink-3</div>
+        <div class="meta"><div class="nm">Tinta 3</div><div class="hx">#667085</div>
+          <div class="use">Texto secundario, metadatos, placeholders.</div><span class="ratio pass">4.97:1 AA</span></div></div>
+      <div class="sw"><div class="chip" style="background:#98A2B3;color:#101828">ink-4</div>
+        <div class="meta"><div class="nm">Tinta 4</div><div class="hx">#98A2B3</div>
+          <div class="use"><b>Nunca para texto.</b> Solo chevrons, iconos decorativos y estados vacíos.</div><span class="ratio fail">2.58:1 falla</span></div></div>
+    </div>
+
+    <h3 class="sub">Marca y acción</h3>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#0B1B33;color:#fff">navy</div>
+        <div class="meta"><div class="nm">Navy</div><div class="hx">#0B1B33</div>
+          <div class="use">Tarjetas de saldo y deuda, avatares, splash. Es el color del dinero en la app.</div>
+          <span class="ratio pass">blanco 17.23:1</span></div></div>
+      <div class="sw"><div class="chip" style="background:#1F6FEB;color:#fff">blue</div>
+        <div class="meta"><div class="nm">Azul acción</div><div class="hx">#1F6FEB</div>
+          <div class="use">Botón primario, links, estado activo, foco.</div>
+          <span class="ratio pass">blanco 4.63:1 AA</span></div></div>
+      <div class="sw"><div class="chip" style="background:#1558C7;color:#fff">blue-600</div>
+        <div class="meta"><div class="nm">Azul texto</div><div class="hx">#1558C7</div>
+          <div class="use">Texto azul sobre fondos claros y chips informativos.</div>
+          <span class="ratio pass">5.73:1 sobre blue-50</span></div></div>
+      <div class="sw"><div class="chip" style="background:#EAF2FE;color:#1558C7">blue-50</div>
+        <div class="meta"><div class="nm">Azul tinte</div><div class="hx">#EAF2FE</div>
+          <div class="use">Fondo de iconos, chips y anillo de foco.</div></div></div>
+    </div>
+
+    <h3 class="sub">Semánticos</h3>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#4CAF50;color:#101828">green</div>
+        <div class="meta"><div class="nm">Verde relleno</div><div class="hx">#4CAF50</div>
+          <div class="use"><b>Solo relleno gráfico</b> de 24 px o más: círculo de éxito, barra de progreso, punto de semáforo.</div>
+          <span class="ratio fail">blanco 2.78:1</span></div></div>
+      <div class="sw"><div class="chip" style="background:#2E7D32;color:#fff">green-600</div>
+        <div class="meta"><div class="nm">Verde acción</div><div class="hx">#2E7D32</div>
+          <div class="use">Botón de abono, montos a favor, texto de éxito.</div>
+          <span class="ratio pass">blanco 5.13:1 AA</span></div></div>
+      <div class="sw"><div class="chip" style="background:#D9A441;color:#101828">gold</div>
+        <div class="meta"><div class="nm">Ámbar relleno</div><div class="hx">#D9A441</div>
+          <div class="use"><b>Solo relleno.</b> Barra de deuda por vencer, luz ámbar del semáforo.</div>
+          <span class="ratio fail">blanco 2.25:1</span></div></div>
+      <div class="sw"><div class="chip" style="background:#8A6010;color:#fff">gold-700</div>
+        <div class="meta"><div class="nm">Ámbar texto</div><div class="hx">#8A6010</div>
+          <div class="use">Texto y chips de advertencia sobre gold-50.</div>
+          <span class="ratio pass">5.06:1 sobre gold-50</span></div></div>
+      <div class="sw"><div class="chip" style="background:#E5484D;color:#fff">red</div>
+        <div class="meta"><div class="nm">Rojo relleno</div><div class="hx">#E5484D</div>
+          <div class="use">Punto de notificación, luz roja, borde de error.</div>
+          <span class="ratio warn">blanco 3.91:1 · solo gráficos</span></div></div>
+      <div class="sw"><div class="chip" style="background:#B42318;color:#fff">red-700</div>
+        <div class="meta"><div class="nm">Rojo texto</div><div class="hx">#B42318</div>
+          <div class="use">Mensajes de error, cargos, deuda vencida.</div>
+          <span class="ratio pass">5.76:1 sobre red-50</span></div></div>
+    </div>
+
+    <div class="box" style="margin-top:22px">
+      <div class="rule do"><i>✓</i><span>El verde significa <b>a favor del cliente</b>: abonos, operación completada, semáforo al día.</span></div>
+      <div class="rule do"><i>✓</i><span>El rojo significa <b>en contra</b>: cargos, deuda vencida, errores. En una app de dinero esto no se negocia.</span></div>
+      <div class="rule dont"><i>✕</i><span>No usar verde para un botón de acción neutra ni azul para confirmar un pago recibido.</span></div>
+      <div class="rule dont"><i>✕</i><span>No poner texto sobre <code>green</code>, <code>gold</code> o <code>red</code> puros: usar su variante 600/700.</span></div>
+    </div>
+  </section>
+
+  <!-- SEMÁFORO -->
+  <section id="semaforo">
+    <h2>Semáforo de crédito <em>03</em></h2>
+    <p class="lead">Es el componente propio de TAV y la razón de ser de la app. Tiene <b>dos ejes independientes</b> y manda el peor de los dos: los <b>días</b> que lleva la deuda y el <b>porcentaje del límite de crédito</b> consumido. El segundo suele dispararse antes — un cajero con volumen topa su cupo en dos días.</p>
+
+    <h3 class="sub">Eje 1 · Días de deuda</h3>
+    <table>
+      <tr><th>Estado</th><th>Días</th><th>Relleno</th><th>Chip</th><th>Qué pasa</th></tr>
+      <tr><td><b>Al día</b></td><td class="m">0 – 3</td><td class="m">#4CAF50</td>
+        <td><span class="cp c-green">Al día</span></td><td>Sin avisos.</td></tr>
+      <tr><td><b>Por vencer</b></td><td class="m">4 – 6</td><td class="m">#D9A441</td>
+        <td><span class="cp c-gold">Por vencer</span></td><td>Aviso automático al cajero y al cobrador, a la vez.</td></tr>
+      <tr><td><b>Vencida</b></td><td class="m">7 o más</td><td class="m">#E5484D</td>
+        <td><span class="cp c-red">Vencida</span></td><td>Entra en la lista de presión que ven todos los cobradores.</td></tr>
+    </table>
+
+    <h3 class="sub">Eje 2 · Límite de crédito consumido</h3>
+    <table>
+      <tr><th>Estado</th><th>% del límite</th><th>Chip</th><th>Qué pasa</th></tr>
+      <tr><td><b>Holgado</b></td><td class="m">menos de 75%</td>
+        <td><span class="cp c-green">Al día</span></td><td>Opera normal.</td></tr>
+      <tr><td><b>Cerca del tope</b></td><td class="m">75% – 99%</td>
+        <td><span class="cp c-gold">Por vencer</span></td><td>Aviso de que se está quedando sin cupo.</td></tr>
+      <tr><td><b>Sin cupo</b></td><td class="m">100% o más</td>
+        <td><span class="cp c-red">Sin cupo</span></td><td><b>Bloqueo duro:</b> no puede registrar operaciones nuevas, tenga señal o no.</td></tr>
+    </table>
+    <p class="lead" style="margin-top:14px">El umbral del 75% es una propuesta pendiente de confirmar con el cliente; el 100% sí es regla firme. El límite lo fija el administrador por cajero, y puede ampliarlo para <b>una operación puntual</b>: la ampliación se consume al usarse y el cupo vuelve solo. Mientras la ampliación esté activa, el porcentaje se calcula sobre el cupo ampliado.</p>
+    <div class="box" style="margin-top:16px">
+      <div class="rule do"><i>✓</i><span>El bloqueo por cupo <b>cobra solo</b>: el cajero no puede seguir despachando, así que busca pagar sin que nadie lo llame. Ese es el mecanismo, no una restricción administrativa.</span></div>
+      <div class="rule do"><i>✓</i><span>En la app del cajero, el número grande es el <b>crédito disponible</b>, no la deuda. Es lo que gobierna si puede trabajar.</span></div>
+      <div class="rule dont"><i>✕</i><span>No mostrar solo el color: siempre acompañado de días, porcentaje y una etiqueta escrita.</span></div>
+    </div>
+    <div class="demo" style="margin-top:16px;gap:16px">
+      <div class="mini" style="background:linear-gradient(155deg,#0B1B33,#1B4272);border:none;color:#fff">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;color:#9EC0EC">Saldo pendiente</span>
+          <span class="cp c-gold">● 4 días</span></div>
+        <div style="font-size:29px;font-weight:700;margin:6px 0 2px">$1.240,00</div>
+        <div style="font-size:12px;color:#9EC0EC">≈ Bs 353.896,00</div>
+        <div class="prog" style="background:rgba(255,255,255,.16)"><i style="width:57%;background:#D9A441"></i></div>
+        <div style="display:flex;justify-content:space-between;margin-top:7px;font-size:11px;color:#9EC0EC">
+          <span>Día 4 de 7</span><span>Vence el 6 ago</span></div>
+      </div>
+      <div class="mini">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="display:flex;gap:5px">
+              <i style="width:13px;height:13px;border-radius:50%;background:#E5E8EC;display:block"></i>
+              <i style="width:13px;height:13px;border-radius:50%;background:#D9A441;display:block;box-shadow:0 0 0 3px rgba(0,0,0,.07)"></i>
+              <i style="width:13px;height:13px;border-radius:50%;background:#E5E8EC;display:block"></i>
+            </div>
+            <b style="font-size:14px">4 días transcurridos</b></div>
+          <span class="cp c-gold">Por vencer</span></div>
+        <div class="prog"><i style="width:57%;background:#D9A441"></i></div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11.5px;color:var(--ink-3)">
+          <span>0 días</span><span>Límite: 7 días</span></div>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:14px">El color nunca viaja solo: siempre acompañado del número de días y de una etiqueta escrita. Un cliente con daltonismo debe poder leer su situación sin ver el color.</p>
+  </section>
+
+  <!-- TIPOGRAFÍA -->
+  <section id="tipografia">
+    <h2>Tipografía <em>04</em></h2>
+    <p class="lead">Una sola familia: <b>Inter</b> (o la del sistema como respaldo). Las cifras de dinero usan <code>font-feature-settings: 'tnum'</code> para que las columnas de montos queden alineadas.</p>
+    <div class="box">
+      <div class="tp"><span class="sp">Display · 34/1.15 · 700</span><span style="font-size:34px;font-weight:700;letter-spacing:-.03em">$1.240,00</span></div>
+      <div class="tp"><span class="sp">H1 · 23/1.25 · 650</span><span style="font-size:23px;font-weight:650;letter-spacing:-.02em">¿Cuánto vas a enviar?</span></div>
+      <div class="tp"><span class="sp">H2 · 17/1.3 · 650</span><span style="font-size:17px;font-weight:650">Estado de cuenta</span></div>
+      <div class="tp"><span class="sp">Body · 15/1.5 · 400</span><span style="font-size:15px">Tu beneficiario recibe bolívares.</span></div>
+      <div class="tp"><span class="sp">Body-2 · 13.5/1.55 · 400</span><span style="font-size:13.5px;color:var(--ink-2)">La tasa se congela por 15 minutos al confirmar.</span></div>
+      <div class="tp"><span class="sp">Label · 12.5/1.3 · 600</span><span style="font-size:12.5px;font-weight:600;color:var(--ink-2)">Número de cuenta</span></div>
+      <div class="tp"><span class="sp">Caption · 11.5/1.5 · 400</span><span style="font-size:11.5px;color:var(--ink-3)">Actualizada hace 12 minutos</span></div>
+      <div class="tp"><span class="sp">Overline · 12/1.2 · 700</span><span style="font-size:12px;font-weight:700;color:var(--ink-3);letter-spacing:.07em;text-transform:uppercase">Movimientos</span></div>
+      <div class="tp"><span class="sp">Mono · 12.5 · 400</span><span style="font-family:var(--mono);font-size:12.5px">TQm4vP...8jK2xL9d</span></div>
+    </div>
+    <div class="box" style="margin-top:16px">
+      <div class="rule do"><i>✓</i><span>Direcciones de wallet, números de cuenta y hashes siempre en monoespaciada.</span></div>
+      <div class="rule do"><i>✓</i><span>Tamaño mínimo de texto en la app: 11.5 px. Por debajo no se lee al sol, y esta gente opera en la calle.</span></div>
+      <div class="rule dont"><i>✕</i><span>No usar más de dos pesos por pantalla. En TAV: 400 y 650.</span></div>
+    </div>
+  </section>
+
+  <!-- ESPACIADO -->
+  <section id="espacio">
+    <h2>Espaciado y radios <em>05</em></h2>
+    <p class="lead">Escala base de 4 px. El margen lateral de pantalla es siempre 20 px; nada toca el borde.</p>
+    <div class="cols">
+      <div class="box">
+        <h3 class="sub" style="margin-top:0">Escala</h3>
+        <div class="sp-row"><span class="inp" style="all:unset;font-family:var(--mono);font-size:11.5px;color:var(--ink-3);width:64px;display:inline-block">4 · xs</span><i class="sp-bar" style="width:4px"></i></div>
+        <div class="sp-row"><span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);width:64px;display:inline-block">8 · sm</span><i class="sp-bar" style="width:8px"></i></div>
+        <div class="sp-row"><span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);width:64px;display:inline-block">12 · md</span><i class="sp-bar" style="width:12px"></i></div>
+        <div class="sp-row"><span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);width:64px;display:inline-block">16 · lg</span><i class="sp-bar" style="width:16px"></i></div>
+        <div class="sp-row"><span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);width:64px;display:inline-block">20 · xl</span><i class="sp-bar" style="width:20px"></i></div>
+        <div class="sp-row"><span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);width:64px;display:inline-block">24 · 2xl</span><i class="sp-bar" style="width:24px"></i></div>
+        <div class="sp-row"><span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);width:64px;display:inline-block">32 · 3xl</span><i class="sp-bar" style="width:32px"></i></div>
+      </div>
+      <div class="box">
+        <h3 class="sub" style="margin-top:0">Radios</h3>
+        <div class="rad">
+          <div><i style="border-radius:10px"></i><span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">10 · chip</span></div>
+          <div><i style="border-radius:12px"></i><span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">12 · campo</span></div>
+          <div><i style="border-radius:14px"></i><span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">14 · tarjeta</span></div>
+          <div><i style="border-radius:20px"></i><span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">20 · hoja</span></div>
+          <div><i style="border-radius:999px"></i><span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">full · píldora</span></div>
+        </div>
+        <h3 class="sub">Reglas de toque</h3>
+        <div class="rule do"><i>✓</i><span>Área mínima táctil de 44 × 44 px, aunque el icono se vea de 20 px.</span></div>
+        <div class="rule do"><i>✓</i><span>Altura de botón principal: 52 px. Campos: 50 px. Filas de lista: 68 px.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ELEVACIÓN -->
+  <section id="elevacion">
+    <h2>Elevación <em>06</em></h2>
+    <p class="lead">Dos niveles y nada más. La sombra es sutil y azulada, nunca gris neutro.</p>
+    <div class="demo">
+      <div class="mini" style="box-shadow:none;width:250px"><b style="font-size:14px">Nivel 0 — plano</b>
+        <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px">Solo borde 1px. Listas dentro de una tarjeta.</div></div>
+      <div class="mini" style="width:250px"><b style="font-size:14px">Nivel 1 — tarjeta</b>
+        <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;font-family:var(--mono);font-size:10.5px;line-height:1.5">0 1px 2px rgba(16,24,40,.05),<br>0 8px 24px rgba(16,24,40,.06)</div></div>
+      <div class="mini" style="width:250px;box-shadow:0 12px 32px rgba(16,24,40,.16)"><b style="font-size:14px">Nivel 2 — flotante</b>
+        <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px">Botón flotante, hojas modales y toasts.</div></div>
+    </div>
+  </section>
+
+  <!-- ICONOS -->
+  <section id="iconos">
+    <h2>Iconografía <em>07</em></h2>
+    <p class="lead">Trazo de 1.8 px sobre grilla de 24 px, extremos y uniones redondeadas, sin relleno. Tamaños: 16 px en línea, 20 px estándar, 26 px destacado.</p>
+    <div class="icons">
+      <div class="ic"><svg class="i"><use href="#ic-home"/></svg><span>home</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-list"/></svg><span>list</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-wallet"/></svg><span>wallet</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-user"/></svg><span>user</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-users"/></svg><span>users</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-bell"/></svg><span>bell</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-plus"/></svg><span>plus</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-check"/></svg><span>check</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-clock"/></svg><span>clock</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-alert"/></svg><span>alert</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-coin"/></svg><span>coin</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-cash"/></svg><span>cash</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-up"/></svg><span>up</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-down"/></svg><span>down</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-doc"/></svg><span>doc</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-copy"/></svg><span>copy</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-lock"/></svg><span>lock</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-shield"/></svg><span>shield</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-chat"/></svg><span>chat</span></div>
+      <div class="ic"><svg class="i"><use href="#ic-refresh"/></svg><span>refresh</span></div>
+    </div>
+    <p class="lead" style="margin-top:16px">Los iconos de significado (coin, cash, up, down, alert) van dentro de un cuadrado de 42 px con radio 12 y fondo tintado del color semántico correspondiente.</p>
+  </section>
+
+  <!-- BOTONES -->
+  <section id="botones">
+    <h2>Botones <em>08</em></h2>
+    <p class="lead">Un solo botón primario por pantalla. Si hay dos acciones que compiten, la segunda va como contorno o texto.</p>
+    <div class="demo">
+      <button class="btn btn-p">Nueva operación</button>
+      <button class="btn btn-g">Abonar a mi deuda</button>
+      <button class="btn btn-o">Ya tengo cuenta</button>
+      <button class="btn btn-t">Cambiar número</button>
+      <button class="btn btn-x">Guardar y continuar</button>
+      <button class="btn btn-d">Confirmar</button>
+    </div>
+    <table style="margin-top:16px">
+      <tr><th>Variante</th><th>Uso</th><th>Fondo</th><th>Texto</th></tr>
+      <tr><td><b>Primario</b></td><td>La acción principal de la pantalla</td><td class="m">#1F6FEB</td><td class="m">#FFFFFF</td></tr>
+      <tr><td><b>Éxito</b></td><td>Solo para abonar o pagar deuda</td><td class="m">#2E7D32</td><td class="m">#FFFFFF</td></tr>
+      <tr><td><b>Contorno</b></td><td>Acción secundaria</td><td class="m">#FFFFFF + borde</td><td class="m">#101828</td></tr>
+      <tr><td><b>Texto</b></td><td>Terciaria, escapes ("cambiar número")</td><td class="m">—</td><td class="m">#1F6FEB</td></tr>
+      <tr><td><b>Deshabilitado</b></td><td>Formulario incompleto. Visible, no oculto</td><td class="m">#DDE2E8</td><td class="m">#9AA5B2</td></tr>
+      <tr><td><b>Oscuro</b></td><td>Sobre superficies claras cuando el azul compite</td><td class="m">#0B1B33</td><td class="m">#FFFFFF</td></tr>
+    </table>
+  </section>
+
+  <!-- CAMPOS -->
+  <section id="campos">
+    <h2>Campos <em>09</em></h2>
+    <p class="lead">Altura 50 px, radio 12, etiqueta encima siempre visible. El anillo de foco son 3 px del tinte del color.</p>
+    <div class="demo col">
+      <div style="width:100%;max-width:330px">
+        <div style="font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Reposo</div>
+        <div class="inp ph">0000 0000 0000 0000</div></div>
+      <div style="width:100%;max-width:330px">
+        <div style="font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Con foco</div>
+        <div class="inp fc">0134 0912 4500</div></div>
+      <div style="width:100%;max-width:330px">
+        <div style="font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Con error</div>
+        <div class="inp er">0134 09</div>
+        <div style="font-size:11.5px;color:var(--red-700);margin-top:6px">La cuenta debe tener 20 dígitos.</div></div>
+      <div style="width:100%;max-width:330px">
+        <div style="font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Selector segmentado</div>
+        <div style="display:flex;gap:8px">
+          <div class="inp" style="justify-content:center;font-size:13px;border-color:var(--blue);background:var(--blue-50);color:var(--blue-600);font-weight:600">Transferencia</div>
+          <div class="inp" style="justify-content:center;font-size:13px">Pago móvil</div>
+        </div></div>
+    </div>
+    <div class="box" style="margin-top:16px">
+      <div class="rule do"><i>✓</i><span>El error aparece <b>debajo</b> del campo y en texto, nunca solo con el borde rojo.</span></div>
+      <div class="rule do"><i>✓</i><span>Teclado numérico automático en montos, cédulas, cuentas y teléfonos.</span></div>
+      <div class="rule dont"><i>✕</i><span>No usar placeholder como etiqueta: al escribir se pierde el contexto.</span></div>
+    </div>
+  </section>
+
+  <!-- CHIPS -->
+  <section id="chips">
+    <h2>Chips y estados <em>10</em></h2>
+    <p class="lead">Cada estado de una operación tiene un color fijo en toda la app. El operador y el cliente ven exactamente el mismo código.</p>
+    <div class="demo">
+      <span class="cp c-blue">En verificación</span>
+      <span class="cp c-blue">En proceso</span>
+      <span class="cp c-green">Completada</span>
+      <span class="cp c-gold">Observada</span>
+      <span class="cp c-red">Rechazada</span>
+      <span class="cp c-gray">Borrador</span>
+      <span class="cp c-green">✓ Cliente verificado</span>
+      <span class="cp c-green">↑ 0,8%</span>
+    </div>
+    <table style="margin-top:16px">
+      <tr><th>Estado</th><th>Significado para el cliente</th><th>Color</th></tr>
+      <tr><td><b>En verificación</b></td><td>Subió el comprobante, la caja aún no lo valida</td><td class="m">blue</td></tr>
+      <tr><td><b>En proceso</b></td><td>Pago validado, el dinero va en camino al beneficiario</td><td class="m">blue</td></tr>
+      <tr><td><b>Completada</b></td><td>El beneficiario ya recibió</td><td class="m">green</td></tr>
+      <tr><td><b>Observada</b></td><td>Falta algo: monto que no cuadra, comprobante ilegible</td><td class="m">gold</td></tr>
+      <tr><td><b>Rechazada</b></td><td>No se pudo procesar, requiere contacto con soporte</td><td class="m">red</td></tr>
+    </table>
+  </section>
+
+  <!-- LISTAS -->
+  <section id="listas">
+    <h2>Listas y tarjetas <em>11</em></h2>
+    <p class="lead">La fila de lista es el componente más repetido de la app: operaciones, movimientos, beneficiarios y notificaciones son todos la misma pieza con distinto contenido.</p>
+    <div class="demo">
+      <div class="mini">
+        <div class="li">
+          <div class="av" style="background:var(--green-50)"><svg class="i g"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>Ana Rodríguez</b><span>USDT → Bs · 31 jul</span></div>
+          <div class="rt"><b>$420,00</b><span style="color:var(--green-600)">Completada</span></div></div>
+        <div class="li">
+          <div class="av"><svg class="i b"><use href="#ic-clock"/></svg></div>
+          <div class="tx"><b>Luis Pérez</b><span>USDT → Bs · 30 jul</span></div>
+          <div class="rt"><b>$820,00</b><span style="color:var(--blue)">En proceso</span></div></div>
+        <div class="li">
+          <div class="av" style="background:var(--red-50)"><svg class="i" style="stroke:var(--red-700)"><use href="#ic-up"/></svg></div>
+          <div class="tx"><b>Cargo · #TAV-2482</b><span>Hoy 9:38 a.m.</span></div>
+          <div class="rt"><b style="color:var(--red-700)">+$515,00</b><span>Saldo $1.240</span></div></div>
+        <div class="li">
+          <div class="av" style="background:var(--green-50)"><svg class="i g"><use href="#ic-down"/></svg></div>
+          <div class="tx"><b>Abono recibido</b><span>1 ago · Efectivo</span></div>
+          <div class="rt"><b style="color:var(--green-600)">−$600,00</b><span>Saldo $725</span></div></div>
+      </div>
+      <div class="mini" style="align-self:flex-start">
+        <div style="font-size:11.5px;color:var(--ink-3)">Tasa de hoy · USDT → Bs</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:4px">
+          <div style="font-size:22px;font-weight:700">285,40 <span style="font-size:12px;color:var(--ink-3);font-weight:500">Bs</span></div>
+          <span class="cp c-green">↑ 0,8%</span></div>
+        <div style="border-top:1px solid var(--line-2);margin:13px 0"></div>
+        <div style="display:flex;justify-content:space-between;font-size:13.5px;padding:6px 0"><span style="color:var(--ink-2)">Comisión TAV (3%)</span><b>15,00 USDT</b></div>
+        <div style="display:flex;justify-content:space-between;font-size:15px;padding:6px 0"><span style="font-weight:600">Total a pagar</span><b style="color:var(--blue)">515,00 USDT</b></div>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:14px">En una fila de movimiento, el signo y el color siempre coinciden: <b style="color:var(--red-700)">+</b> es lo que el cliente debe, <b style="color:var(--green-600)">−</b> es lo que ya pagó. El saldo resultante va debajo del monto, en gris.</p>
+  </section>
+
+  <!-- NAV -->
+  <section id="nav">
+    <h2>Navegación <em>12</em></h2>
+    <p class="lead">Cuatro destinos fijos más un botón central de acción. El botón central no es un destino: abre el flujo de nueva operación.</p>
+    <div class="demo" style="justify-content:center">
+      <div style="width:330px;background:#fff;border:1px solid var(--line);border-radius:14px;display:flex;padding:9px 6px 12px;position:relative">
+        <div style="flex:1;text-align:center;color:var(--blue);font-size:10.5px;font-weight:600">
+          <svg class="i b" style="margin-bottom:3px"><use href="#ic-home"/></svg><div>Inicio</div></div>
+        <div style="flex:1;text-align:center;color:var(--ink-3);font-size:10.5px;font-weight:600">
+          <svg class="i" style="stroke:var(--ink-3);margin-bottom:3px"><use href="#ic-list"/></svg><div>Operaciones</div></div>
+        <div style="flex:0 0 60px;display:flex;justify-content:center">
+          <div style="width:54px;height:54px;border-radius:18px;background:var(--blue);display:flex;align-items:center;justify-content:center;margin-top:-22px;box-shadow:0 8px 20px rgba(31,111,235,.4);border:4px solid #fff">
+            <svg class="i w" style="width:24px;height:24px"><use href="#ic-plus"/></svg></div></div>
+        <div style="flex:1;text-align:center;color:var(--ink-3);font-size:10.5px;font-weight:600">
+          <svg class="i" style="stroke:var(--ink-3);margin-bottom:3px"><use href="#ic-wallet"/></svg><div>Cuenta</div></div>
+        <div style="flex:1;text-align:center;color:var(--ink-3);font-size:10.5px;font-weight:600">
+          <svg class="i" style="stroke:var(--ink-3);margin-bottom:3px"><use href="#ic-user"/></svg><div>Perfil</div></div>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:14px">Los flujos de varios pasos (nueva operación, abono) usan barra de progreso segmentada arriba y botón de retroceso a la izquierda. Nunca se cierra un flujo sin confirmación si ya hay datos escritos.</p>
+  </section>
+
+  <!-- NÚMEROS -->
+  <section id="numeros">
+    <h2>Números y moneda <em>13</em></h2>
+    <p class="lead">Formato venezolano: punto para miles, coma para decimales. Esto no es un detalle estético — un monto mal formateado en una app de dinero destruye la confianza.</p>
+    <table>
+      <tr><th>Concepto</th><th>Formato</th><th>Ejemplo</th></tr>
+      <tr><td>Dólares / USDT</td><td class="m">$#.###,00</td><td class="m">$1.240,00</td></tr>
+      <tr><td>Bolívares</td><td class="m">Bs #.###,00</td><td class="m">Bs 353.896,00</td></tr>
+      <tr><td>Tasa</td><td class="m">###,00</td><td class="m">285,40</td></tr>
+      <tr><td>USDT en cripto</td><td class="m">###,00 USDT</td><td class="m">515,00 USDT</td></tr>
+      <tr><td>Operación</td><td class="m">#TAV-####</td><td class="m">#TAV-2482</td></tr>
+      <tr><td>Cuenta enmascarada</td><td class="m">Banco ••••####</td><td class="m">Banesco ••••4471</td></tr>
+      <tr><td>Fecha corta</td><td class="m">d MMM</td><td class="m">31 jul</td></tr>
+      <tr><td>Fecha completa</td><td class="m">d MMM yyyy · h:mm a</td><td class="m">3 ago 2026 · 9:38 a.m.</td></tr>
+    </table>
+    <div class="box" style="margin-top:16px">
+      <div class="rule do"><i>✓</i><span>Los montos en dólares siempre con dos decimales, incluso si son cero.</span></div>
+      <div class="rule do"><i>✓</i><span>Los bolívares se muestran como equivalencia informativa, con <code>≈</code> delante.</span></div>
+      <div class="rule dont"><i>✕</i><span>Nunca abreviar montos ("1,2K"). En dinero se escribe la cifra completa.</span></div>
+    </div>
+  </section>
+
+  <!-- VOZ -->
+  <section id="voz">
+    <h2>Tono de voz <em>14</em></h2>
+    <p class="lead">Directo, sin tecnicismos financieros y sin adornos. El cliente de TAV opera hoy por WhatsApp: la app debe sonar igual de humana, pero más precisa.</p>
+    <div class="cols">
+      <div class="box">
+        <h3 class="sub" style="margin-top:0;color:var(--green-600)">Así sí</h3>
+        <div class="rule do"><i>✓</i><span>"¿Cuánto vas a enviar?"</span></div>
+        <div class="rule do"><i>✓</i><span>"Tu beneficiario recibe Bs 142.700,00"</span></div>
+        <div class="rule do"><i>✓</i><span>"Llevas 4 días con saldo pendiente"</span></div>
+        <div class="rule do"><i>✓</i><span>"Enviar por otra red puede causar la pérdida de los fondos"</span></div>
+      </div>
+      <div class="box">
+        <h3 class="sub" style="margin-top:0;color:var(--red-700)">Así no</h3>
+        <div class="rule dont"><i>✕</i><span>"Ingrese el monto de la transacción a procesar"</span></div>
+        <div class="rule dont"><i>✕</i><span>"Monto acreditado al beneficiario final"</span></div>
+        <div class="rule dont"><i>✕</i><span>"Usted presenta obligaciones vencidas"</span></div>
+        <div class="rule dont"><i>✕</i><span>"Error 402: transacción no válida"</span></div>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">Regla práctica: si la frase no se la dirías por WhatsApp a un cliente que conoces, no va en la app.</p>
+  </section>
+
+  <!-- FLUTTER -->
+  <section id="flutter">
+    <h2>Notas para Flutter <em>15</em></h2>
+    <p class="lead">Los tokens de esta página trasladados a <code>ThemeData</code>. La idea es que nadie escriba un color en línea dentro de un widget.</p>
+    <pre><span class="c">// lib/theme/tav_colors.dart</span>
+<span class="k">class</span> TavColors {
+  <span class="k">static const</span> navy      = Color(<span class="s">0xFF0B1B33</span>);
+  <span class="k">static const</span> blue      = Color(<span class="s">0xFF1F6FEB</span>); <span class="c">// acción</span>
+  <span class="k">static const</span> blue600   = Color(<span class="s">0xFF1558C7</span>); <span class="c">// texto azul</span>
+  <span class="k">static const</span> blue50    = Color(<span class="s">0xFFEAF2FE</span>);
+  <span class="k">static const</span> green     = Color(<span class="s">0xFF4CAF50</span>); <span class="c">// solo relleno</span>
+  <span class="k">static const</span> green600  = Color(<span class="s">0xFF2E7D32</span>); <span class="c">// texto y botón</span>
+  <span class="k">static const</span> green50   = Color(<span class="s">0xFFEAF7EB</span>);
+  <span class="k">static const</span> gold      = Color(<span class="s">0xFFD9A441</span>);
+  <span class="k">static const</span> gold700   = Color(<span class="s">0xFF8A6010</span>);
+  <span class="k">static const</span> gold50    = Color(<span class="s">0xFFFBF3E3</span>);
+  <span class="k">static const</span> red       = Color(<span class="s">0xFFE5484D</span>);
+  <span class="k">static const</span> red700    = Color(<span class="s">0xFFB42318</span>);
+  <span class="k">static const</span> red50     = Color(<span class="s">0xFFFDECEC</span>);
+  <span class="k">static const</span> bg        = Color(<span class="s">0xFFF4F5F7</span>);
+  <span class="k">static const</span> surface   = Color(<span class="s">0xFFFFFFFF</span>);
+  <span class="k">static const</span> line      = Color(<span class="s">0xFFE5E8EC</span>);
+  <span class="k">static const</span> ink       = Color(<span class="s">0xFF101828</span>);
+  <span class="k">static const</span> ink2      = Color(<span class="s">0xFF475467</span>);
+  <span class="k">static const</span> ink3      = Color(<span class="s">0xFF667085</span>);
+  <span class="k">static const</span> ink4      = Color(<span class="s">0xFF98A2B3</span>); <span class="c">// nunca texto</span>
+}
+
+<span class="c">// Radios y espaciado</span>
+<span class="k">class</span> TavRadius { <span class="k">static const</span> chip=10.0, field=12.0, card=14.0, sheet=20.0; }
+<span class="k">class</span> TavSpace  { <span class="k">static const</span> xs=4.0, sm=8.0, md=12.0, lg=16.0, xl=20.0, xxl=24.0; }
+
+<span class="c">// Sombra nivel 1</span>
+<span class="k">const</span> tavCardShadow = [
+  BoxShadow(color: Color(<span class="s">0x0D101828</span>), blurRadius: 2, offset: Offset(0, 1)),
+  BoxShadow(color: Color(<span class="s">0x0F101828</span>), blurRadius: 24, offset: Offset(0, 8)),
+];</pre>
+
+    <div class="box" style="margin-top:18px">
+      <h3 class="sub" style="margin-top:0">Paquetes sugeridos</h3>
+      <table style="box-shadow:none;border:none">
+        <tr><th>Necesidad</th><th>Paquete</th></tr>
+        <tr><td>Formato de moneda es-VE</td><td class="m">intl · NumberFormat.currency(locale: 'es_VE')</td></tr>
+        <tr><td>Tipografía Inter</td><td class="m">google_fonts</td></tr>
+        <tr><td>PIN y biometría</td><td class="m">local_auth + flutter_secure_storage</td></tr>
+        <tr><td>Subir comprobante</td><td class="m">image_picker</td></tr>
+        <tr><td>Exportar estado de cuenta</td><td class="m">pdf + printing</td></tr>
+        <tr><td>Notificaciones</td><td class="m">firebase_messaging</td></tr>
+      </table>
+      <div class="rule do" style="margin-top:14px"><i>✓</i><span>Los tres roles comparten estos tokens y componentes. El Admin cambia el <b>layout</b> (tablero de escritorio), no el lenguaje visual.</span></div>
+      <div class="rule do"><i>✓</i><span>Montos siempre en <code>int</code> de centavos o <code>Decimal</code>, nunca <code>double</code>. Un error de redondeo en una casa de cambio es dinero real perdido.</span></div>
+    </div>
+  </section>
+
+  <div style="margin-top:60px;padding:28px 0 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-family:var(--mono);font-size:11.5px;color:var(--ink-3)">
+    <span>TAV · Sistema de diseño v1.1</span>
+    <span><a href="index.html" style="color:var(--blue);text-decoration:none">← Volver a la entrega</a></span>
+  </div>
+
+  </div>
+</main>
+
+<script>
+const secs=[...document.querySelectorAll('section')], links=[...document.querySelectorAll('nav a.s')];
+const io=new IntersectionObserver(es=>{
+  es.forEach(e=>{
+    if(e.isIntersecting){
+      links.forEach(l=>l.classList.toggle('on', l.getAttribute('href')==='#'+e.target.id));
+    }
+  });
+},{rootMargin:'-15% 0px -75% 0px'});
+secs.forEach(s=>io.observe(s));
+</script>
+</body>
+</html>

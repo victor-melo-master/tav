@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TAV — Prototipo navegable (App Cobrador)</title>
+<style>
+:root{
+  --navy:#0B1B33; --navy-700:#132a4a;
+  --blue:#1F6FEB; --blue-600:#1558C7; --blue-50:#EAF2FE;
+  --green:#4CAF50; --green-600:#2E7D32; --green-50:#EAF7EB;
+  --gold:#D9A441; --gold-700:#8A6010; --gold-50:#FBF3E3;
+  --red:#E5484D; --red-700:#B42318; --red-50:#FDECEC;
+  --bg:#F4F5F7; --surface:#FFFFFF; --line:#E5E8EC; --line-2:#EFF1F4;
+  --ink:#101828; --ink-2:#475467; --ink-3:#667085; --ink-4:#98A2B3;
+  --r-s:10px; --r-m:14px; --r-l:20px;
+  --sh:0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:#0E1A2B;background-image:radial-gradient(1200px 600px at 20% -10%, #16305A 0%, transparent 60%);
+  color:var(--ink);display:flex;min-height:100%}
+
+.map{width:270px;flex:0 0 270px;background:#0A1526;border-right:1px solid rgba(255,255,255,.07);
+  padding:22px 16px 40px;overflow-y:auto;height:100vh;position:sticky;top:0}
+.map .brand{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.map .brand h1{font-size:17px;color:#fff;margin:0;letter-spacing:.16em;font-weight:700}
+.map .sub{color:#7C8FA8;font-size:11px;margin:0 0 20px 44px;letter-spacing:.04em}
+.map .grp{color:#6B82A0;font-size:10px;letter-spacing:.12em;text-transform:uppercase;margin:18px 0 7px;font-weight:700}
+.map a{display:block;color:#B7C6D8;text-decoration:none;font-size:12.5px;padding:6px 9px;border-radius:7px;cursor:pointer;line-height:1.35}
+.map a:hover{background:rgba(255,255,255,.06);color:#fff}
+.map a.on{background:var(--blue);color:#fff;font-weight:600}
+.map .note{margin-top:24px;padding:11px;border-radius:10px;background:rgba(255,255,255,.05);color:#8FA3BC;font-size:11px;line-height:1.5}
+
+.stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 20px;gap:14px;min-height:100vh}
+.stage-top{display:flex;align-items:center;gap:10px;color:#9DB2CC;font-size:12px;flex-wrap:wrap;justify-content:center}
+.stage-top b{color:#fff;font-weight:600}
+.tgl{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#CFE0F2;
+  font-size:11.5px;padding:5px 11px;border-radius:999px;cursor:pointer;font-family:inherit}
+.tgl.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.tgl.warn.on{background:var(--gold-700);border-color:var(--gold-700)}
+
+.phone{width:392px;height:812px;background:var(--bg);border-radius:46px;border:11px solid #05101F;
+  box-shadow:0 30px 70px rgba(0,0,0,.55), 0 0 0 2px #22344C;position:relative;overflow:hidden;flex:0 0 auto}
+.notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:118px;height:26px;background:#05101F;border-radius:999px;z-index:60}
+.viewport{position:absolute;inset:0;overflow:hidden}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;background:var(--bg);animation:in .22s ease}
+.screen.active{display:flex}
+@keyframes in{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.screen.fade{animation:fd .25s ease}
+@keyframes fd{from{opacity:0}to{opacity:1}}
+
+.sbar{height:46px;flex:0 0 46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:12.5px;font-weight:600}
+.sbar .r{display:flex;gap:5px;align-items:center}
+.body{flex:1;overflow-y:auto;overflow-x:hidden}
+.body::-webkit-scrollbar{width:0}
+.pad{padding:0 20px}
+.pb{padding-bottom:26px}
+
+.topbar{display:flex;align-items:center;gap:12px;padding:4px 18px 14px}
+.topbar h2{font-size:17px;margin:0;font-weight:650;flex:1}
+.iconbtn{width:38px;height:38px;border-radius:12px;background:var(--surface);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;position:relative}
+.iconbtn:active{transform:scale(.94)}
+.iconbtn.ghost{background:transparent;border-color:transparent}
+.dot{position:absolute;top:8px;right:9px;width:8px;height:8px;border-radius:50%;background:var(--red);border:2px solid var(--surface)}
+svg.i{width:20px;height:20px;stroke:var(--ink);stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}
+svg.i.b{stroke:var(--blue)} svg.i.w{stroke:#fff} svg.i.g{stroke:var(--green-600)}
+svg.i.m{stroke:var(--ink-4)} svg.i.r{stroke:var(--red-700)} svg.i.d{stroke:var(--gold-700)}
+svg.i.sm{width:16px;height:16px} svg.i.lg{width:26px;height:26px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);padding:16px;box-shadow:var(--sh)}
+.h-sec{font-size:12px;font-weight:700;color:var(--ink-3);letter-spacing:.07em;text-transform:uppercase;margin:22px 0 10px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.muted{color:var(--ink-2);font-size:13px}
+.tiny{color:var(--ink-3);font-size:11.5px}
+
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:52px;border-radius:14px;
+  font-size:15px;font-weight:650;cursor:pointer;border:1px solid transparent;font-family:inherit}
+.btn:active{transform:scale(.985)}
+.btn-p{background:var(--blue);color:#fff;box-shadow:0 6px 16px rgba(31,111,235,.28)}
+.btn-g{background:var(--green-600);color:#fff;box-shadow:0 6px 16px rgba(46,125,50,.24)}
+.btn-d{background:var(--navy);color:#fff}
+.btn-o{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.btn-t{background:transparent;color:var(--blue);height:44px}
+.btn-r{background:var(--surface);color:var(--red-700);border-color:#F3C9C6}
+.btn[disabled]{background:#DDE2E8;color:#9AA5B2;box-shadow:none;pointer-events:none}
+.btn.sm{height:42px;font-size:13.5px;border-radius:12px}
+
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px}
+.input,input.inp,select.inp,textarea.inp{width:100%;min-height:50px;border:1px solid var(--line);border-radius:12px;
+  background:var(--surface);padding:0 14px;font-size:15px;font-family:inherit;color:var(--ink);
+  display:flex;align-items:center;outline:none;-webkit-appearance:none;appearance:none}
+textarea.inp{padding:13px 14px;min-height:84px;resize:none;line-height:1.5;display:block}
+input.inp:focus,select.inp:focus,textarea.inp:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-50)}
+input.inp::placeholder,textarea.inp::placeholder{color:var(--ink-3)}
+select.inp{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2398A2B3' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;padding-right:38px}
+.input .ph{color:var(--ink-3)}
+
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:650;padding:4px 10px;border-radius:999px}
+.c-green{background:var(--green-50);color:#256B2A}
+.c-gold{background:var(--gold-50);color:var(--gold-700)}
+.c-red{background:var(--red-50);color:var(--red-700)}
+.c-blue{background:var(--blue-50);color:var(--blue-600)}
+.c-gray{background:#F1F3F6;color:var(--ink-2)}
+
+.li{display:flex;align-items:center;gap:12px;padding:13px 0;cursor:pointer;border-bottom:1px solid var(--line-2)}
+.li:last-child{border-bottom:none}
+.li .av{width:42px;height:42px;border-radius:12px;background:var(--blue-50);display:flex;align-items:center;justify-content:center;flex:0 0 42px;font-weight:650;font-size:13px}
+.li .av.nv{background:var(--navy);color:#fff}
+.li .av.gr{background:var(--green-50)} .li .av.rd{background:var(--red-50)} .li .av.gd{background:var(--gold-50)}
+.li .tx{flex:1;min-width:0}
+.li .tx b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .tx span{font-size:12px;color:var(--ink-3)}
+.li .rt{text-align:right;flex:0 0 auto}
+.li .rt b{display:block;font-size:14px;font-weight:650}
+.li .rt span{font-size:11px;color:var(--ink-3)}
+
+.tabbar{flex:0 0 auto;height:76px;background:var(--surface);border-top:1px solid var(--line);
+  display:flex;align-items:flex-start;padding:9px 6px 0}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;color:var(--ink-3);font-size:10.5px;font-weight:600}
+.tab svg{stroke:var(--ink-3)}
+.tab.on{color:var(--blue)} .tab.on svg{stroke:var(--blue)}
+.fabwrap{flex:0 0 66px;display:flex;justify-content:center}
+.fab{width:56px;height:56px;border-radius:19px;background:var(--blue);display:flex;align-items:center;justify-content:center;
+  margin-top:-24px;box-shadow:0 8px 20px rgba(31,111,235,.4);cursor:pointer;border:4px solid var(--surface)}
+.fab:active{transform:scale(.93)}
+
+body.hs [data-go],body.hs .li,body.hs .tab,body.hs .fab,body.hs .iconbtn{outline:1.5px dashed rgba(31,111,235,.55);outline-offset:2px;border-radius:8px}
+
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:8px 16px 12px}
+.key{height:52px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;border-radius:12px;cursor:pointer}
+.key:active{background:#E7EBF0}
+.pin-dots{display:flex;gap:16px;justify-content:center;margin:26px 0 8px}
+.pin-dots i{width:14px;height:14px;border-radius:50%;border:1.7px solid var(--ink-4);display:block}
+.pin-dots i.f{background:var(--blue);border-color:var(--blue)}
+
+.prog{height:7px;border-radius:99px;background:#E9ECF1;overflow:hidden}
+.prog i{display:block;height:100%;border-radius:99px}
+.divide{height:1px;background:var(--line-2);margin:13px 0}
+.kv{display:flex;justify-content:space-between;padding:7px 0;font-size:13.5px;gap:12px}
+.kv span{color:var(--ink-2)} .kv b{font-weight:650;text-align:right}
+.seg{display:flex;background:#E9ECF1;border-radius:12px;padding:3px;margin:0 20px}
+.seg div{flex:1;text-align:center;padding:8px 4px;font-size:12.5px;font-weight:600;color:var(--ink-2);border-radius:9px;cursor:pointer}
+.seg div.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.mseg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mseg .m{height:48px;border:1px solid var(--line);border-radius:12px;background:var(--surface);
+  display:flex;align-items:center;justify-content:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer}
+.mseg .m.on{border-color:var(--blue);background:var(--blue-50);color:var(--blue-600)}
+.mseg .m.on svg{stroke:var(--blue-600)}
+.qc{display:flex;gap:8px;margin-top:10px}
+.qc .q{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 4px;
+  text-align:center;font-size:12.5px;font-weight:650;cursor:pointer;box-shadow:var(--sh)}
+.qc .q.on{border-color:var(--blue);background:var(--blue-50);color:var(--blue-600)}
+.upload{border:1.6px dashed #C4CCD6;border-radius:14px;padding:22px;text-align:center;cursor:pointer;background:#FAFBFC}
+.upload.done{border-style:solid;border-color:var(--green-600);background:var(--green-50)}
+.banner{margin:0 20px 12px;border-radius:12px;padding:11px 13px;display:flex;gap:10px;align-items:center;font-size:12.5px;line-height:1.45}
+.banner.off{background:var(--gold-50);border:1px solid #F0DFBB;color:#7E570D}
+.banner.ok{background:var(--green-50);border:1px solid #CDE9CF;color:#256B2A}
+.stat{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);padding:13px;box-shadow:var(--sh)}
+.stat .n{font-size:19px;font-weight:700;margin-top:3px}
+.hide{display:none !important}
+#toast{position:absolute;left:50%;transform:translateX(-50%) translateY(20px);bottom:104px;z-index:80;
+  background:var(--navy);color:#fff;font-size:13px;font-weight:600;padding:12px 18px;border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,.3);opacity:0;transition:.25s;pointer-events:none;display:flex;align-items:center;gap:8px;max-width:82%}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.tl{position:relative;padding-left:28px}
+.tl .n{position:relative;padding-bottom:18px}
+.tl .n:last-child{padding-bottom:0}
+.tl .n::before{content:'';position:absolute;left:-22px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff;border:2.5px solid var(--line)}
+.tl .n::after{content:'';position:absolute;left:-16px;top:19px;bottom:0;width:2px;background:var(--line)}
+.tl .n:last-child::after{display:none}
+.tl .n.ok::before{background:var(--green);border-color:var(--green)}
+.tl .n.ok::after{background:var(--green)}
+.tl .n.now::before{border-color:var(--blue);box-shadow:0 0 0 4px var(--blue-50)}
+.tl .n b{font-size:13.5px;display:block;font-weight:600}
+.tl .n span{font-size:11.5px;color:var(--ink-3)}
+@media(max-width:1000px){.map{display:none}}
+</style>
+</head>
+<body>
+
+<svg style="display:none">
+<symbol id="ic-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="ic-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19h6a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7h6"/></symbol>
+<symbol id="ic-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+<symbol id="ic-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></symbol>
+<symbol id="ic-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5"/><path d="M17 5.5a3.5 3.5 0 0 1 0 6.5M18.5 20c0-2.4-.8-3.9-2-4.9"/></symbol>
+<symbol id="ic-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M10.5 20a2 2 0 0 0 3 0"/></symbol>
+<symbol id="ic-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="ic-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+<symbol id="ic-next" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+<symbol id="ic-check" viewBox="0 0 24 24"><path d="M4.5 12.5 9.5 17.5 20 7"/></symbol>
+<symbol id="ic-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></symbol>
+<symbol id="ic-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.8 9.3c-.5-.8-1.6-1.2-2.8-1.2-1.6 0-2.7.8-2.7 1.9 0 2.7 5.6 1.4 5.6 4.1 0 1.2-1.2 2-2.9 2-1.3 0-2.4-.5-2.9-1.3"/></symbol>
+<symbol id="ic-phone" viewBox="0 0 24 24"><path d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 6.5 6.5L17 13l4 1.5v3a2 2 0 0 1-2.2 2A17 17 0 0 1 3.5 5.2 2 2 0 0 1 5.5 3z"/></symbol>
+<symbol id="ic-chat" viewBox="0 0 24 24"><path d="M21 11.5c0 4.1-4 7.5-9 7.5-1 0-2-.1-2.9-.4L4 21l1.3-3.6C3.9 16 3 13.9 3 11.5 3 7.4 7 4 12 4s9 3.4 9 7.5z"/></symbol>
+<symbol id="ic-pin" viewBox="0 0 24 24"><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></symbol>
+<symbol id="ic-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></symbol>
+<symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.3l3.2 2"/></symbol>
+<symbol id="ic-alert" viewBox="0 0 24 24"><path d="M12 3 1.8 20h20.4z"/><path d="M12 10v4M12 17.2h.01"/></symbol>
+<symbol id="ic-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.6-3.1 8.3-7.5 9.5-4.4-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+<symbol id="ic-lock" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+<symbol id="ic-out" viewBox="0 0 24 24"><path d="M14 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8"/><path d="M17 8l4 4-4 4M21 12H9"/></symbol>
+<symbol id="ic-sync" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 0 1 14.6-6M20.5 12a8.5 8.5 0 0 1-14.6 6"/><path d="M18 2.5V6h-3.5M6 21.5V18h3.5"/></symbol>
+<symbol id="ic-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 3.5-2.3M19 13a10 10 0 0 0-6.6-2.9M1.8 9.5a15 15 0 0 1 4.4-2.8M22.2 9.5a15 15 0 0 0-9.8-3.4"/><path d="M12 20h.01"/></symbol>
+<symbol id="ic-cam" viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h2l1.4-2h7.2L17 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.4"/></symbol>
+<symbol id="ic-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="ic-share" viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></symbol>
+</svg>
+
+<aside class="map">
+  <div class="brand">
+    <svg viewBox="0 0 100 100" fill="none" style="width:34px;height:34px">
+      <path d="M50 8 86 29v42L50 92 14 71V29z" stroke="#1F6FEB" stroke-width="4"/>
+      <circle cx="50" cy="8" r="5.5" fill="#1F6FEB"/><circle cx="86" cy="29" r="5.5" fill="#1F6FEB"/>
+      <circle cx="86" cy="71" r="5.5" fill="#1F6FEB"/><circle cx="50" cy="92" r="5.5" fill="#1F6FEB"/>
+      <circle cx="14" cy="71" r="5.5" fill="#1F6FEB"/><circle cx="14" cy="29" r="5.5" fill="#1F6FEB"/>
+      <path d="M50 72V38M50 44c-8-10-16-8-16-8s2 12 16 12M50 40c7-11 15-10 15-10s-1 13-15 14" stroke="#5FB53C" stroke-width="4.5" stroke-linecap="round"/>
+    </svg>
+    <h1>TAV</h1>
+  </div>
+  <p class="sub">Prototipo · App Cobrador</p>
+
+  <div class="grp">1 · Acceso</div>
+  <a data-go="login">Ingresar con PIN</a>
+
+  <div class="grp">2 · Mi día</div>
+  <a data-go="home">Inicio · Mi día</a>
+  <a data-go="notifs">Notificaciones</a>
+  <a data-go="pending">Pendientes por sincronizar</a>
+
+  <div class="grp">3 · Cajeros</div>
+  <a data-go="route">Cajeros por cobrar</a>
+  <a data-go="cajero">Detalle del cajero</a>
+
+  <div class="grp">4 · Registrar cobro</div>
+  <a data-go="collect">Monto y método</a>
+  <a data-go="confirm">Revisar y confirmar</a>
+  <a data-go="receipt">Cobro registrado</a>
+
+  <div class="grp">5 · Cuadre del día</div>
+  <a data-go="cierre">Lista diaria</a>
+  <a data-go="move">Detalle de un cobro</a>
+  <a data-go="annul">Anular con motivo</a>
+  <a data-go="send">Cerrar y declarar</a>
+  <a data-go="sent">En verificación</a>
+
+  <div class="grp">6 · Historial</div>
+  <a data-go="history">Cierres anteriores</a>
+  <a data-go="hdetail">Cierre con diferencia</a>
+  <a data-go="profile">Mi perfil</a>
+
+  <div class="note">La lista es compartida: todos los cobradores ven todas las deudas. El semáforo combina días de deuda y % del límite de crédito consumido.</div>
+</aside>
+
+<main class="stage">
+  <div class="stage-top">
+    <span><b>TAV</b> · App Cobrador</span>
+    <span style="opacity:.4">|</span>
+    <span id="scr-name">Ingresar</span>
+    <a class="tgl" href="index.html" style="text-decoration:none">← Entrega</a>
+    <a class="tgl" href="TAV_design_system.html" style="text-decoration:none">Design system</a>
+    <button class="tgl" id="hsBtn">Zonas clickeables</button>
+    <button class="tgl warn" id="offBtn">Simular sin señal</button>
+  </div>
+
+<div class="phone">
+  <div class="notch"></div>
+  <div class="viewport" id="vp">
+
+  <!-- LOGIN -->
+  <section class="screen fade active" id="s-login" data-title="Ingresar">
+    <div class="sbar"><span>7:02</span><span class="r">••• ▮</span></div>
+    <div class="body pad" style="text-align:center;padding-top:30px">
+      <div style="width:74px;height:74px;border-radius:26px;background:var(--navy);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;color:#fff;font-size:25px;font-weight:650">JR</div>
+      <h2 style="font-size:21px;margin:0 0 4px">Hola, José</h2>
+      <p class="muted" style="margin:0">Cobrador · Zona Valencia</p>
+      <div class="pin-dots" id="pd"><i></i><i></i><i></i><i></i></div>
+      <p class="tiny">Ingresa tu PIN para ver la ruta de hoy</p>
+    </div>
+    <div class="keypad">
+      <div class="key" data-pin="1">1</div><div class="key" data-pin="2">2</div><div class="key" data-pin="3">3</div>
+      <div class="key" data-pin="4">4</div><div class="key" data-pin="5">5</div><div class="key" data-pin="6">6</div>
+      <div class="key" data-pin="7">7</div><div class="key" data-pin="8">8</div><div class="key" data-pin="9">9</div>
+      <div class="key" style="font-size:12px;font-weight:600;color:var(--ink-3)">Huella</div>
+      <div class="key" data-pin="0">0</div>
+      <div class="key" data-pin="del"><svg class="i m"><use href="#ic-back"/></svg></div>
+    </div>
+  </section>
+
+  <!-- HOME -->
+  <section class="screen" id="s-home" data-title="Mi día">
+    <div class="sbar"><span>7:02</span><span class="r">••• ▮</span></div>
+    <div class="topbar">
+      <div style="width:40px;height:40px;border-radius:13px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:650;font-size:14px;cursor:pointer" data-go="profile">JR</div>
+      <div style="flex:1">
+        <div class="tiny">Jueves 6 de agosto</div>
+        <div style="font-size:15px;font-weight:650">José Ramírez</div>
+      </div>
+      <div class="iconbtn" data-go="notifs"><svg class="i"><use href="#ic-bell"/></svg><i class="dot"></i></div>
+    </div>
+
+    <div class="banner off hide" id="offBanner" data-go="pending">
+      <svg class="i d sm" style="flex:0 0 16px"><use href="#ic-off"/></svg>
+      <span style="flex:1">Sin señal · <b id="offCount">0</b> cobros guardados en el teléfono</span>
+      <svg class="i d sm"><use href="#ic-next"/></svg>
+    </div>
+
+    <div class="body pad pb">
+      <!-- Recaudado -->
+      <div class="card" style="background:linear-gradient(155deg,var(--navy),#1B4272);border:none;color:#fff;padding:18px">
+        <div class="row">
+          <span style="font-size:12.5px;color:#9EC0EC">Recaudado hoy</span>
+          <span class="chip c-gold" id="homeStatus">Sin rendir</span>
+        </div>
+        <div style="font-size:33px;font-weight:700;margin:6px 0 12px;letter-spacing:-.5px" id="homeTotal">$10.000,00</div>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1;background:rgba(255,255,255,.09);border-radius:11px;padding:10px 12px">
+            <div style="font-size:10.5px;color:#9EC0EC">Efectivo en mano</div>
+            <div style="font-size:16px;font-weight:700;margin-top:2px" id="homeCash">$6.700,00</div>
+          </div>
+          <div style="flex:1;background:rgba(255,255,255,.09);border-radius:11px;padding:10px 12px">
+            <div style="font-size:10.5px;color:#9EC0EC">Digital verificable</div>
+            <div style="font-size:16px;font-weight:700;margin-top:2px" id="homeDig">$3.300,00</div>
+          </div>
+        </div>
+        <div class="prog" style="background:rgba(255,255,255,.16);margin-top:16px"><i id="homeProg" style="width:62%;background:var(--blue)"></i></div>
+        <div class="row" style="margin-top:7px">
+          <span style="font-size:11px;color:#9EC0EC"><b id="homeDone">5</b> de <span id="homeTot">8</span> cajeros visitados</span>
+          <span style="font-size:11px;color:#9EC0EC">Se entrega hoy mismo</span>
+        </div>
+      </div>
+
+      <button class="btn btn-p" style="margin-top:14px" data-go="route">
+        <svg class="i w"><use href="#ic-plus"/></svg> Registrar cobro</button>
+
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <div class="stat"><div class="tiny">Por cobrar</div><div class="n" id="statPend">$5.120</div></div>
+        <div class="stat"><div class="tiny">En rojo</div><div class="n" style="color:var(--red-700)" id="statVenc">1</div></div>
+        <div class="stat"><div class="tiny">Cobros hoy</div><div class="n" id="statN">5</div></div>
+      </div>
+
+      <div class="row h-sec"><span>Los más urgentes</span>
+        <span style="color:var(--blue);text-transform:none;letter-spacing:0;font-size:12.5px;cursor:pointer" data-go="route">Ver todos</span></div>
+      <div class="card" style="padding:4px 16px" id="homeNext"></div>
+
+      <div class="row h-sec"><span>Últimos cobros</span>
+        <span style="color:var(--blue);text-transform:none;letter-spacing:0;font-size:12.5px;cursor:pointer" data-go="cierre">Ver lista</span></div>
+      <div class="card" style="padding:4px 16px" id="homeLast"></div>
+    </div>
+
+    <div class="tabbar">
+      <div class="tab on"><svg class="i"><use href="#ic-home"/></svg>Mi día</div>
+      <div class="tab" data-go="route"><svg class="i"><use href="#ic-route"/></svg>Cajeros</div>
+      <div class="fabwrap"><div class="fab" data-go="route"><svg class="i w lg"><use href="#ic-plus"/></svg></div></div>
+      <div class="tab" data-go="cierre"><svg class="i"><use href="#ic-list"/></svg>Cuadre</div>
+      <div class="tab" data-go="profile"><svg class="i"><use href="#ic-user"/></svg>Perfil</div>
+    </div>
+  </section>
+
+  <!-- RUTA -->
+  <section class="screen" id="s-route" data-title="Ruta del día">
+    <div class="sbar"><span>2:14</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div>
+      <h2>Cajeros por cobrar</h2>
+      <div class="iconbtn"><svg class="i"><use href="#ic-pin"/></svg></div></div>
+    <div class="seg" id="routeSeg">
+      <div class="on" data-f="pend">Por cobrar (<span id="segPend">3</span>)</div>
+      <div data-f="done">Cobrados hoy (<span id="segDone">5</span>)</div>
+    </div>
+    <div class="body pad pb" style="padding-top:12px">
+      <p class="tiny" style="margin:6px 0 12px;line-height:1.5">Lista compartida por todos los cobradores. Primero los bloqueados por límite, después los de más días.</p>
+      <div class="card" style="padding:4px 16px" id="routeList"></div>
+    </div>
+    <div class="tabbar">
+      <div class="tab" data-go="home"><svg class="i"><use href="#ic-home"/></svg>Mi día</div>
+      <div class="tab on"><svg class="i"><use href="#ic-route"/></svg>Cajeros</div>
+      <div class="fabwrap"><div class="fab" data-go="route"><svg class="i w lg"><use href="#ic-plus"/></svg></div></div>
+      <div class="tab" data-go="cierre"><svg class="i"><use href="#ic-list"/></svg>Cuadre</div>
+      <div class="tab" data-go="profile"><svg class="i"><use href="#ic-user"/></svg>Perfil</div>
+    </div>
+  </section>
+
+  <!-- CAJERO -->
+  <section class="screen" id="s-cajero" data-title="Detalle del cajero">
+    <div class="sbar"><span>2:16</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2 id="cjTitle">María González</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="background:linear-gradient(155deg,var(--navy),#1B4272);border:none;color:#fff">
+        <div class="row">
+          <span style="font-size:12.5px;color:#9EC0EC">Debe</span>
+          <span class="chip c-gold" id="cjChip">● 4 días</span>
+        </div>
+        <div style="font-size:32px;font-weight:700;margin:5px 0 2px" id="cjDebt">$1.240,00</div>
+        <div style="font-size:12px;color:#9EC0EC" id="cjOf">de un límite de $2.000,00</div>
+        <div class="prog" style="background:rgba(255,255,255,.16);margin-top:14px"><i id="cjProg" style="width:62%;background:var(--gold)"></i></div>
+        <div class="row" style="margin-top:7px">
+          <span style="font-size:11px;color:#9EC0EC" id="cjPct">62% del límite consumido</span>
+          <span style="font-size:11px;color:#9EC0EC" id="cjDays">4 días</span>
+        </div>
+      </div>
+
+      <div class="banner hide" id="cjAttBanner" style="margin:12px 0 0">
+        <svg class="i sm" style="flex:0 0 16px"><use href="#ic-user"/></svg>
+        <span id="cjAttTx" style="flex:1"></span>
+      </div>
+
+      <button class="btn btn-g" style="margin-top:14px" data-go="collect">
+        <svg class="i w"><use href="#ic-cash"/></svg> Registrar cobro</button>
+
+      <button class="btn btn-o" style="margin-top:10px" id="cjAtt">
+        <svg class="i b"><use href="#ic-pin"/></svg> <span id="cjAttLbl">Marcar que lo estoy atendiendo</span></button>
+
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <button class="btn btn-o sm" style="flex:1"><svg class="i b sm"><use href="#ic-phone"/></svg> Llamar</button>
+        <button class="btn btn-o sm" style="flex:1"><svg class="i b sm"><use href="#ic-chat"/></svg> WhatsApp</button>
+        <button class="btn btn-o sm" style="flex:1" id="cjNudge"><svg class="i b sm"><use href="#ic-bell"/></svg> Avisar</button>
+      </div>
+
+      <div class="h-sec">Ubicación</div>
+      <div class="card" style="display:flex;gap:12px;align-items:center">
+        <div style="width:42px;height:42px;border-radius:12px;background:var(--blue-50);display:flex;align-items:center;justify-content:center;flex:0 0 42px">
+          <svg class="i b"><use href="#ic-pin"/></svg></div>
+        <div style="flex:1"><b style="font-size:13.5px" id="cjZone">Valencia norte</b>
+          <div class="tiny" id="cjAddr">Av. Bolívar Norte, C.C. Shopping Center, local 12</div></div>
+        <svg class="i m sm"><use href="#ic-next"/></svg>
+      </div>
+
+      <div class="h-sec">Datos</div>
+      <div class="card">
+        <div class="kv"><span>Cédula</span><b id="cjDoc">V-18.442.907</b></div>
+        <div class="kv"><span>Teléfono</span><b>+58 414 855 2210</b></div>
+        <div class="kv"><span>Límite de crédito</span><b id="cjLimit">$2.000,00</b></div>
+        <div class="kv"><span>Última conexión</span><b id="cjConn">Hoy 9:38 a.m.</b></div>
+      </div>
+
+      <div class="card" style="margin-top:12px;background:#FAFBFC;box-shadow:none;display:flex;gap:11px">
+        <svg class="i m" style="flex:0 0 20px"><use href="#ic-shield"/></svg>
+        <p style="margin:0;font-size:12px;color:var(--ink-3);line-height:1.55">
+          No ves sus operaciones ni con quién trabaja. Solo cuánto debe y desde cuándo — eso es todo
+          lo que necesitas para cobrarle.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- COBRO -->
+  <section class="screen" id="s-collect" data-title="Registrar cobro">
+    <div class="sbar"><span>2:18</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Registrar cobro</h2></div>
+    <div class="body" style="padding:0 20px">
+      <div class="card" style="display:flex;gap:11px;align-items:center;padding:12px 14px">
+        <div style="width:38px;height:38px;border-radius:11px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:650;font-size:12px" id="coIni">MG</div>
+        <div style="flex:1"><b style="font-size:14px" id="coName">María González</b>
+          <div class="tiny">Debe <span id="coDebt">$1.240,00</span></div></div>
+        <span class="chip c-gold" id="coChip">4 días</span>
+      </div>
+
+      <div class="card" style="margin-top:11px;text-align:center;padding:18px 16px">
+        <div class="tiny">Monto recibido</div>
+        <div style="display:flex;align-items:baseline;justify-content:center;gap:4px;margin:4px 0 2px">
+          <span style="font-size:24px;font-weight:700;color:var(--blue)" id="coSym">$</span>
+          <span style="font-size:34px;font-weight:700;letter-spacing:-1px;color:var(--blue)" id="coAmt">0,00</span>
+        </div>
+        <div class="tiny" id="coAfter">Selecciona un monto</div>
+      </div>
+
+      <div class="qc">
+        <div class="q" data-q="all">Toda la deuda</div>
+        <div class="q" data-q="half">Mitad</div>
+        <div class="q on" data-q="other">Otro monto</div>
+      </div>
+
+      <div class="h-sec" style="margin:16px 0 9px">¿Cómo lo recibiste?</div>
+      <div class="mseg" id="coMethod">
+        <div class="m on" data-m="efectivo"><svg class="i sm"><use href="#ic-cash"/></svg> Efectivo USD</div>
+        <div class="m" data-m="bs"><svg class="i sm"><use href="#ic-coin"/></svg> Bolívares</div>
+        <div class="m" data-m="movil"><svg class="i sm"><use href="#ic-phone"/></svg> Pago móvil</div>
+        <div class="m" data-m="usdt"><svg class="i sm"><use href="#ic-coin"/></svg> USDT</div>
+      </div>
+      <p class="tiny" id="coHint" style="margin:9px 0 0;line-height:1.5">El efectivo suma a lo que debes entregar al cierre del día.</p>
+    </div>
+    <div class="keypad" style="padding-bottom:4px">
+      <div class="key" data-k="1">1</div><div class="key" data-k="2">2</div><div class="key" data-k="3">3</div>
+      <div class="key" data-k="4">4</div><div class="key" data-k="5">5</div><div class="key" data-k="6">6</div>
+      <div class="key" data-k="7">7</div><div class="key" data-k="8">8</div><div class="key" data-k="9">9</div>
+      <div class="key" data-k="00">00</div><div class="key" data-k="0">0</div>
+      <div class="key" data-k="del"><svg class="i m"><use href="#ic-back"/></svg></div>
+    </div>
+    <div class="pad" style="padding-bottom:18px"><button class="btn btn-p" id="coGo" disabled>Continuar</button></div>
+  </section>
+
+  <!-- CONFIRMAR -->
+  <section class="screen" id="s-confirm" data-title="Revisar y confirmar">
+    <div class="sbar"><span>2:19</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Revisa antes de cargar</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="text-align:center;background:var(--navy);border:none;color:#fff">
+        <div style="font-size:12px;color:#9EC0EC">Vas a registrar</div>
+        <div style="font-size:32px;font-weight:700;margin:5px 0 3px" id="cfAmt">$600,00</div>
+        <div style="font-size:12.5px;color:#9EC0EC" id="cfMethod">Efectivo USD · de María González</div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="kv"><span>Cajero</span><b id="cfName">María González</b></div>
+        <div class="kv"><span>Deuda antes</span><b id="cfBefore">$1.240,00</b></div>
+        <div class="kv"><span>Deuda después</span><b id="cfAfter" style="color:var(--green-600)">$640,00</b></div>
+        <div class="divide"></div>
+        <div class="kv"><span>Tu efectivo en mano pasa a</span><b id="cfCash">$7.300,00</b></div>
+      </div>
+
+      <div class="card" style="margin-top:12px;background:var(--gold-50);border-color:#F0DFBB;display:flex;gap:11px">
+        <svg class="i d" style="flex:0 0 20px"><use href="#ic-alert"/></svg>
+        <p style="margin:0;font-size:12.5px;color:#7E570D;line-height:1.55">
+          Al confirmar, el cobro <b>queda cargado al sistema de inmediato</b> y entra en tu lista del día.
+          El cajero no lo aprueba. Si te equivocas tendrás que anularlo indicando el motivo, y la anulación
+          queda visible para el administrador.</p>
+      </div>
+
+      <div class="h-sec">Respaldo (opcional)</div>
+      <div class="upload" id="cfUpl">
+        <svg class="i lg m" style="margin-bottom:8px"><use href="#ic-cam"/></svg>
+        <div style="font-size:13.5px;font-weight:600">Foto del recibo o del efectivo</div>
+        <div class="tiny" style="margin-top:3px">Te protege si después hay un reclamo</div>
+      </div>
+      <div class="field" style="margin-top:14px"><label>Nota (opcional)</label>
+        <textarea class="inp" id="cfNote" placeholder="Ej. abona el resto el viernes"></textarea></div>
+    </div>
+    <div class="pad pb"><button class="btn btn-g" id="cfGo">Confirmar cobro</button></div>
+  </section>
+
+  <!-- RECIBO -->
+  <section class="screen fade" id="s-receipt" data-title="Cobro registrado">
+    <div class="sbar"><span>2:20</span><span class="r">••• ▮</span></div>
+    <div class="body pad" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+      <div style="width:86px;height:86px;border-radius:50%;background:var(--green-50);display:flex;align-items:center;justify-content:center;margin-bottom:18px">
+        <div style="width:60px;height:60px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center">
+          <svg class="i w" style="width:30px;height:30px;stroke-width:2.4"><use href="#ic-check"/></svg></div>
+      </div>
+      <h2 style="font-size:22px;margin:0 0 6px" id="rcTitle">Cobro registrado</h2>
+      <p class="muted" style="margin:0 0 18px;line-height:1.6" id="rcSub">Ya está cargado en el sistema. El administrador lo verá en tu lista del día.</p>
+      <div class="card" style="width:100%;text-align:left">
+        <div class="kv"><span>N° de registro</span><b id="rcId">#COB-0416</b></div>
+        <div class="kv"><span>Cajero</span><b id="rcName">María González</b></div>
+        <div class="kv"><span>Monto</span><b id="rcAmt">$600,00</b></div>
+        <div class="kv"><span>Método</span><b id="rcMethod">Efectivo USD</b></div>
+        <div class="kv"><span>Hora</span><b id="rcTime">2:20 p.m.</b></div>
+        <div class="divide"></div>
+        <div class="kv"><span>Deuda del cajero</span><b id="rcDebt">$640,00</b></div>
+        <div class="kv" style="font-size:15px"><span style="color:var(--ink);font-weight:600">Efectivo en mano</span><b id="rcCash" style="color:var(--blue)">$7.300,00</b></div>
+      </div>
+      <div class="banner ok" style="margin:14px 0 0;width:100%" id="rcSync">
+        <svg class="i g sm" style="flex:0 0 16px"><use href="#ic-sync"/></svg>
+        <span>Sincronizado con la central</span>
+      </div>
+    </div>
+    <div class="pad pb">
+      <button class="btn btn-p" data-go="route">Siguiente cajero</button>
+      <button class="btn btn-t" style="margin-top:4px" data-go="home">Volver a mi día</button>
+    </div>
+  </section>
+
+  <!-- CIERRE / LISTA DIARIA -->
+  <section class="screen" id="s-cierre" data-title="Lista diaria">
+    <div class="sbar"><span>5:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div>
+      <h2>Lista del día</h2>
+      <div class="iconbtn" data-go="history"><svg class="i"><use href="#ic-clock"/></svg></div></div>
+    <div class="body pad pb">
+      <div class="card" style="background:linear-gradient(155deg,var(--navy),#1B4272);border:none;color:#fff">
+        <div class="row">
+          <span style="font-size:12.5px;color:#9EC0EC">Jueves 6 de agosto</span>
+          <span class="chip c-gold" id="ciStatus">Sin rendir</span>
+        </div>
+        <div style="font-size:12px;color:#9EC0EC;margin-top:12px">Total registrado</div>
+        <div style="font-size:29px;font-weight:700;margin:2px 0 12px" id="ciTotal">$10.000,00</div>
+        <div style="background:rgba(255,255,255,.11);border-radius:12px;padding:13px">
+          <div class="row"><span style="font-size:12px;color:#CFE0F2">Efectivo que debes entregar</span>
+            <b style="font-size:19px" id="ciCash">$6.700,00</b></div>
+          <div class="row" style="margin-top:8px"><span style="font-size:11.5px;color:#9EC0EC">Digital (verificable en cuenta)</span>
+            <b style="font-size:13px;color:#9EC0EC" id="ciDig">$3.300,00</b></div>
+        </div>
+      </div>
+
+      <div class="h-sec">Desglose por método</div>
+      <div class="card">
+        <div class="kv"><span>Efectivo USD</span><b id="bkEf">$6.700,00</b></div>
+        <div class="kv"><span>Bolívares</span><b id="bkBs">Bs 941.820,00 · $3.300,00</b></div>
+        <div class="kv"><span>Pago móvil</span><b id="bkMv">$0,00</b></div>
+        <div class="kv"><span>USDT</span><b id="bkUs">$0,00</b></div>
+        <div class="divide"></div>
+        <div class="kv" style="font-size:15px"><span style="color:var(--ink);font-weight:600">Total</span><b id="bkTot">$10.000,00</b></div>
+      </div>
+
+      <div class="row h-sec"><span>Registros de hoy (<span id="ciN">5</span>)</span></div>
+      <div class="card" style="padding:4px 16px" id="ciList"></div>
+
+      <div class="card" style="margin-top:14px;background:var(--blue-50);border-color:#CDE0FB;display:flex;gap:11px">
+        <svg class="i b" style="flex:0 0 20px"><use href="#ic-shield"/></svg>
+        <p style="margin:0;font-size:12.5px;color:#1B4E9B;line-height:1.55">
+          Al cerrar, esta lista se envía al administrador. Él compara el efectivo que entregas
+          contra los <b id="ciCash2">$6.700,00</b> declarados aquí.</p>
+      </div>
+
+      <button class="btn btn-d" style="margin-top:14px" id="ciGo">Cerrar día y declarar entrega</button>
+    </div>
+    <div class="tabbar">
+      <div class="tab" data-go="home"><svg class="i"><use href="#ic-home"/></svg>Mi día</div>
+      <div class="tab" data-go="route"><svg class="i"><use href="#ic-route"/></svg>Cajeros</div>
+      <div class="fabwrap"><div class="fab" data-go="route"><svg class="i w lg"><use href="#ic-plus"/></svg></div></div>
+      <div class="tab on"><svg class="i"><use href="#ic-list"/></svg>Cuadre</div>
+      <div class="tab" data-go="profile"><svg class="i"><use href="#ic-user"/></svg>Perfil</div>
+    </div>
+  </section>
+
+  <!-- DETALLE DE COBRO -->
+  <section class="screen" id="s-move" data-title="Detalle de un cobro">
+    <div class="sbar"><span>5:42</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2 id="mvId">#COB-0412</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="text-align:center">
+        <span class="chip c-green">Cargado al sistema</span>
+        <div style="font-size:30px;font-weight:700;margin:10px 0 2px" id="mvAmt">$2.400,00</div>
+        <div class="muted" id="mvMethod">Efectivo USD</div>
+      </div>
+      <div class="h-sec">Detalle</div>
+      <div class="card">
+        <div class="kv"><span>Cajero</span><b id="mvName">Luis Pérez</b></div>
+        <div class="kv"><span>Hora</span><b id="mvTime">10:15 a.m.</b></div>
+        <div class="kv"><span>Zona</span><b>Valencia sur</b></div>
+        <div class="kv"><span>Cobrador</span><b>José Ramírez (tú)</b></div>
+        <div class="kv"><span>Sincronizado</span><b style="color:var(--green-600)">Sí · 10:15 a.m.</b></div>
+        <div class="divide"></div>
+        <div class="kv"><span>Deuda antes</span><b>$2.400,00</b></div>
+        <div class="kv"><span>Deuda después</span><b>$0,00</b></div>
+      </div>
+      <div class="h-sec">Respaldo</div>
+      <div class="card" style="display:flex;gap:11px;align-items:center">
+        <div style="width:42px;height:52px;border-radius:8px;background:#EDF1F6;display:flex;align-items:center;justify-content:center"><svg class="i m"><use href="#ic-cam"/></svg></div>
+        <div style="flex:1"><b style="font-size:13.5px">recibo_0412.jpg</b><div class="tiny">Tomada a las 10:15 a.m.</div></div>
+      </div>
+      <button class="btn btn-o" style="margin-top:16px"><svg class="i"><use href="#ic-share"/></svg> Compartir recibo</button>
+      <button class="btn btn-r" style="margin-top:10px" data-go="annul"><svg class="i r"><use href="#ic-x"/></svg> Anular este cobro</button>
+      <p class="tiny" style="text-align:center;margin-top:12px;line-height:1.5">Los cobros no se borran. Una anulación queda en la lista con su motivo y el administrador la ve.</p>
+    </div>
+  </section>
+
+  <!-- ANULAR -->
+  <section class="screen" id="s-annul" data-title="Anular con motivo">
+    <div class="sbar"><span>5:43</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Anular cobro</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="background:var(--red-50);border-color:#F3C9C6;display:flex;gap:11px">
+        <svg class="i r" style="flex:0 0 20px"><use href="#ic-alert"/></svg>
+        <p style="margin:0;font-size:12.5px;color:var(--red-700);line-height:1.55">
+          Vas a anular <b>#COB-0412 · $2.400,00</b>. La deuda del cajero vuelve a subir y tu efectivo
+          en mano baja. Esta acción queda registrada con tu nombre y la hora.</p>
+      </div>
+      <div class="field" style="margin-top:16px"><label>Motivo de la anulación</label>
+        <select class="inp" id="anReason">
+          <option value="">Selecciona el motivo</option>
+          <option>Monto equivocado</option>
+          <option>Cajero equivocado</option>
+          <option>El cajero no entregó el dinero</option>
+          <option>Registro duplicado</option>
+          <option>Otro</option>
+        </select></div>
+      <div class="field"><label>Explicación</label>
+        <textarea class="inp" id="anNote" placeholder="Explica qué pasó. El administrador lo va a leer."></textarea></div>
+    </div>
+    <div class="pad pb"><button class="btn btn-r" id="anGo" disabled>Anular cobro</button></div>
+  </section>
+
+  <!-- CERRAR / DECLARAR -->
+  <section class="screen" id="s-send" data-title="Cerrar y declarar">
+    <div class="sbar"><span>5:50</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Declarar entrega</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="text-align:center;background:var(--navy);border:none;color:#fff;padding:22px">
+        <div style="font-size:12px;color:#9EC0EC">Efectivo que vas a entregar</div>
+        <div style="font-size:36px;font-weight:700;margin:6px 0 3px" id="snCash">$6.700,00</div>
+        <div style="font-size:12px;color:#9EC0EC">de <span id="snN">5</span> cobros registrados hoy</div>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="kv"><span>Total registrado</span><b id="snTotal">$10.000,00</b></div>
+        <div class="kv"><span>Digital (ya en cuentas)</span><b id="snDig">$3.300,00</b></div>
+        <div class="divide"></div>
+        <div class="kv" style="font-size:15px"><span style="color:var(--ink);font-weight:600">Efectivo a entregar</span><b id="snCash2" style="color:var(--blue)">$6.700,00</b></div>
+      </div>
+      <div class="field" style="margin-top:16px"><label>¿A quién le entregas?</label>
+        <select class="inp"><option>Caja Central · Valencia</option><option>Administración</option><option>Otro cobrador</option></select></div>
+      <div class="field"><label>Nota para el administrador (opcional)</label>
+        <textarea class="inp" placeholder="Ej. Pedro Loyo no pagó, quedó para mañana"></textarea></div>
+      <div class="card" style="background:var(--gold-50);border-color:#F0DFBB;display:flex;gap:11px">
+        <svg class="i d" style="flex:0 0 20px"><use href="#ic-alert"/></svg>
+        <p style="margin:0;font-size:12.5px;color:#7E570D;line-height:1.55">
+          Después de cerrar no puedes registrar más cobros del día de hoy ni modificar la lista.
+          Si falta algún cajero, regístralo antes.</p>
+      </div>
+    </div>
+    <div class="pad pb"><button class="btn btn-d" id="snGo">Confirmar y enviar al admin</button></div>
+  </section>
+
+  <!-- ENVIADO -->
+  <section class="screen fade" id="s-sent" data-title="En verificación">
+    <div class="sbar"><span>5:52</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-go="home"><svg class="i"><use href="#ic-back"/></svg></div><h2>Cierre del 6 de agosto</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="text-align:center;padding:24px 16px">
+        <div style="width:70px;height:70px;border-radius:50%;background:var(--gold-50);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+          <svg class="i d" style="width:30px;height:30px"><use href="#ic-clock"/></svg></div>
+        <h2 style="font-size:20px;margin:0 0 6px">Lista enviada</h2>
+        <p class="muted" style="margin:0">El administrador está verificando tu entrega.</p>
+        <div style="margin-top:14px"><span class="chip c-gold">● En verificación</span></div>
+      </div>
+      <div class="h-sec">Seguimiento</div>
+      <div class="card">
+        <div class="tl">
+          <div class="n ok"><b>Cobros registrados</b><span>5 registros · $10.000,00</span></div>
+          <div class="n ok"><b>Lista cerrada y enviada</b><span>Hoy · 5:52 p.m.</span></div>
+          <div class="n now"><b>Verificación del administrador</b><span>Compara el efectivo entregado contra lo declarado</span></div>
+          <div class="n"><b>Cierre conforme</b><span>Pendiente</span></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="kv"><span>Declarado en efectivo</span><b>$6.700,00</b></div>
+        <div class="kv"><span>Digital</span><b>$3.300,00</b></div>
+        <div class="kv"><span>Entregado a</span><b>Caja Central · Valencia</b></div>
+      </div>
+      <button class="btn btn-o" style="margin-top:16px"><svg class="i"><use href="#ic-doc"/></svg> Descargar lista en PDF</button>
+      <button class="btn btn-t" data-go="home">Volver a mi día</button>
+    </div>
+  </section>
+
+  <!-- HISTORIAL -->
+  <section class="screen" id="s-history" data-title="Cierres anteriores">
+    <div class="sbar"><span>5:55</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Mis cierres</h2></div>
+    <div class="body pad pb">
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <div class="stat"><div class="tiny">Este mes</div><div class="n">$182.400</div></div>
+        <div class="stat"><div class="tiny">Cierres conformes</div><div class="n" style="color:var(--green-600)">21/22</div></div>
+      </div>
+      <div class="h-sec">Agosto</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="sent"><div class="av gd"><svg class="i d sm"><use href="#ic-clock"/></svg></div>
+          <div class="tx"><b>Jueves 6 de agosto</b><span>5 cobros · en verificación</span></div>
+          <div class="rt"><b>$10.000,00</b><span style="color:var(--gold-700)">Pendiente</span></div></div>
+        <div class="li" data-go="hdetail"><div class="av rd"><svg class="i r sm"><use href="#ic-alert"/></svg></div>
+          <div class="tx"><b>Lunes 3 de agosto</b><span>7 cobros · diferencia de $50</span></div>
+          <div class="rt"><b>$5.400,00</b><span style="color:var(--red-700)">Con diferencia</span></div></div>
+        <div class="li"><div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>Viernes 31 de julio</b><span>9 cobros · verificado</span></div>
+          <div class="rt"><b>$12.850,00</b><span style="color:var(--green-600)">Conforme</span></div></div>
+        <div class="li"><div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>Jueves 30 de julio</b><span>6 cobros · verificado</span></div>
+          <div class="rt"><b>$8.200,00</b><span style="color:var(--green-600)">Conforme</span></div></div>
+        <div class="li"><div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>Miércoles 29 de julio</b><span>8 cobros · verificado</span></div>
+          <div class="rt"><b>$9.640,00</b><span style="color:var(--green-600)">Conforme</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CIERRE CON DIFERENCIA -->
+  <section class="screen" id="s-hdetail" data-title="Cierre con diferencia">
+    <div class="sbar"><span>5:56</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Lunes 3 de agosto</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="border-color:#F3C9C6;background:var(--red-50);text-align:center">
+        <span class="chip c-red">● Diferencia detectada</span>
+        <div style="font-size:30px;font-weight:700;margin:10px 0 2px;color:var(--red-700)">−$50,00</div>
+        <div style="font-size:13px;color:var(--red-700)">Entregaste menos de lo declarado</div>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="kv"><span>Declaraste en efectivo</span><b>$5.400,00</b></div>
+        <div class="kv"><span>Recibió Caja Central</span><b>$5.350,00</b></div>
+        <div class="divide"></div>
+        <div class="kv" style="font-size:15px"><span style="color:var(--ink);font-weight:600">Diferencia</span><b style="color:var(--red-700)">−$50,00</b></div>
+      </div>
+      <div class="h-sec">Nota del administrador</div>
+      <div class="card" style="display:flex;gap:11px">
+        <div style="width:34px;height:34px;border-radius:11px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:650;font-size:11px;flex:0 0 34px">SR</div>
+        <div><b style="font-size:13.5px">Saddiel Rojas · Administración</b>
+          <p style="margin:5px 0 0;font-size:13px;line-height:1.55;color:var(--ink-2)">Faltaron $50 del cobro a Rosa Díaz. Revisa si el billete de $50 se quedó en la moto. Descontado de la comisión de la semana.</p>
+          <div class="tiny" style="margin-top:7px">3 ago · 7:12 p.m.</div></div>
+      </div>
+      <div class="h-sec">Registros del día (7)</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li"><div class="av gr"><svg class="i g sm"><use href="#ic-cash"/></svg></div>
+          <div class="tx"><b>Rosa Díaz</b><span>#COB-0388 · 4:40 p.m.</span></div>
+          <div class="rt"><b>$1.300,00</b><span style="color:var(--red-700)">Revisado</span></div></div>
+        <div class="li"><div class="av gr"><svg class="i g sm"><use href="#ic-cash"/></svg></div>
+          <div class="tx"><b>Jesús Marcano</b><span>#COB-0385 · 2:10 p.m.</span></div>
+          <div class="rt"><b>$900,00</b><span>Conforme</span></div></div>
+        <div class="li"><div class="av gr"><svg class="i g sm"><use href="#ic-cash"/></svg></div>
+          <div class="tx"><b>Carmen Silva</b><span>#COB-0381 · 12:25 p.m.</span></div>
+          <div class="rt"><b>$3.200,00</b><span>Conforme</span></div></div>
+      </div>
+      <button class="btn btn-o" style="margin-top:16px"><svg class="i b"><use href="#ic-chat"/></svg> Responder al administrador</button>
+    </div>
+  </section>
+
+  <!-- PENDIENTES -->
+  <section class="screen" id="s-pending" data-title="Pendientes por sincronizar">
+    <div class="sbar"><span>2:30</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Sin sincronizar</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="background:var(--gold-50);border-color:#F0DFBB;display:flex;gap:11px">
+        <svg class="i d" style="flex:0 0 20px"><use href="#ic-off"/></svg>
+        <p style="margin:0;font-size:12.5px;color:#7E570D;line-height:1.55">
+          Estás sin señal. Los cobros se guardan en el teléfono y se cargan solos cuando vuelva
+          la conexión. Puedes seguir trabajando normal.</p>
+      </div>
+      <div class="h-sec">Guardados en el teléfono (<span id="pnN">0</span>)</div>
+      <div class="card" style="padding:4px 16px" id="pnList">
+        <div class="li" style="cursor:default"><div class="av"><svg class="i m sm"><use href="#ic-sync"/></svg></div>
+          <div class="tx"><b>Nada pendiente</b><span>Todo está cargado en la central</span></div></div>
+      </div>
+      <button class="btn btn-o" style="margin-top:16px" id="pnGo"><svg class="i b"><use href="#ic-sync"/></svg> Reintentar sincronización</button>
+      <p class="tiny" style="text-align:center;margin-top:12px;line-height:1.5">El cierre del día solo puede enviarse con todos los cobros sincronizados.</p>
+    </div>
+  </section>
+
+  <!-- NOTIFICACIONES -->
+  <section class="screen" id="s-notifs" data-title="Notificaciones">
+    <div class="sbar"><span>5:58</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Notificaciones</h2></div>
+    <div class="body pad pb">
+      <div class="h-sec" style="margin-top:4px">Hoy</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="route"><div class="av rd"><svg class="i r sm"><use href="#ic-alert"/></svg></div>
+          <div class="tx"><b>Cajero vencido</b><span style="white-space:normal">Pedro Loyo llegó a 8 días con $3.100 pendientes</span></div></div>
+        <div class="li" data-go="route"><div class="av rd"><svg class="i r sm"><use href="#ic-lock"/></svg></div>
+          <div class="tx"><b>Cajero bloqueado por límite</b><span>Yajaira Mendoza topó su crédito de $2.850</span></div></div>
+        <div class="li" data-go="route"><div class="av gd"><svg class="i d sm"><use href="#ic-off"/></svg></div>
+          <div class="tx"><b>Cajero sin conectarse</b><span style="white-space:normal">Yajaira Mendoza no abre la app desde hace 4 días</span></div></div>
+        <div class="li" data-go="route"><div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>Aviso leído</b><span>Pedro Loyo leyó el aviso de cobro · 11:20 a.m.</span></div></div>
+      </div>
+      <div class="h-sec">Ayer</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="history"><div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>Cierre conforme</b><span>El admin verificó tu lista del 5 de agosto</span></div></div>
+        <div class="li" data-go="hdetail"><div class="av rd"><svg class="i r sm"><use href="#ic-alert"/></svg></div>
+          <div class="tx"><b>Diferencia en tu cierre</b><span style="white-space:normal">Faltaron $50 en la entrega del 3 de agosto</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PERFIL -->
+  <section class="screen" id="s-profile" data-title="Mi perfil">
+    <div class="sbar"><span>6:00</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Mi perfil</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="display:flex;gap:13px;align-items:center">
+        <div style="width:54px;height:54px;border-radius:18px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:650;font-size:18px">JR</div>
+        <div style="flex:1">
+          <b style="font-size:16px">José Ramírez</b>
+          <div class="tiny">Cobrador · Zona Valencia</div>
+          <span class="chip c-blue" style="margin-top:6px">8 cajeros asignados</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <div class="stat"><div class="tiny">Recaudado agosto</div><div class="n">$182.400</div></div>
+        <div class="stat"><div class="tiny">Cierres conformes</div><div class="n" style="color:var(--green-600)">95%</div></div>
+      </div>
+      <div class="h-sec">Mi trabajo</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="history"><div class="av"><svg class="i b sm"><use href="#ic-doc"/></svg></div>
+          <div class="tx"><b>Mis cierres</b><span>Historial y verificaciones</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li" data-go="route"><div class="av"><svg class="i b sm"><use href="#ic-users"/></svg></div>
+          <div class="tx"><b>Mis cajeros</b><span>8 asignados en Valencia</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li" data-go="pending"><div class="av"><svg class="i b sm"><use href="#ic-sync"/></svg></div>
+          <div class="tx"><b>Sincronización</b><span>Estado de los cobros guardados</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+      </div>
+      <div class="h-sec">Cuenta</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li"><div class="av"><svg class="i b sm"><use href="#ic-lock"/></svg></div>
+          <div class="tx"><b>Cambiar PIN</b><span>Última vez hace 1 mes</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li"><div class="av"><svg class="i b sm"><use href="#ic-chat"/></svg></div>
+          <div class="tx"><b>Contactar administración</b><span>WhatsApp directo</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+      </div>
+      <button class="btn btn-o" style="margin-top:16px;color:var(--red-700)" data-go="login">
+        <svg class="i r"><use href="#ic-out"/></svg> Cerrar sesión</button>
+      <p class="tiny" style="text-align:center;margin-top:14px">TAV Cobrador v1.0.0 · Prototipo</p>
+    </div>
+    <div class="tabbar">
+      <div class="tab" data-go="home"><svg class="i"><use href="#ic-home"/></svg>Mi día</div>
+      <div class="tab" data-go="route"><svg class="i"><use href="#ic-route"/></svg>Cajeros</div>
+      <div class="fabwrap"><div class="fab" data-go="route"><svg class="i w lg"><use href="#ic-plus"/></svg></div></div>
+      <div class="tab" data-go="cierre"><svg class="i"><use href="#ic-list"/></svg>Cuadre</div>
+      <div class="tab on"><svg class="i"><use href="#ic-user"/></svg>Perfil</div>
+    </div>
+  </section>
+
+  </div>
+  <div id="toast"><svg class="i w sm"><use href="#ic-check"/></svg><span id="toastTx"></span></div>
+</div>
+</main>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const vp = $('vp'), nameEl = $('scr-name');
+  let stack = [], current = 'login';
+  const RATE = 285.40;
+  const money = n => n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const ini = n => n.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+
+  window.go = function(id, push){
+    const el = $('s-'+id);
+    if(!el){ console.warn('falta pantalla', id); return; }
+    if(push !== false && current && current !== id) stack.push(current);
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    el.classList.add('active');
+    el.querySelectorAll('.body').forEach(b=>b.scrollTop=0);
+    current = id;
+    nameEl.textContent = el.dataset.title || id;
+    document.querySelectorAll('.map a').forEach(a=>a.classList.toggle('on', a.dataset.go===id));
+    if(id==='login') stack=[];
+  };
+  function back(){ go(stack.pop() || 'home', false); }
+
+  document.addEventListener('click', e=>{
+    if(e.target.closest('[data-back]')) return back();
+    const g = e.target.closest('[data-go]');
+    if(g) go(g.dataset.go);
+  });
+
+  const toast=$('toast'), toastTx=$('toastTx'); let tT;
+  function say(m){ toastTx.textContent=m; toast.classList.add('on'); clearTimeout(tT); tT=setTimeout(()=>toast.classList.remove('on'),2400); }
+
+  $('hsBtn').addEventListener('click',function(){ document.body.classList.toggle('hs'); this.classList.toggle('on'); });
+
+  // ---------- ESTADO ----------
+  const METHODS = {
+    efectivo:{label:'Efectivo USD', cash:true,  sym:'$',  hint:'El efectivo suma a lo que debes entregar al cierre del día.'},
+    bs:      {label:'Bolívares',    cash:false, sym:'Bs', hint:'Transferencia en bolívares. No suma a tu efectivo, se verifica en cuenta.'},
+    movil:   {label:'Pago móvil',   cash:false, sym:'Bs', hint:'Pago móvil en bolívares. No suma a tu efectivo, se verifica en cuenta.'},
+    usdt:    {label:'USDT',         cash:false, sym:'$',  hint:'Transferencia en USDT. No suma a tu efectivo, se verifica en wallet.'}
+  };
+  const S = {
+    offline:false, pending:[], closed:false, seq:415,
+    pend:[
+      {n:'Pedro Loyo',      z:'C.C. Metrópolis, nivel feria', debt:3100, lim:3200, days:8, doc:'V-12.908.334', off:0, att:null, conn:'Ayer 6:12 p.m.'},
+      {n:'María González',  z:'Av. Bolívar Norte, local 12',  debt:1240, lim:2000, days:4, doc:'V-18.442.907', off:0, att:null, conn:'Hoy 9:38 a.m.'},
+      {n:'Yajaira Mendoza', z:'Av. Bolívar, Torre Sindoni',   debt:2850, lim:2850, days:2, doc:'V-20.115.762', off:4, att:null, conn:'Hace 4 días'}
+    ],
+    done:[
+      {id:'COB-0415', n:'Rosa Díaz',     amt:1300, m:'efectivo', t:'1:05 p.m.'},
+      {id:'COB-0414', n:'Jesús Marcano', amt:1500, m:'bs',       t:'12:30 p.m.'},
+      {id:'COB-0413', n:'Ana Rodríguez', amt:3000, m:'efectivo', t:'11:48 a.m.'},
+      {id:'COB-0412', n:'Carmen Silva',  amt:1800, m:'bs',       t:'11:02 a.m.'},
+      {id:'COB-0411', n:'Luis Pérez',    amt:2400, m:'efectivo', t:'10:15 a.m.'}
+    ],
+    sel:null, amt:'', method:'efectivo', quick:'other'
+  };
+  const totals = () => {
+    let cash=0, dig=0, by={efectivo:0,bs:0,movil:0,usdt:0};
+    S.done.forEach(c=>{ by[c.m]+=c.amt; METHODS[c.m].cash ? cash+=c.amt : dig+=c.amt; });
+    return {cash, dig, total:cash+dig, by};
+  };
+  // Semáforo de dos ejes: días de deuda y % del límite consumido. Manda el peor de los dos.
+  // Umbrales de crédito propuestos (a confirmar con el cliente): 75% ámbar · 100% rojo y bloqueo.
+  const PCT_AMBER = 0.75;
+  function stateOf(c){
+    const pct = c.lim ? c.debt/c.lim : 0;
+    const byDays = c.days>=7 ? 2 : c.days>=4 ? 1 : 0;
+    const byPct  = pct>=1 ? 2 : pct>=PCT_AMBER ? 1 : 0;
+    const s = Math.max(byDays, byPct);
+    const blocked = pct>=1;
+    let why;
+    if(blocked && c.days>=7) why = 'Bloqueado · '+c.days+' días';
+    else if(blocked)         why = 'Bloqueado por límite';
+    else if(c.days>=7)       why = c.days+' días · vencido';
+    else                     why = c.days+' días';
+    return {s, pct, blocked, why,
+      c:   ['c-green','c-gold','c-red'][s],
+      col: ['var(--green)','var(--gold)','var(--red)'][s]};
+  }
+  const lightOf = d => d>=7 ? {c:'c-red',col:'var(--red)'} : d>=4 ? {c:'c-gold',col:'var(--gold)'} : {c:'c-green',col:'var(--green)'};
+
+  // Orden: bloqueados por límite primero, luego por estado, luego por días
+  const byUrgency = arr => arr.slice().sort((a,b)=>{
+    const A=stateOf(a), B=stateOf(b);
+    return (B.blocked-A.blocked) || (B.s-A.s) || (b.days-a.days) || (b.debt-a.debt);
+  });
+
+  // ---------- RENDER ----------
+  function row(html, go, click){
+    const d=document.createElement('div'); d.className='li'; d.innerHTML=html;
+    if(go) d.dataset.go=go;
+    if(click) d.addEventListener('click',click);
+    return d;
+  }
+  function cajeroRow(c){
+    const L=stateOf(c);
+    const flags = [];
+    if(c.att) flags.push('<span class="chip c-blue" style="margin-top:4px">'+(c.att==='yo'?'Lo estás atendiendo':c.att+' lo atiende')+'</span>');
+    if(c.off>=3) flags.push('<span class="chip c-gray" style="margin-top:4px">Sin conectarse '+c.off+' días</span>');
+    return row(
+      '<div class="av nv">'+ini(c.n)+'</div>'+
+      '<div class="tx"><b>'+c.n+'</b><span>'+c.z+'</span>'+
+        (flags.length?'<div style="display:flex;gap:5px;flex-wrap:wrap">'+flags.join('')+'</div>':'')+'</div>'+
+      '<div class="rt"><b>$'+money(c.debt)+'</b>'+
+        '<span class="chip '+L.c+'" style="margin-top:3px">'+L.why+'</span>'+
+        '<span style="display:block;margin-top:3px">'+Math.round(L.pct*100)+'% del límite</span></div>',
+      'cajero', ()=>openCajero(c));
+  }
+  function doneRow(c, target){
+    const M=METHODS[c.m];
+    return row(
+      '<div class="av gr"><svg class="i g sm"><use href="#'+(M.cash?'ic-cash':'ic-coin')+'"/></svg></div>'+
+      '<div class="tx"><b>'+c.n+'</b><span>'+c.id+' · '+M.label+' · '+c.t+'</span></div>'+
+      '<div class="rt"><b style="color:var(--green-600)">$'+money(c.amt)+'</b><span>'+(M.cash?'efectivo':'digital')+'</span></div>',
+      target||'move', ()=>openMove(c));
+  }
+  function render(){
+    const T=totals();
+    // home
+    $('homeTotal').textContent='$'+money(T.total);
+    $('homeCash').textContent='$'+money(T.cash);
+    $('homeDig').textContent='$'+money(T.dig);
+    $('homeDone').textContent=S.done.length;
+    $('homeTot').textContent=S.done.length+S.pend.length;
+    $('homeProg').style.width=(S.done.length/(S.done.length+S.pend.length)*100)+'%';
+    $('statN').textContent=S.done.length;
+    $('statPend').textContent='$'+S.pend.reduce((a,c)=>a+c.debt,0).toLocaleString('es-VE');
+    $('statVenc').textContent=S.pend.filter(c=>stateOf(c).s===2).length;
+    $('homeStatus').textContent = S.closed?'En verificación':'Sin rendir';
+    $('homeStatus').className = 'chip '+(S.closed?'c-blue':'c-gold');
+    const hn=$('homeNext'); hn.innerHTML='';
+    byUrgency(S.pend).slice(0,3).forEach(c=>hn.appendChild(cajeroRow(c)));
+    if(!S.pend.length) hn.innerHTML='<div class="li" style="cursor:default"><div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div><div class="tx"><b>Nada en rojo</b><span>Ningún cajero pasado de días ni de límite</span></div></div>';
+    const hl=$('homeLast'); hl.innerHTML='';
+    S.done.slice(0,3).forEach(c=>hl.appendChild(doneRow(c)));
+    // ruta
+    $('segPend').textContent=S.pend.length; $('segDone').textContent=S.done.length;
+    const filt=document.querySelector('#routeSeg .on').dataset.f;
+    const rl=$('routeList'); rl.innerHTML='';
+    if(filt==='pend'){
+      byUrgency(S.pend).forEach(c=>rl.appendChild(cajeroRow(c)));
+      if(!S.pend.length) rl.innerHTML='<div class="li" style="cursor:default"><div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div><div class="tx"><b>Nada pendiente</b><span>No queda nadie por cobrar</span></div></div>';
+    } else {
+      S.done.forEach(c=>rl.appendChild(doneRow(c)));
+    }
+    // cuadre
+    $('ciTotal').textContent='$'+money(T.total);
+    $('ciCash').textContent='$'+money(T.cash);
+    $('ciCash2').textContent='$'+money(T.cash);
+    $('ciDig').textContent='$'+money(T.dig);
+    $('bkEf').textContent='$'+money(T.by.efectivo);
+    $('bkBs').textContent='Bs '+money(T.by.bs*RATE)+' · $'+money(T.by.bs);
+    $('bkMv').textContent='$'+money(T.by.movil);
+    $('bkUs').textContent='$'+money(T.by.usdt);
+    $('bkTot').textContent='$'+money(T.total);
+    $('ciN').textContent=S.done.length;
+    const cl=$('ciList'); cl.innerHTML='';
+    S.done.forEach(c=>cl.appendChild(doneRow(c)));
+    $('ciStatus').textContent = S.closed?'En verificación':'Sin rendir';
+    $('ciStatus').className = 'chip '+(S.closed?'c-blue':'c-gold');
+    $('ciGo').disabled = S.closed || S.pending.length>0;
+    $('ciGo').textContent = S.closed ? 'Día cerrado · en verificación' : 'Cerrar día y declarar entrega';
+    // declarar
+    $('snCash').textContent='$'+money(T.cash); $('snCash2').textContent='$'+money(T.cash);
+    $('snTotal').textContent='$'+money(T.total); $('snDig').textContent='$'+money(T.dig);
+    $('snN').textContent=S.done.length;
+    // offline
+    $('offBanner').classList.toggle('hide', !S.offline && S.pending.length===0);
+    $('offCount').textContent=S.pending.length;
+    $('pnN').textContent=S.pending.length;
+    const pl=$('pnList');
+    if(S.pending.length){
+      pl.innerHTML='';
+      S.pending.forEach(c=>pl.appendChild(row(
+        '<div class="av gd"><svg class="i d sm"><use href="#ic-clock"/></svg></div>'+
+        '<div class="tx"><b>'+c.n+'</b><span>'+c.id+' · '+METHODS[c.m].label+' · '+c.t+'</span></div>'+
+        '<div class="rt"><b>$'+money(c.amt)+'</b><span style="color:var(--gold-700)">en el teléfono</span></div>')));
+    } else {
+      pl.innerHTML='<div class="li" style="cursor:default"><div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div><div class="tx"><b>Nada pendiente</b><span>Todo está cargado en la central</span></div></div>';
+    }
+  }
+
+  // ---------- CAJERO ----------
+  function openCajero(c){
+    S.sel=c;
+    const L=stateOf(c);
+    $('cjTitle').textContent=c.n;
+    $('cjDebt').textContent='$'+money(c.debt);
+    $('cjOf').textContent='de un límite de $'+money(c.lim);
+    $('cjChip').textContent='● '+L.why; $('cjChip').className='chip '+L.c;
+    $('cjProg').style.width=Math.min(100,L.pct*100)+'%'; $('cjProg').style.background=L.col;
+    $('cjPct').textContent=Math.round(L.pct*100)+'% del límite consumido';
+    $('cjDays').textContent=c.days+' día'+(c.days===1?'':'s');
+    $('cjZone').textContent=c.z.split(',')[0]; $('cjAddr').textContent=c.z;
+    $('cjDoc').textContent=c.doc; $('cjLimit').textContent='$'+money(c.lim);
+    $('cjConn').textContent=c.conn;
+    renderAtt(c);
+    // preparar cobro
+    S.amt=''; S.quick='other'; S.method='efectivo';
+    $('coIni').textContent=ini(c.n); $('coName').textContent=c.n;
+    $('coDebt').textContent='$'+money(c.debt);
+    $('coChip').textContent=L.why; $('coChip').className='chip '+L.c;
+    document.querySelectorAll('#coMethod .m').forEach(m=>m.classList.toggle('on', m.dataset.m==='efectivo'));
+    document.querySelectorAll('.qc .q').forEach(q=>q.classList.toggle('on', q.dataset.q==='other'));
+    renderAmt();
+  }
+  function renderAtt(c){
+    const b=$('cjAttBanner');
+    if(!c.att){
+      b.classList.add('hide');
+      $('cjAttLbl').textContent='Marcar que lo estoy atendiendo';
+    } else if(c.att==='yo'){
+      b.className='banner ok'; b.classList.remove('hide');
+      $('cjAttTx').textContent='Lo estás atendiendo. Los demás cobradores lo ven así.';
+      $('cjAttLbl').textContent='Ya no lo estoy atendiendo';
+    } else {
+      b.className='banner off'; b.classList.remove('hide');
+      $('cjAttTx').textContent=c.att+' lo está atendiendo desde hace 12 min.';
+      $('cjAttLbl').textContent='Atenderlo yo';
+    }
+  }
+  $('cjAtt').addEventListener('click',()=>{
+    const c=S.sel; if(!c) return;
+    c.att = c.att==='yo' ? null : 'yo';
+    renderAtt(c); render();
+    say(c.att ? 'Marcado · los demás cobradores lo ven' : 'Ya no aparece como atendido');
+  });
+  $('cjNudge').addEventListener('click',()=>{
+    if(!S.sel) return;
+    say('Aviso de cobro enviado a '+S.sel.n);
+  });
+
+  // ---------- COBRO ----------
+  function amtValue(){ return parseFloat(S.amt||'0'); }
+  function renderAmt(){
+    const M=METHODS[S.method], v=amtValue();
+    const usd = (S.method==='bs'||S.method==='movil') ? v/RATE : v;
+    $('coSym').textContent=M.sym;
+    $('coAmt').textContent = S.amt==='' ? '0,00' : money(v);
+    $('coHint').textContent=M.hint;
+    if(!S.sel){ $('coAfter').textContent=''; return; }
+    if(v<=0){ $('coAfter').textContent='Selecciona un monto'; }
+    else {
+      const diff = usd - S.sel.debt;           // tolerancia de 1 centavo por redondeo
+      const eq = (S.method==='bs'||S.method==='movil') ? ' · equivale a $'+money(usd) : '';
+      let t;
+      if(diff > 0.01)       t = 'Excede la deuda en $'+money(diff);
+      else if(diff > -0.01) t = 'Salda la deuda completa ✓'+eq;
+      else                  t = 'Le quedarían $'+money(-diff)+eq;
+      $('coAfter').textContent=t;
+    }
+    $('coGo').disabled = v<=0;
+  }
+  document.querySelectorAll('[data-k]').forEach(k=>k.addEventListener('click',()=>{
+    const v=k.dataset.k;
+    if(v==='del') S.amt=S.amt.slice(0,-1);
+    else if(S.amt.length<9) S.amt=(S.amt==='0'?'':S.amt)+v;
+    document.querySelectorAll('.qc .q').forEach(q=>q.classList.toggle('on', q.dataset.q==='other'));
+    S.quick='other'; renderAmt();
+  }));
+  document.querySelector('.qc').addEventListener('click',e=>{
+    const q=e.target.closest('[data-q]'); if(!q||!S.sel) return;
+    document.querySelectorAll('.qc .q').forEach(x=>x.classList.toggle('on',x===q));
+    S.quick=q.dataset.q;
+    const inBs = (S.method==='bs'||S.method==='movil');
+    if(q.dataset.q==='all')  S.amt=String(Math.round(S.sel.debt*(inBs?RATE:1)));
+    if(q.dataset.q==='half') S.amt=String(Math.round(S.sel.debt/2*(inBs?RATE:1)));
+    if(q.dataset.q==='other') S.amt='';
+    renderAmt();
+  });
+  $('coMethod').addEventListener('click',e=>{
+    const m=e.target.closest('[data-m]'); if(!m) return;
+    S.method=m.dataset.m;
+    document.querySelectorAll('#coMethod .m').forEach(x=>x.classList.toggle('on',x===m));
+    if(S.quick!=='other'){ document.querySelector('.qc .q[data-q="'+S.quick+'"]').click(); }
+    renderAmt();
+  });
+  $('coGo').addEventListener('click',()=>{
+    const M=METHODS[S.method], v=amtValue();
+    const usd=(S.method==='bs'||S.method==='movil')?v/RATE:v;
+    const T=totals();
+    $('cfAmt').textContent=(M.sym==='Bs'?'Bs ':'$')+money(v);
+    $('cfMethod').textContent=M.label+' · de '+S.sel.n;
+    $('cfName').textContent=S.sel.n;
+    $('cfBefore').textContent='$'+money(S.sel.debt);
+    $('cfAfter').textContent='$'+money(Math.max(0,S.sel.debt-usd));
+    $('cfCash').textContent='$'+money(T.cash+(M.cash?usd:0));
+    go('confirm');
+  });
+
+  $('cfUpl').addEventListener('click',function(){
+    this.classList.add('done');
+    this.innerHTML='<svg class="i lg g" style="margin-bottom:8px"><use href="#ic-check"/></svg><div style="font-size:13.5px;font-weight:600;color:#256B2A">recibo_'+(S.seq+1)+'.jpg</div><div class="tiny" style="margin-top:3px">Adjunta · toca para cambiar</div>';
+  });
+
+  $('cfGo').addEventListener('click',()=>{
+    const M=METHODS[S.method], v=amtValue();
+    const usd=(S.method==='bs'||S.method==='movil')?v/RATE:v;
+    S.seq++;
+    const rec={id:'COB-0'+S.seq, n:S.sel.n, amt:usd, m:S.method, t:'2:20 p.m.'};
+    S.done.unshift(rec);
+    S.sel.debt=Math.max(0,S.sel.debt-usd);
+    if(S.sel.debt<=0) S.pend=S.pend.filter(c=>c!==S.sel);
+    if(S.offline) S.pending.push(rec);
+    const T=totals();
+    $('rcId').textContent='#'+rec.id; $('rcName').textContent=rec.n;
+    $('rcAmt').textContent=(M.sym==='Bs'?'Bs ':'$')+money(v);
+    $('rcMethod').textContent=M.label; $('rcTime').textContent=rec.t;
+    $('rcDebt').textContent='$'+money(S.sel.debt);
+    $('rcCash').textContent='$'+money(T.cash);
+    if(S.offline){
+      $('rcTitle').textContent='Guardado en el teléfono';
+      $('rcSub').textContent='No hay señal. Se cargará solo cuando vuelva la conexión; ya cuenta en tu lista del día.';
+      $('rcSync').className='banner off';
+      $('rcSync').innerHTML='<svg class="i d sm" style="flex:0 0 16px"><use href="#ic-off"/></svg><span>Pendiente de sincronizar</span>';
+    } else {
+      $('rcTitle').textContent='Cobro registrado';
+      $('rcSub').textContent='Ya está cargado en el sistema. El administrador lo verá en tu lista del día.';
+      $('rcSync').className='banner ok';
+      $('rcSync').innerHTML='<svg class="i g sm" style="flex:0 0 16px"><use href="#ic-sync"/></svg><span>Sincronizado con la central</span>';
+    }
+    // limpiar respaldo
+    $('cfUpl').className='upload';
+    $('cfUpl').innerHTML='<svg class="i lg m" style="margin-bottom:8px"><use href="#ic-cam"/></svg><div style="font-size:13.5px;font-weight:600">Foto del recibo o del efectivo</div><div class="tiny" style="margin-top:3px">Te protege si después hay un reclamo</div>';
+    $('cfNote').value='';
+    render(); go('receipt');
+  });
+
+  // ---------- MOVIMIENTO / ANULAR ----------
+  function openMove(c){
+    const M=METHODS[c.m];
+    $('mvId').textContent='#'+c.id; $('mvAmt').textContent='$'+money(c.amt);
+    $('mvMethod').textContent=M.label; $('mvName').textContent=c.n; $('mvTime').textContent=c.t;
+    S.moveSel=c;
+  }
+  function anCheck(){ $('anGo').disabled = !$('anReason').value || $('anNote').value.trim().length<4; }
+  $('anReason').addEventListener('change',anCheck);
+  $('anNote').addEventListener('input',anCheck);
+  $('anGo').addEventListener('click',()=>{
+    const c=S.moveSel; if(!c) return;
+    S.done=S.done.filter(x=>x!==c);
+    S.pending=S.pending.filter(x=>x!==c);
+    const cj=S.pend.find(x=>x.n===c.n);
+    if(cj) cj.debt+=c.amt;
+    $('anReason').value=''; $('anNote').value=''; anCheck();
+    render(); say('Cobro anulado · el admin fue notificado'); go('cierre');
+  });
+
+  // ---------- CIERRE ----------
+  $('ciGo').addEventListener('click',()=>{
+    if(S.pending.length){ say('Sincroniza los cobros pendientes primero'); return; }
+    go('send');
+  });
+  $('snGo').addEventListener('click',()=>{ S.closed=true; render(); go('sent'); });
+
+  // ---------- RUTA (filtro) ----------
+  $('routeSeg').addEventListener('click',e=>{
+    const d=e.target.closest('[data-f]'); if(!d) return;
+    document.querySelectorAll('#routeSeg div').forEach(x=>x.classList.toggle('on',x===d));
+    render();
+  });
+
+  // ---------- OFFLINE ----------
+  $('offBtn').addEventListener('click',function(){
+    S.offline=!S.offline; this.classList.toggle('on', S.offline);
+    this.textContent = S.offline ? 'Volver a tener señal' : 'Simular sin señal';
+    if(!S.offline && S.pending.length){
+      const n=S.pending.length; S.pending=[]; say(n+' cobro'+(n===1?'':'s')+' sincronizado'+(n===1?'':'s'));
+    }
+    render();
+  });
+  $('pnGo').addEventListener('click',()=>{
+    if(S.offline){ say('Sigues sin señal'); return; }
+    if(S.pending.length){ const n=S.pending.length; S.pending=[]; render(); say(n+' cobros sincronizados'); }
+    else say('No hay nada pendiente');
+  });
+
+  // ---------- PIN ----------
+  let p=0;
+  document.querySelectorAll('[data-pin]').forEach(k=>k.addEventListener('click',()=>{
+    p = k.dataset.pin==='del' ? Math.max(0,p-1) : Math.min(4,p+1);
+    document.querySelectorAll('#pd i').forEach((d,i)=>d.classList.toggle('f',i<p));
+    if(p===4) setTimeout(()=>{ p=0; document.querySelectorAll('#pd i').forEach(d=>d.classList.remove('f')); go('home'); },320);
+  }));
+
+  render();
+})();
+</script>
+</body>
+</html>

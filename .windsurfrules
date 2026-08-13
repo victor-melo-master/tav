@@ -1,0 +1,28 @@
+# Reglas del proyecto TAV
+
+Antes de escribir código en este repositorio, lee SIEMPRE estos archivos:
+
+1. `AGENTS.md` — reglas innegociables. Romper una es un bug aunque el código compile.
+2. `docs/01-reglas-de-negocio.md` — lo que dijo el cliente.
+3. `docs/02-modelo-de-datos.md` — el schema y las dos transacciones críticas.
+4. `docs/03-plan-de-construccion.md` — la fase en la que estamos.
+
+## Las que más se rompen
+
+- Los montos son `BigInt` de **centavos**. Nunca `float`, `double`, `Number` ni `Decimal`.
+- La tabla `movimientos` es de **solo-inserción**. Nada de `update` ni `delete`. Corregir = insertar un reverso.
+- El límite de crédito se valida **en la base de datos**, en transacción con `FOR UPDATE`.
+  Deshabilitar un botón en Flutter no es una validación.
+- Toda escritura de dinero es **idempotente** por `clientUuid`.
+- Colores y medidas salen de `TavColors`, `TavSpace`, `TavRadius`, `TavText`. Nada escrito a mano.
+- El diseño ya está resuelto en `design/*.html`. Replícalo, no lo reinterpretes.
+
+## Si algo no está definido
+
+No lo inventes. Márcalo con `// PENDIENTE DE DEFINIR:` y sigue.
+Un supuesto silencioso en un sistema de dinero es el error más caro posible.
+
+## Idioma
+
+Producto y textos de interfaz en español de Venezuela. Formato `$1.240,00` y `Bs 353.896,00`.
+Conceptos de negocio en español (`cajero`, `cobro`, `cierre`), términos técnicos en inglés.

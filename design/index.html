@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TAV — Entrega de diseño</title>
+<style>
+:root{
+  --navy:#0B1B33; --navy-2:#132a4a;
+  --blue:#1F6FEB; --blue-600:#1558C7; --blue-50:#EAF2FE;
+  --green:#4CAF50; --green-600:#2E7D32; --green-50:#EAF7EB;
+  --gold:#D9A441; --gold-50:#FBF3E3;
+  --bg:#F4F5F7; --surface:#FFFFFF; --line:#E5E8EC;
+  --ink:#101828; --ink-2:#475467; --ink-3:#667085;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,sans-serif;
+  background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+
+/* HERO */
+.hero{background:var(--navy);position:relative;overflow:hidden;padding:78px 24px 108px;text-align:center}
+.hero::before{content:'';position:absolute;inset:-40% 20% auto;height:520px;
+  background:radial-gradient(closest-side,rgba(31,111,235,.42),transparent 72%);filter:blur(10px)}
+.hero::after{content:'';position:absolute;left:-10%;top:20%;width:420px;height:420px;
+  background:radial-gradient(closest-side,rgba(76,175,80,.16),transparent 70%)}
+.hero > *{position:relative;z-index:2}
+.eyebrow{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px;
+  letter-spacing:.19em;color:#7FB4FF;text-transform:uppercase;margin-bottom:26px}
+.eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--green);display:block;
+  box-shadow:0 0 0 4px rgba(76,175,80,.22)}
+.hero h1{font-size:clamp(34px,5.4vw,62px);line-height:1.06;letter-spacing:-.028em;margin:0 auto 22px;
+  color:#fff;font-weight:700;max-width:15ch}
+.hero p{color:#94AECD;font-size:clamp(14px,1.5vw,16.5px);line-height:1.65;margin:0 auto;max-width:56ch}
+.mark{width:52px;height:52px;margin:0 auto 24px;display:block}
+
+/* GRID */
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:22px;margin-top:-58px;position:relative;z-index:3}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:26px;
+  display:flex;flex-direction:column;text-decoration:none;color:inherit;
+  box-shadow:0 1px 2px rgba(16,24,40,.04),0 12px 34px rgba(16,24,40,.07);
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease}
+a.card:hover{transform:translateY(-4px);border-color:#CBD8EA;
+  box-shadow:0 1px 2px rgba(16,24,40,.05),0 22px 48px rgba(16,24,40,.12)}
+.tile{width:52px;height:52px;border-radius:15px;background:var(--navy);
+  display:flex;align-items:center;justify-content:center;margin-bottom:22px;flex:0 0 52px}
+.tile svg{width:25px;height:25px;stroke:#5FA0FF;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.card h3{font-size:20px;margin:0 0 10px;letter-spacing:-.015em;font-weight:680}
+.card p{color:var(--ink-3);font-size:14px;line-height:1.62;margin:0 0 22px;flex:1}
+.go{font-family:var(--mono);font-size:12.5px;font-weight:600;color:var(--ink);letter-spacing:.02em;
+  display:inline-flex;align-items:center;gap:8px}
+a.card:hover .go{color:var(--blue)}
+.go span{transition:transform .18s ease;display:inline-block}
+a.card:hover .go span{transform:translateX(4px)}
+
+.card.soon{opacity:.72;background:#FAFBFC;box-shadow:none;border-style:dashed}
+.card.soon .tile{background:#E9ECF1}
+.card.soon .tile svg{stroke:#8C9AAC}
+.card.soon .go{color:var(--ink-3)}
+.tag{position:absolute;top:20px;right:22px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;padding:5px 10px;border-radius:99px;font-weight:600}
+.card{position:relative}
+.tag.ok{background:var(--green-50);color:var(--green-600)}
+.tag.wait{background:#EDF0F4;color:var(--ink-3)}
+
+/* NOTA */
+.note{margin:60px 0 0;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:30px}
+.note h4{margin:0 0 8px;font-size:15.5px}
+.note p{margin:0;color:var(--ink-3);font-size:13.8px;line-height:1.7;max-width:72ch}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.pill{font-family:var(--mono);font-size:11.5px;padding:6px 12px;border-radius:99px;
+  background:var(--bg);border:1px solid var(--line);color:var(--ink-2)}
+.pill b{color:var(--ink);font-weight:650}
+
+footer{margin-top:56px;padding:30px 0 60px;border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;
+  font-family:var(--mono);font-size:11.5px;color:var(--ink-3);letter-spacing:.03em}
+@media(max-width:640px){.hero{padding:52px 20px 92px}.grid{gap:16px}.card{padding:22px}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <svg class="mark" viewBox="0 0 100 100" fill="none">
+    <path d="M50 8 86 29v42L50 92 14 71V29z" stroke="#4E9BFF" stroke-width="4"/>
+    <circle cx="50" cy="8" r="5" fill="#4E9BFF"/><circle cx="86" cy="29" r="5" fill="#4E9BFF"/>
+    <circle cx="86" cy="71" r="5" fill="#4E9BFF"/><circle cx="50" cy="92" r="5" fill="#4E9BFF"/>
+    <circle cx="14" cy="71" r="5" fill="#4E9BFF"/><circle cx="14" cy="29" r="5" fill="#4E9BFF"/>
+    <path d="M50 74V36M50 44c-8-10-17-8-17-8s2 13 17 13M50 38c7-11 16-10 16-10s-1 13-16 14"
+      stroke="#6FCB4A" stroke-width="5" stroke-linecap="round"/>
+  </svg>
+  <div class="eyebrow"><i></i> TAV · Entrega de diseño</div>
+  <h1>Todo lo que necesitas para construir TAV.</h1>
+  <p>Prototipo interactivo, sistema de diseño y especificación de pantallas — en un solo lugar, listo para pasar a Flutter.</p>
+</header>
+
+<main class="wrap">
+  <div class="grid">
+
+    <a class="card" href="TAV_prototipo_cajero.html">
+      <span class="tag ok">Disponible</span>
+      <div class="tile"><svg viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.6"/><path d="M10.5 18.5h3"/></svg></div>
+      <h3>Prototipo · App Cajero</h3>
+      <p>Las 27 pantallas del cajero, navegables: registro con OTP, nueva operación con tasa en vivo, cuentas de destino, estado de cuenta con semáforo de crédito y abono de deuda.</p>
+      <span class="go">Abrir prototipo <span>→</span></span>
+    </a>
+
+    <a class="card" href="TAV_design_system.html">
+      <span class="tag ok">Disponible</span>
+      <div class="tile"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg></div>
+      <h3>Sistema de diseño</h3>
+      <p>Tokens de color con ratios de contraste verificados, tipografía, espaciado, radios, iconografía y componentes base — con su equivalente en Flutter.</p>
+      <span class="go">Ver design system <span>→</span></span>
+    </a>
+
+    <a class="card" href="TAV_prototipo_cobrador.html">
+      <span class="tag ok">Disponible</span>
+      <div class="tile"><svg viewBox="0 0 24 24"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19h6a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7h6"/></svg></div>
+      <h3>Prototipo · App Cobrador</h3>
+      <p>Ruta del día ordenada por vencimiento, registro de cobro que carga al instante, modo sin señal y la lista diaria que declara cuánto efectivo carga encima para que el admin lo audite.</p>
+      <span class="go">Abrir prototipo <span>→</span></span>
+    </a>
+
+    <div class="card soon">
+      <span class="tag wait">Próximamente</span>
+      <div class="tile"><svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8.5 21h7M12 17v4"/><path d="M6.5 13.5l3-3.5 2.5 2.5 3.5-4.5 2 2.5"/></svg></div>
+      <h3>Panel Administrador</h3>
+      <p>Verificación de las listas diarias de cada cobrador, cartera por cajero en modo semáforo, ganancia por comisiones, alertas de vencidos y exportación de reportes en PDF.</p>
+      <span class="go">En construcción</span>
+    </div>
+
+    <div class="card soon">
+      <span class="tag wait">Próximamente</span>
+      <div class="tile"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg></div>
+      <h3>Handoff técnico</h3>
+      <p>Cada pantalla documentada con medidas, estados, casos borde y reglas de negocio — el documento que recibe el equipo de desarrollo Flutter.</p>
+      <span class="go">En construcción</span>
+    </div>
+
+  </div>
+
+  <section class="note">
+    <h4>El ciclo del dinero</h4>
+    <p>TAV no atiende consumidores finales: atiende <b>cajeros</b>, revendedores que despachan a sus propios clientes y operan a crédito. El <b>cobrador</b> recorre su zona, cobra y carga cada monto al instante. Al cerrar el día declara cuánto efectivo lleva encima, y el <b>administrador</b> verifica esa lista contra lo que recibe. Cada eslabón se audita contra el siguiente — eso es lo que diseñamos, no tres apps sueltas.</p>
+    <div class="pills">
+      <span class="pill"><b>27</b> pantallas cajero</span>
+      <span class="pill"><b>17</b> pantallas cobrador</span>
+      <span class="pill"><b>7 días</b> umbral de semáforo</span>
+      <span class="pill">Objetivo <b>WCAG AA</b></span>
+      <span class="pill">Destino <b>Flutter</b></span>
+    </div>
+  </section>
+
+  <footer>
+    <span>TAV · Operaciones de cambio y remesas</span>
+    <span>Prototipo v1.1 · agosto 2026</span>
+  </footer>
+</main>
+
+</body>
+</html>

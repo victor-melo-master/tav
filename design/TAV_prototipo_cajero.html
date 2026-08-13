@@ -1,0 +1,1752 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TAV — Prototipo navegable (App Cajero)</title>
+<style>
+:root{
+  /* Marca */
+  --navy:#0B1B33;
+  --navy-700:#132a4a;
+  --blue:#1F6FEB;
+  --blue-600:#1558C7;
+  --blue-50:#EAF2FE;
+  --green:#4CAF50;      /* solo relleno gráfico */
+  --green-600:#2E7D32;  /* texto y botones — blanco encima 5.13:1 */
+  --green-50:#EAF7EB;
+  --gold:#D9A441;
+  --gold-50:#FBF3E3;
+  --red:#E5484D;
+  --red-50:#FDECEC;
+  /* Neutros (fondos principales) */
+  --bg:#F4F5F7;
+  --surface:#FFFFFF;
+  --line:#E5E8EC;
+  --line-2:#EFF1F4;
+  --ink:#101828;
+  --ink-2:#475467;
+  --ink-3:#667085;      /* texto secundario — 4.97:1 sobre blanco */
+  --ink-4:#98A2B3;      /* solo iconografía decorativa */
+  --r-s:10px; --r-m:14px; --r-l:20px; --r-xl:28px;
+  --sh:0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:#0E1A2B;
+  background-image:radial-gradient(1200px 600px at 20% -10%, #16305A 0%, transparent 60%);
+  color:var(--ink);display:flex;min-height:100%;
+}
+
+/* ---------- LAYOUT ---------- */
+.map{
+  width:270px;flex:0 0 270px;background:#0A1526;border-right:1px solid rgba(255,255,255,.07);
+  padding:22px 16px 40px;overflow-y:auto;height:100vh;position:sticky;top:0;
+}
+.map .brand{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.map .brand .bm{width:34px;height:34px}
+.map .brand h1{font-size:17px;color:#fff;margin:0;letter-spacing:.16em;font-weight:700}
+.map .sub{color:#7C8FA8;font-size:11px;margin:0 0 20px 44px;letter-spacing:.04em}
+.map .grp{color:#6B82A0;font-size:10px;letter-spacing:.12em;text-transform:uppercase;margin:18px 0 7px;font-weight:700}
+.map a{display:block;color:#B7C6D8;text-decoration:none;font-size:12.5px;padding:6px 9px;border-radius:7px;cursor:pointer;line-height:1.35}
+.map a:hover{background:rgba(255,255,255,.06);color:#fff}
+.map a.on{background:var(--blue);color:#fff;font-weight:600}
+.map .note{margin-top:24px;padding:11px;border-radius:10px;background:rgba(255,255,255,.05);color:#8FA3BC;font-size:11px;line-height:1.5}
+
+.stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 20px;gap:14px;min-height:100vh}
+.stage-top{display:flex;align-items:center;gap:10px;color:#9DB2CC;font-size:12px}
+.stage-top b{color:#fff;font-weight:600}
+.tgl{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#CFE0F2;font-size:11.5px;padding:5px 11px;border-radius:999px;cursor:pointer}
+.tgl.on{background:var(--blue);border-color:var(--blue);color:#fff}
+
+.phone{
+  width:392px;height:812px;background:var(--bg);border-radius:46px;
+  border:11px solid #05101F;box-shadow:0 30px 70px rgba(0,0,0,.55), 0 0 0 2px #22344C;
+  position:relative;overflow:hidden;flex:0 0 auto;
+}
+.notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:118px;height:26px;background:#05101F;border-radius:999px;z-index:60}
+.viewport{position:absolute;inset:0;overflow:hidden}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;background:var(--bg);animation:in .22s ease}
+.screen.active{display:flex}
+@keyframes in{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.screen.fade{animation:fd .25s ease}
+@keyframes fd{from{opacity:0}to{opacity:1}}
+
+/* status bar */
+.sbar{height:46px;flex:0 0 46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:12.5px;font-weight:600;color:var(--ink)}
+.sbar.light{color:#fff}
+.sbar .r{display:flex;gap:5px;align-items:center}
+.body{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.body::-webkit-scrollbar{width:0}
+.pad{padding:0 20px}
+.pb{padding-bottom:26px}
+
+/* ---------- COMPONENTES ---------- */
+.topbar{display:flex;align-items:center;gap:12px;padding:4px 18px 14px}
+.topbar h2{font-size:17px;margin:0;font-weight:650;flex:1}
+.iconbtn{width:38px;height:38px;border-radius:12px;background:var(--surface);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;position:relative}
+.iconbtn:active{transform:scale(.94)}
+.iconbtn.ghost{background:transparent;border-color:transparent}
+.dot{position:absolute;top:8px;right:9px;width:8px;height:8px;border-radius:50%;background:var(--red);border:2px solid var(--surface)}
+svg.i{width:20px;height:20px;stroke:var(--ink);stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}
+svg.i.b{stroke:var(--blue)} svg.i.w{stroke:#fff} svg.i.g{stroke:var(--green)}
+svg.i.m{stroke:var(--ink-3)} svg.i.r{stroke:var(--red)} svg.i.sm{width:16px;height:16px}
+svg.i.lg{width:26px;height:26px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);padding:16px;box-shadow:var(--sh)}
+.card+.card{margin-top:12px}
+.h-sec{font-size:12px;font-weight:700;color:var(--ink-3);letter-spacing:.07em;text-transform:uppercase;margin:22px 0 10px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.muted{color:var(--ink-2);font-size:13px}
+.tiny{color:var(--ink-3);font-size:11.5px}
+
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:52px;border-radius:14px;
+  font-size:15px;font-weight:650;cursor:pointer;border:1px solid transparent;font-family:inherit}
+.btn:active{transform:scale(.985)}
+.btn-p{background:var(--blue);color:#fff;box-shadow:0 6px 16px rgba(31,111,235,.28)}
+.btn-d{background:var(--navy);color:#fff}
+.btn-g{background:var(--green-600);color:#fff;box-shadow:0 6px 16px rgba(76,175,80,.25)}
+.btn-o{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.btn-t{background:transparent;color:var(--blue);height:44px}
+.btn[disabled]{background:#DDE2E8;color:#9AA5B2;box-shadow:none;pointer-events:none}
+.btn-sm{height:40px;font-size:13.5px;border-radius:11px;width:auto;padding:0 16px}
+
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px}
+.input{width:100%;height:50px;border:1px solid var(--line);border-radius:12px;background:var(--surface);
+  padding:0 14px;font-size:15px;font-family:inherit;color:var(--ink);display:flex;align-items:center;cursor:text}
+.input.focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-50)}
+.input .ph{color:var(--ink-3)}
+.select{justify-content:space-between}
+.hint{font-size:11.5px;color:var(--ink-3);margin-top:6px}
+
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:650;padding:4px 10px;border-radius:999px}
+.c-green{background:var(--green-50);color:#256B2A}
+.c-gold{background:var(--gold-50);color:#8A6010}
+.c-red{background:var(--red-50);color:#B42318}
+.c-blue{background:var(--blue-50);color:var(--blue-600)}
+.c-gray{background:#F1F3F6;color:var(--ink-2)}
+
+.li{display:flex;align-items:center;gap:12px;padding:13px 0;cursor:pointer;border-bottom:1px solid var(--line-2)}
+.li:last-child{border-bottom:none}
+.li .av{width:42px;height:42px;border-radius:12px;background:var(--blue-50);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.li .av.gr{background:var(--green-50)} .li .av.rd{background:var(--red-50)} .li .av.gd{background:var(--gold-50)}
+.li .tx{flex:1;min-width:0}
+.li .tx b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .tx span{font-size:12px;color:var(--ink-3)}
+.li .rt{text-align:right;flex:0 0 auto}
+.li .rt b{display:block;font-size:14px;font-weight:650}
+.li .rt span{font-size:11px;color:var(--ink-3)}
+
+/* tabbar */
+.tabbar{flex:0 0 auto;height:76px;background:var(--surface);border-top:1px solid var(--line);
+  display:flex;align-items:flex-start;padding:9px 6px 0;position:relative}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;color:var(--ink-3);font-size:10.5px;font-weight:600}
+.tab svg{stroke:var(--ink-3)}
+.tab.on{color:var(--blue)} .tab.on svg{stroke:var(--blue)}
+.fabwrap{flex:0 0 66px;display:flex;justify-content:center}
+.fab{width:56px;height:56px;border-radius:19px;background:var(--blue);display:flex;align-items:center;justify-content:center;
+  margin-top:-24px;box-shadow:0 8px 20px rgba(31,111,235,.4);cursor:pointer;border:4px solid var(--surface)}
+.fab:active{transform:scale(.93)}
+
+/* hotspot highlight */
+body.hs [data-go],body.hs .li,body.hs .tab,body.hs .fab,body.hs .iconbtn{outline:1.5px dashed rgba(31,111,235,.55);outline-offset:2px;border-radius:8px}
+
+/* keypad */
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:8px 16px 18px}
+.key{height:54px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;
+  border-radius:12px;cursor:pointer;color:var(--ink)}
+.key:active{background:#E7EBF0}
+.pin-dots{display:flex;gap:16px;justify-content:center;margin:26px 0 8px}
+.pin-dots i{width:14px;height:14px;border-radius:50%;border:1.7px solid var(--ink-3);display:block}
+.pin-dots i.f{background:var(--blue);border-color:var(--blue)}
+
+/* progress */
+.prog{height:7px;border-radius:99px;background:#E9ECF1;overflow:hidden}
+.prog i{display:block;height:100%;border-radius:99px}
+.steps{display:flex;gap:6px;padding:0 20px 14px}
+.steps i{flex:1;height:3.5px;border-radius:99px;background:#DFE4EA}
+.steps i.on{background:var(--blue)}
+
+/* timeline */
+.tl{position:relative;padding-left:28px}
+.tl .n{position:relative;padding-bottom:20px}
+.tl .n:last-child{padding-bottom:0}
+.tl .n::before{content:'';position:absolute;left:-22px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff;border:2.5px solid var(--line)}
+.tl .n::after{content:'';position:absolute;left:-16px;top:19px;bottom:0;width:2px;background:var(--line)}
+.tl .n:last-child::after{display:none}
+.tl .n.ok::before{background:var(--green);border-color:var(--green)}
+.tl .n.ok::after{background:var(--green)}
+.tl .n.now::before{border-color:var(--blue);box-shadow:0 0 0 4px var(--blue-50)}
+.tl .n b{font-size:13.5px;display:block;font-weight:600}
+.tl .n span{font-size:11.5px;color:var(--ink-3)}
+
+.hero-grad{background:linear-gradient(160deg,var(--navy) 0%,#16345F 60%,#1B4E86 100%)}
+.divide{height:1px;background:var(--line-2);margin:13px 0}
+.kv{display:flex;justify-content:space-between;padding:7px 0;font-size:13.5px}
+.kv span{color:var(--ink-2)} .kv b{font-weight:650}
+.upload{border:1.6px dashed #C4CCD6;border-radius:14px;padding:26px;text-align:center;cursor:pointer;background:#FAFBFC}
+.upload.done{border-style:solid;border-color:var(--green);background:var(--green-50)}
+.badge-n{background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:99px;padding:1px 6px;margin-left:6px}
+.seg{display:flex;background:#E9ECF1;border-radius:12px;padding:3px;margin:0 20px}
+.seg div{flex:1;text-align:center;padding:8px;font-size:12.5px;font-weight:600;color:var(--ink-2);border-radius:9px;cursor:pointer}
+.seg div.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.bars{display:flex;align-items:flex-end;gap:7px;height:70px;margin-top:12px}
+.bars i{flex:1;background:var(--blue-50);border-radius:5px 5px 0 0;position:relative}
+.bars i.on{background:var(--blue)}
+
+/* inputs reales */
+input.inp,select.inp{width:100%;height:50px;border:1px solid var(--line);border-radius:12px;background:var(--surface);
+  padding:0 14px;font-size:15px;font-family:inherit;color:var(--ink);outline:none;-webkit-appearance:none;appearance:none}
+input.inp:focus,select.inp:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-50)}
+input.inp::placeholder{color:var(--ink-3)}
+input.inp.err{border-color:var(--red);box-shadow:0 0 0 3px var(--red-50)}
+select.inp{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2398A2B3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;padding-right:38px}
+.mseg{display:flex;gap:8px}
+.mseg .m{flex:1;height:50px;border:1px solid var(--line);border-radius:12px;background:var(--surface);
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer}
+.mseg .m.on{border-color:var(--blue);background:var(--blue-50);color:var(--blue-600)}
+.qc{display:flex;gap:8px;margin-top:12px}
+.qc .q{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 4px;text-align:center;
+  font-size:12.5px;font-weight:650;cursor:pointer;box-shadow:var(--sh)}
+.qc .q.on{border-color:var(--blue);background:var(--blue-50);color:var(--blue-600)}
+.radio{width:21px;height:21px;border-radius:50%;border:1.7px solid var(--line);flex:0 0 21px;display:flex;align-items:center;justify-content:center}
+.radio.on{background:var(--blue);border-color:var(--blue)}
+.radio svg{display:none} .radio.on svg{display:block}
+.hide{display:none !important}
+#toast{position:absolute;left:50%;transform:translateX(-50%) translateY(20px);bottom:104px;z-index:80;
+  background:var(--navy);color:#fff;font-size:13px;font-weight:600;padding:12px 18px;border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,.3);opacity:0;transition:.25s;pointer-events:none;display:flex;align-items:center;gap:8px}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(max-width:1000px){.map{display:none}}
+</style>
+</head>
+<body>
+
+<!-- ICONOS -->
+<svg style="display:none">
+<symbol id="ic-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="ic-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+<symbol id="ic-wallet" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1"/><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3"/><path d="M21 10h-4a2 2 0 0 0 0 4h4z"/></symbol>
+<symbol id="ic-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></symbol>
+<symbol id="ic-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5"/><path d="M17 5.5a3.5 3.5 0 0 1 0 6.5M18.5 20c0-2.4-.8-3.9-2-4.9"/></symbol>
+<symbol id="ic-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M10.5 20a2 2 0 0 0 3 0"/></symbol>
+<symbol id="ic-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="ic-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+<symbol id="ic-next" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+<symbol id="ic-check" viewBox="0 0 24 24"><path d="M4.5 12.5 9.5 17.5 20 7"/></symbol>
+<symbol id="ic-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol>
+<symbol id="ic-up" viewBox="0 0 24 24"><path d="M12 17V5M7 10l5-5 5 5"/><path d="M4 19h16"/></symbol>
+<symbol id="ic-down" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5"/><path d="M4 20h16"/></symbol>
+<symbol id="ic-alert" viewBox="0 0 24 24"><path d="M12 3 1.8 20h20.4z"/><path d="M12 10v4M12 17.2h.01"/></symbol>
+<symbol id="ic-refresh" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 0 1 14.6-6M20.5 12a8.5 8.5 0 0 1-14.6 6"/><path d="M18 2.5V6h-3.5M6 21.5V18h3.5"/></symbol>
+<symbol id="ic-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.4c-.7.3-1 .8-1 1.6"/><path d="M12 17h.01"/></symbol>
+<symbol id="ic-lock" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+<symbol id="ic-out" viewBox="0 0 24 24"><path d="M14 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8"/><path d="M17 8l4 4-4 4M21 12H9"/></symbol>
+<symbol id="ic-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.8 9.3c-.5-.8-1.6-1.2-2.8-1.2-1.6 0-2.7.8-2.7 1.9 0 2.7 5.6 1.4 5.6 4.1 0 1.2-1.2 2-2.9 2-1.3 0-2.4-.5-2.9-1.3"/></symbol>
+<symbol id="ic-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></symbol>
+<symbol id="ic-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></symbol>
+<symbol id="ic-chat" viewBox="0 0 24 24"><path d="M21 11.5c0 4.1-4 7.5-9 7.5-1 0-2-.1-2.9-.4L4 21l1.3-3.6C3.9 16 3 13.9 3 11.5 3 7.4 7 4 12 4s9 3.4 9 7.5z"/></symbol>
+<symbol id="ic-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/></symbol>
+<symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.3l3.2 2"/></symbol>
+<symbol id="ic-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.6-3.1 8.3-7.5 9.5-4.4-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+<symbol id="ic-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.2 9h17.6M3.2 15h17.6M12 3c2.5 2.6 3.8 5.7 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z"/></symbol>
+</svg>
+
+<!-- MAPA DE FLUJO -->
+<aside class="map">
+  <div class="brand">
+    <svg class="bm" viewBox="0 0 100 100" fill="none">
+      <path d="M50 8 86 29v42L50 92 14 71V29z" stroke="#1F6FEB" stroke-width="4"/>
+      <circle cx="50" cy="8" r="5.5" fill="#1F6FEB"/><circle cx="86" cy="29" r="5.5" fill="#1F6FEB"/>
+      <circle cx="86" cy="71" r="5.5" fill="#1F6FEB"/><circle cx="50" cy="92" r="5.5" fill="#1F6FEB"/>
+      <circle cx="14" cy="71" r="5.5" fill="#1F6FEB"/><circle cx="14" cy="29" r="5.5" fill="#1F6FEB"/>
+      <path d="M50 72V38M50 44c-8-10-16-8-16-8s2 12 16 12M50 40c7-11 15-10 15-10s-1 13-15 14" stroke="#5FB53C" stroke-width="4.5" stroke-linecap="round"/>
+    </svg>
+    <h1>TAV</h1>
+  </div>
+  <p class="sub">Prototipo · App Cajero</p>
+
+  <div class="grp">1 · Acceso</div>
+  <a data-go="splash">Splash</a>
+  <a data-go="welcome">Bienvenida</a>
+  <a data-go="reg-phone">Registro · teléfono</a>
+  <a data-go="otp">Código OTP</a>
+  <a data-go="reg-data">Datos del cajero</a>
+  <a data-go="pin-new">Crear PIN</a>
+  <a data-go="login">Ingresar con PIN</a>
+
+  <div class="grp">2 · Inicio</div>
+  <a data-go="home">Inicio / Dashboard</a>
+  <a data-go="rates">Tasa del día</a>
+  <a data-go="notifs">Notificaciones</a>
+
+  <div class="grp">3 · Nueva operación</div>
+  <a data-go="op-type">Tipo de operación</a>
+  <a data-go="op-amount">Monto y tasa</a>
+  <a data-go="op-benef">Elegir beneficiario</a>
+  <a data-go="benef-new">Nuevo beneficiario</a>
+  <a data-go="op-summary">Resumen</a>
+  <a data-go="op-pay">Instrucciones de pago</a>
+  <a data-go="op-ok">Confirmación</a>
+
+  <div class="grp">4 · Operaciones</div>
+  <a data-go="ops">Historial</a>
+  <a data-go="op-detail">Detalle de operación</a>
+
+  <div class="grp">5 · Crédito y deuda</div>
+  <a data-go="account">Cupo, deuda y semáforo</a>
+  <a data-go="pay-debt">Abonar a deuda</a>
+  <a data-go="raise">Solicitar ampliación</a>
+  <a data-go="raise-sent">Solicitud enviada</a>
+
+  <div class="grp">6 · Perfil</div>
+  <a data-go="profile">Mi perfil</a>
+  <a data-go="benefs">Mis beneficiarios</a>
+  <a data-go="security">Seguridad</a>
+  <a data-go="support">Soporte</a>
+
+  <div class="note">Prototipo de navegación. Los datos son de ejemplo. Paleta tomada del logo: azul y verde de acento sobre fondos blanco y gris.</div>
+</aside>
+
+<!-- ESCENARIO -->
+<main class="stage">
+  <div class="stage-top">
+    <span><b>TAV</b> · Prototipo App Cajero</span>
+    <span style="opacity:.4">|</span>
+    <span id="scr-name">Splash</span>
+    <a class="tgl" href="index.html" style="text-decoration:none">← Entrega</a>
+    <a class="tgl" href="TAV_design_system.html" style="text-decoration:none">Design system</a>
+    <button class="tgl" id="hsBtn">Ver zonas clickeables</button>
+    <button class="tgl" onclick="go('splash')">Reiniciar</button>
+  </div>
+
+<div class="phone">
+  <div class="notch"></div>
+  <div class="viewport" id="vp">
+
+  <!-- ================= SPLASH ================= -->
+  <section class="screen fade active" id="s-splash" data-title="Splash">
+    <div class="hero-grad" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;cursor:pointer" data-go="welcome">
+      <svg viewBox="0 0 100 100" fill="none" style="width:112px">
+        <path d="M50 8 86 29v42L50 92 14 71V29z" stroke="#4E9BFF" stroke-width="3.4"/>
+        <circle cx="50" cy="8" r="5" fill="#4E9BFF"/><circle cx="86" cy="29" r="5" fill="#4E9BFF"/>
+        <circle cx="86" cy="71" r="5" fill="#4E9BFF"/><circle cx="50" cy="92" r="5" fill="#4E9BFF"/>
+        <circle cx="14" cy="71" r="5" fill="#4E9BFF"/><circle cx="14" cy="29" r="5" fill="#4E9BFF"/>
+        <path d="M50 74V36M50 44c-8-10-17-8-17-8s2 13 17 13M50 38c7-11 16-10 16-10s-1 13-16 14" stroke="#6FCB4A" stroke-width="4.5" stroke-linecap="round"/>
+      </svg>
+      <div style="text-align:center">
+        <div style="color:#fff;font-size:34px;font-weight:700;letter-spacing:.34em;margin-left:.34em">TAV</div>
+        <div style="color:#8FB4E8;font-size:12.5px;letter-spacing:.16em;margin-top:8px">CAMBIO · REMESAS · CONFIANZA</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= BIENVENIDA ================= -->
+  <section class="screen" id="s-welcome" data-title="Bienvenida">
+    <div class="sbar light"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="hero-grad" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:30px 24px 34px;border-radius:0 0 34px 34px">
+      <svg viewBox="0 0 100 100" fill="none" style="width:58px;margin-bottom:auto">
+        <path d="M50 8 86 29v42L50 92 14 71V29z" stroke="#4E9BFF" stroke-width="4"/>
+        <path d="M50 74V36M50 44c-8-10-17-8-17-8s2 13 17 13M50 38c7-11 16-10 16-10s-1 13-16 14" stroke="#6FCB4A" stroke-width="5" stroke-linecap="round"/>
+      </svg>
+      <h2 style="color:#fff;font-size:29px;line-height:1.24;margin:0 0 12px;font-weight:680">Tu dinero,<br>donde lo necesitas.</h2>
+      <p style="color:#A9C6EB;font-size:14px;line-height:1.6;margin:0">Cambia USDT y dólares a bolívares con la tasa del día y sigue cada operación en tiempo real.</p>
+    </div>
+    <div class="pad" style="padding-top:24px;padding-bottom:30px">
+      <button class="btn btn-p" data-go="reg-phone">Crear cuenta</button>
+      <button class="btn btn-o" style="margin-top:10px" data-go="login">Ya tengo cuenta</button>
+      <p class="tiny" style="text-align:center;margin-top:16px;line-height:1.5">Al continuar aceptas los <b style="color:var(--blue)">Términos</b> y la <b style="color:var(--blue)">Política de privacidad</b>.</p>
+    </div>
+  </section>
+
+  <!-- ================= REGISTRO TELÉFONO ================= -->
+  <section class="screen" id="s-reg-phone" data-title="Registro · teléfono">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn ghost" data-back><svg class="i"><use href="#ic-back"/></svg></div></div>
+    <div class="steps"><i class="on"></i><i></i><i></i><i></i></div>
+    <div class="body pad">
+      <h2 style="font-size:23px;margin:6px 0 8px">¿Cuál es tu número?</h2>
+      <p class="muted" style="margin:0 0 26px">Te enviaremos un código por WhatsApp para verificar tu identidad.</p>
+      <div class="field">
+        <label>Número de teléfono</label>
+        <div style="display:flex;gap:9px">
+          <div class="input select" style="width:110px;flex:0 0 110px" data-go="reg-phone"><span>🇻🇪 +58</span><svg class="i sm m"><use href="#ic-next" style="transform:rotate(90deg)"/></svg></div>
+          <div class="input focus" style="flex:1">414 855 2210</div>
+        </div>
+        <p class="hint">Usaremos este número también para avisarte de cada operación.</p>
+      </div>
+      <div class="card" style="background:var(--blue-50);border-color:#CDE0FB;display:flex;gap:11px;margin-top:20px">
+        <svg class="i b" style="flex:0 0 20px"><use href="#ic-shield"/></svg>
+        <p style="margin:0;font-size:12.5px;color:#1B4E9B;line-height:1.55">Tus datos se usan solo para operar contigo. TAV no comparte tu información con terceros.</p>
+      </div>
+    </div>
+    <div class="pad pb"><button class="btn btn-p" data-go="otp">Enviar código</button></div>
+  </section>
+
+  <!-- ================= OTP ================= -->
+  <section class="screen" id="s-otp" data-title="Código OTP">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn ghost" data-back><svg class="i"><use href="#ic-back"/></svg></div></div>
+    <div class="steps"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+    <div class="body pad">
+      <h2 style="font-size:23px;margin:6px 0 8px">Verifica tu número</h2>
+      <p class="muted" style="margin:0 0 28px">Enviamos un código de 6 dígitos al <b style="color:var(--ink)">+58 414 855 2210</b>.</p>
+      <div style="display:flex;gap:9px">
+        <div class="input" style="justify-content:center;font-weight:650;font-size:20px">4</div>
+        <div class="input" style="justify-content:center;font-weight:650;font-size:20px">8</div>
+        <div class="input" style="justify-content:center;font-weight:650;font-size:20px">1</div>
+        <div class="input" style="justify-content:center;font-weight:650;font-size:20px">9</div>
+        <div class="input focus" style="justify-content:center;font-weight:650;font-size:20px">2</div>
+        <div class="input" style="justify-content:center"></div>
+      </div>
+      <p class="tiny" style="text-align:center;margin-top:22px">¿No te llegó? Reenviar en <b style="color:var(--ink-2)">00:38</b></p>
+      <button class="btn btn-t" style="margin-top:4px">Cambiar número</button>
+    </div>
+    <div class="pad pb"><button class="btn btn-p" data-go="reg-data">Verificar</button></div>
+  </section>
+
+  <!-- ================= DATOS ================= -->
+  <section class="screen" id="s-reg-data" data-title="Datos del cajero">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn ghost" data-back><svg class="i"><use href="#ic-back"/></svg></div></div>
+    <div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+    <div class="body pad">
+      <h2 style="font-size:23px;margin:6px 0 8px">Cuéntanos quién eres</h2>
+      <p class="muted" style="margin:0 0 24px">Necesitamos estos datos para registrar tus operaciones a tu nombre.</p>
+      <div class="field"><label>Nombre y apellido</label><div class="input">María González</div></div>
+      <div class="field"><label>Cédula o documento de identidad</label><div class="input">V-18.442.907</div></div>
+      <div class="field"><label>Correo electrónico <span style="font-weight:400;color:var(--ink-3)">(opcional)</span></label><div class="input"><span class="ph">maria@correo.com</span></div></div>
+      <div class="field"><label>Ciudad donde operas</label><div class="input select"><span>Valencia, Carabobo</span><svg class="i sm m"><use href="#ic-next" style="transform:rotate(90deg)"/></svg></div></div>
+      <div style="display:flex;gap:10px;align-items:flex-start;margin-top:6px">
+        <div style="width:20px;height:20px;border-radius:6px;background:var(--blue);display:flex;align-items:center;justify-content:center;flex:0 0 20px"><svg class="i sm w"><use href="#ic-check"/></svg></div>
+        <p class="tiny" style="margin:0;line-height:1.5">Acepto los términos de servicio y autorizo el uso de mis datos para las operaciones de cambio.</p>
+      </div>
+    </div>
+    <div class="pad pb"><button class="btn btn-p" data-go="pin-new">Continuar</button></div>
+  </section>
+
+  <!-- ================= CREAR PIN ================= -->
+  <section class="screen" id="s-pin-new" data-title="Crear PIN">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn ghost" data-back><svg class="i"><use href="#ic-back"/></svg></div></div>
+    <div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+    <div class="body pad" style="text-align:center">
+      <div style="width:56px;height:56px;border-radius:18px;background:var(--blue-50);display:flex;align-items:center;justify-content:center;margin:10px auto 16px">
+        <svg class="i lg b"><use href="#ic-lock"/></svg></div>
+      <h2 style="font-size:22px;margin:0 0 8px">Crea tu PIN</h2>
+      <p class="muted" style="margin:0">4 dígitos para entrar rápido y proteger tu cuenta.</p>
+      <div class="pin-dots" id="pd1"><i class="f"></i><i class="f"></i><i></i><i></i></div>
+      <p class="tiny">No uses fechas de nacimiento ni secuencias.</p>
+    </div>
+    <div class="keypad">
+      <div class="key" data-pin="1">1</div><div class="key" data-pin="2">2</div><div class="key" data-pin="3">3</div>
+      <div class="key" data-pin="4">4</div><div class="key" data-pin="5">5</div><div class="key" data-pin="6">6</div>
+      <div class="key" data-pin="7">7</div><div class="key" data-pin="8">8</div><div class="key" data-pin="9">9</div>
+      <div class="key" style="font-size:12px;font-weight:600;color:var(--ink-3)">Face ID</div>
+      <div class="key" data-pin="0">0</div>
+      <div class="key" data-pin="del"><svg class="i m"><use href="#ic-back"/></svg></div>
+    </div>
+  </section>
+
+  <!-- ================= LOGIN ================= -->
+  <section class="screen" id="s-login" data-title="Ingresar con PIN">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="body pad" style="text-align:center;padding-top:34px">
+      <div style="width:74px;height:74px;border-radius:26px;background:var(--navy);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;color:#fff;font-size:25px;font-weight:650">MG</div>
+      <h2 style="font-size:21px;margin:0 0 4px">Hola, María</h2>
+      <p class="muted" style="margin:0">Ingresa tu PIN para continuar</p>
+      <div class="pin-dots" id="pd2"><i></i><i></i><i></i><i></i></div>
+      <button class="btn btn-t">Usar Face ID</button>
+    </div>
+    <div class="keypad">
+      <div class="key" data-pin2="1">1</div><div class="key" data-pin2="2">2</div><div class="key" data-pin2="3">3</div>
+      <div class="key" data-pin2="4">4</div><div class="key" data-pin2="5">5</div><div class="key" data-pin2="6">6</div>
+      <div class="key" data-pin2="7">7</div><div class="key" data-pin2="8">8</div><div class="key" data-pin2="9">9</div>
+      <div class="key" style="font-size:12px;font-weight:600;color:var(--ink-3)" data-go="welcome">Salir</div>
+      <div class="key" data-pin2="0">0</div>
+      <div class="key" data-pin2="del"><svg class="i m"><use href="#ic-back"/></svg></div>
+    </div>
+  </section>
+
+  <!-- ================= HOME ================= -->
+  <section class="screen" id="s-home" data-title="Inicio / Dashboard">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar">
+      <div style="width:40px;height:40px;border-radius:13px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:650;font-size:14px" data-go="profile">MG</div>
+      <div style="flex:1">
+        <div class="tiny">Buenos días</div>
+        <div style="font-size:15px;font-weight:650">María González</div>
+      </div>
+      <div class="iconbtn" data-go="notifs"><svg class="i"><use href="#ic-bell"/></svg><i class="dot"></i></div>
+    </div>
+    <div class="body pad pb">
+
+      <!-- Crédito disponible -->
+      <div class="card" style="background:linear-gradient(155deg,var(--navy),#1B4272);border:none;color:#fff;padding:18px">
+        <div class="row">
+          <span style="font-size:12.5px;color:#9EC0EC">Crédito disponible para operar</span>
+          <span class="chip c-gold" id="homeDays">● 4 días</span>
+        </div>
+        <div style="font-size:33px;font-weight:700;margin:6px 0 2px;letter-spacing:-.5px" id="homeAvail">$760,00</div>
+        <div style="font-size:12.5px;color:#9EC0EC" id="homeOf">de un límite de $2.000,00</div>
+        <div class="prog" style="background:rgba(255,255,255,.16);margin-top:16px"><i id="homeProg" style="width:62%;background:var(--gold)"></i></div>
+        <div class="row" style="margin-top:7px">
+          <span style="font-size:11px;color:#9EC0EC" id="homeUsed">Debes $1.240,00 · 62% usado</span>
+          <span style="font-size:11px;color:#9EC0EC" id="homeDayLbl">Día 4 de 7</span>
+        </div>
+        <button class="btn btn-g" style="margin-top:16px;height:46px" data-go="pay-debt">Abonar a mi deuda</button>
+      </div>
+
+      <div class="card hide" id="blockCard" style="margin-top:12px;background:var(--red-50);border-color:#F3C9C6">
+        <div style="display:flex;gap:11px">
+          <svg class="i r" style="flex:0 0 20px"><use href="#ic-lock"/></svg>
+          <div>
+            <b style="font-size:14px;color:var(--red-700)">Sin crédito disponible</b>
+            <p style="margin:5px 0 0;font-size:12.5px;color:var(--red-700);line-height:1.55">
+              Llegaste a tu límite de $<span id="blkLimit">2.000,00</span>. No puedes registrar
+              operaciones nuevas hasta que abones o el administrador te amplíe el cupo.</p>
+          </div>
+        </div>
+        <button class="btn btn-o" style="margin-top:12px;height:44px" data-go="raise">Solicitar ampliación</button>
+      </div>
+
+      <!-- Tasa del día -->
+      <div class="card" style="margin-top:12px;cursor:pointer" data-go="rates">
+        <div class="row">
+          <div style="display:flex;align-items:center;gap:11px">
+            <div style="width:38px;height:38px;border-radius:12px;background:var(--green-50);display:flex;align-items:center;justify-content:center"><svg class="i g"><use href="#ic-coin"/></svg></div>
+            <div>
+              <div style="font-size:11.5px;color:var(--ink-3)">Tasa de hoy · USDT → Bs</div>
+              <div style="font-size:18px;font-weight:700">285,40 <span style="font-size:12px;color:var(--ink-3);font-weight:500">Bs</span></div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <span class="chip c-green">↑ 0,8%</span>
+            <div class="tiny" style="margin-top:5px">hace 12 min</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-p" style="margin-top:14px" data-go="op-type">
+        <svg class="i w"><use href="#ic-plus"/></svg> Nueva operación</button>
+
+      <!-- Accesos -->
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <div class="card" style="flex:1;text-align:center;padding:14px 8px;cursor:pointer" data-go="benefs">
+          <svg class="i b" style="margin-bottom:6px"><use href="#ic-users"/></svg>
+          <div style="font-size:12px;font-weight:600">Beneficiarios</div></div>
+        <div class="card" style="flex:1;text-align:center;padding:14px 8px;margin:0;cursor:pointer" data-go="account">
+          <svg class="i b" style="margin-bottom:6px"><use href="#ic-doc"/></svg>
+          <div style="font-size:12px;font-weight:600">Estado de cuenta</div></div>
+        <div class="card" style="flex:1;text-align:center;padding:14px 8px;margin:0;cursor:pointer" data-go="support">
+          <svg class="i b" style="margin-bottom:6px"><use href="#ic-chat"/></svg>
+          <div style="font-size:12px;font-weight:600">Soporte</div></div>
+      </div>
+
+      <div class="row h-sec"><span>Últimas operaciones</span><span style="color:var(--blue);text-transform:none;letter-spacing:0;font-size:12.5px;cursor:pointer" data-go="ops">Ver todas</span></div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="op-detail">
+          <div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>Ana Rodríguez</b><span>USDT → Bs · 31 jul</span></div>
+          <div class="rt"><b>$420,00</b><span style="color:var(--green-600)">Completada</span></div>
+        </div>
+        <div class="li" data-go="op-detail">
+          <div class="av"><svg class="i b sm"><use href="#ic-clock"/></svg></div>
+          <div class="tx"><b>Luis Pérez</b><span>USDT → Bs · 30 jul</span></div>
+          <div class="rt"><b>$820,00</b><span style="color:var(--blue)">En proceso</span></div>
+        </div>
+        <div class="li" data-go="op-detail">
+          <div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>Retiro efectivo · Valencia</b><span>USD → Bs · 28 jul</span></div>
+          <div class="rt"><b>$300,00</b><span style="color:var(--green-600)">Completada</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="tabbar">
+      <div class="tab on"><svg class="i"><use href="#ic-home"/></svg>Inicio</div>
+      <div class="tab" data-go="ops"><svg class="i"><use href="#ic-list"/></svg>Operaciones</div>
+      <div class="fabwrap"><div class="fab" data-go="op-type"><svg class="i w lg"><use href="#ic-plus"/></svg></div></div>
+      <div class="tab" data-go="account"><svg class="i"><use href="#ic-wallet"/></svg>Cuenta</div>
+      <div class="tab" data-go="profile"><svg class="i"><use href="#ic-user"/></svg>Perfil</div>
+    </div>
+  </section>
+
+  <!-- ================= TASA DEL DÍA ================= -->
+  <section class="screen" id="s-rates" data-title="Tasa del día">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Tasa del día</h2>
+      <div class="iconbtn"><svg class="i"><use href="#ic-refresh"/></svg></div></div>
+    <div class="body pad pb">
+      <div class="card" style="text-align:center;padding:24px 16px">
+        <div class="tiny">1 USDT equivale a</div>
+        <div style="font-size:40px;font-weight:700;letter-spacing:-1px;margin:6px 0">285,40</div>
+        <div class="muted">Bolívares</div>
+        <div style="margin-top:12px"><span class="chip c-green">↑ 0,8% vs. ayer</span></div>
+        <div class="bars">
+          <i style="height:52%"></i><i style="height:60%"></i><i style="height:46%"></i><i style="height:68%"></i>
+          <i style="height:74%"></i><i style="height:64%"></i><i class="on" style="height:88%"></i>
+        </div>
+        <div class="row tiny" style="margin-top:8px"><span>28 jul</span><span>Hoy</span></div>
+      </div>
+      <div class="h-sec">Otros pares</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li"><div class="av"><svg class="i b sm"><use href="#ic-cash"/></svg></div>
+          <div class="tx"><b>USD efectivo → Bs</b><span>Entrega en ciudad</span></div><div class="rt"><b>283,00</b><span>Bs</span></div></div>
+        <div class="li"><div class="av"><svg class="i b sm"><use href="#ic-coin"/></svg></div>
+          <div class="tx"><b>Zelle → Bs</b><span>Transferencia USA</span></div><div class="rt"><b>281,50</b><span>Bs</span></div></div>
+      </div>
+      <div class="card" style="margin-top:12px;background:var(--gold-50);border-color:#F0DFBB;display:flex;gap:11px">
+        <svg class="i" style="stroke:#8A6010;flex:0 0 20px"><use href="#ic-alert"/></svg>
+        <p style="margin:0;font-size:12.5px;color:#7E570D;line-height:1.55">La tasa se fija al momento de confirmar la operación y queda registrada en tu comprobante.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= NOTIFICACIONES ================= -->
+  <section class="screen" id="s-notifs" data-title="Notificaciones">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Notificaciones</h2>
+      <span class="tiny" style="color:var(--blue);cursor:pointer">Marcar leídas</span></div>
+    <div class="body pad pb">
+      <div class="h-sec" style="margin-top:4px">Hoy</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="account">
+          <div class="av rd"><svg class="i r sm"><use href="#ic-alert"/></svg></div>
+          <div class="tx"><b>Recordatorio de pago</b><span style="white-space:normal">Llevas 4 días con saldo pendiente de $1.240,00</span></div></div>
+        <div class="li" data-go="rates">
+          <div class="av gd"><svg class="i sm" style="stroke:#8A6010"><use href="#ic-refresh"/></svg></div>
+          <div class="tx"><b>Tasa actualizada</b><span>USDT → Bs pasó a 285,40 · 9:12 a.m.</span></div></div>
+      </div>
+      <div class="h-sec">Ayer</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="op-detail">
+          <div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>Operación completada</b><span style="white-space:normal">#TAV-2477 · Ana Rodríguez recibió Bs 119.868,00</span></div></div>
+        <div class="li" data-go="op-detail">
+          <div class="av"><svg class="i b sm"><use href="#ic-clock"/></svg></div>
+          <div class="tx"><b>Pago verificado</b><span>Recibimos tu comprobante de #TAV-2481</span></div></div>
+        <div class="li" data-go="benefs">
+          <div class="av"><svg class="i b sm"><use href="#ic-users"/></svg></div>
+          <div class="tx"><b>Beneficiario agregado</b><span>Luis Pérez · Pago móvil</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TIPO DE OPERACIÓN ================= -->
+  <section class="screen" id="s-op-type" data-title="Tipo de operación">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Nueva operación</h2></div>
+    <div class="steps"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+    <div class="body pad pb">
+      <p class="muted" style="margin:2px 0 18px">¿Qué tipo de operación quieres registrar?</p>
+
+      <div class="card" style="cursor:pointer;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-50)" data-go="op-amount">
+        <div style="display:flex;gap:13px;align-items:flex-start">
+          <div style="width:44px;height:44px;border-radius:14px;background:var(--blue-50);display:flex;align-items:center;justify-content:center;flex:0 0 44px"><svg class="i b lg"><use href="#ic-coin"/></svg></div>
+          <div style="flex:1">
+            <div class="row"><b style="font-size:15px">USDT → Bolívares</b><span class="chip c-blue">Más usada</span></div>
+            <p class="muted" style="margin:5px 0 0;line-height:1.5">Envías USDT (Binance / TRC20) y tu beneficiario recibe bolívares por transferencia o pago móvil.</p>
+            <div class="tiny" style="margin-top:9px">Tasa hoy · <b style="color:var(--ink-2)">285,40 Bs</b> · entrega en 15–45 min</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="cursor:pointer" data-go="op-amount">
+        <div style="display:flex;gap:13px;align-items:flex-start">
+          <div style="width:44px;height:44px;border-radius:14px;background:var(--green-50);display:flex;align-items:center;justify-content:center;flex:0 0 44px"><svg class="i g lg"><use href="#ic-cash"/></svg></div>
+          <div style="flex:1">
+            <b style="font-size:15px">USD efectivo → Bolívares</b>
+            <p class="muted" style="margin:5px 0 0;line-height:1.5">Entregas efectivo a nuestro recolector en tu ciudad y acreditamos bolívares al beneficiario.</p>
+            <div class="tiny" style="margin-top:9px">Tasa hoy · <b style="color:var(--ink-2)">283,00 Bs</b> · coordinamos punto y hora</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="background:transparent;border-style:dashed;box-shadow:none;text-align:center;padding:18px">
+        <p class="tiny" style="margin:0">¿Necesitas otro tipo de operación (mayoreo, Zelle, retiro en otra ciudad)?<br><b style="color:var(--blue);cursor:pointer" data-go="support">Escríbenos por soporte</b></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= MONTO ================= -->
+  <section class="screen" id="s-op-amount" data-title="Monto y tasa">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>¿Cuánto vas a enviar?</h2></div>
+    <div class="steps"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+    <div class="body" style="padding:0 20px">
+      <div class="card" style="text-align:center;padding:20px 16px">
+        <div class="tiny">Envías</div>
+        <div style="display:flex;align-items:baseline;justify-content:center;gap:7px;margin:4px 0 2px">
+          <span id="amtIn" style="font-size:38px;font-weight:700;letter-spacing:-1px">500</span>
+          <span style="font-size:16px;font-weight:600;color:var(--ink-3)">USDT</span>
+        </div>
+        <div class="divide"></div>
+        <div class="tiny">Tu beneficiario recibe</div>
+        <div style="font-size:22px;font-weight:650;color:var(--green-600);margin-top:3px">Bs <span id="amtOut">142.700,00</span></div>
+      </div>
+
+      <div class="card" style="margin-top:11px">
+        <div class="kv"><span>Tasa aplicada</span><b>285,40 Bs / USDT</b></div>
+        <div class="kv"><span>Comisión TAV (3%)</span><b>15,00 USDT</b></div>
+        <div class="divide"></div>
+        <div class="kv" style="font-size:15px"><span style="color:var(--ink);font-weight:600">Total a pagar</span><b style="color:var(--blue)">515,00 USDT</b></div>
+        <div class="divide"></div>
+        <div class="kv"><span>Crédito disponible</span><b id="opAvail" style="color:var(--green-600)">$760,00</b></div>
+      </div>
+
+      <div class="card hide" id="opBlock" style="margin-top:11px;background:var(--red-50);border-color:#F3C9C6;display:flex;gap:11px">
+        <svg class="i r" style="flex:0 0 20px"><use href="#ic-lock"/></svg>
+        <p style="margin:0;font-size:12.5px;color:var(--red-700);line-height:1.55">
+          Esta operación supera tu crédito disponible por <b id="opOver">$0,00</b>.
+          Abona para liberar cupo o pide una ampliación al administrador.</p>
+      </div>
+      <button class="btn btn-o hide" id="opRaise" style="margin-top:10px" data-go="raise">Solicitar ampliación</button>
+      <p class="tiny" style="text-align:center;margin-top:10px">La tasa se congela por 15 minutos al confirmar.</p>
+    </div>
+    <div class="keypad" style="padding-bottom:6px">
+      <div class="key" data-amt="1">1</div><div class="key" data-amt="2">2</div><div class="key" data-amt="3">3</div>
+      <div class="key" data-amt="4">4</div><div class="key" data-amt="5">5</div><div class="key" data-amt="6">6</div>
+      <div class="key" data-amt="7">7</div><div class="key" data-amt="8">8</div><div class="key" data-amt="9">9</div>
+      <div class="key" data-amt="00">00</div><div class="key" data-amt="0">0</div>
+      <div class="key" data-amt="del"><svg class="i m"><use href="#ic-back"/></svg></div>
+    </div>
+    <div class="pad" style="padding-bottom:20px"><button class="btn btn-p" id="opNext" data-go="op-benef">Continuar</button></div>
+  </section>
+
+  <!-- ================= SOLICITAR AMPLIACIÓN ================= -->
+  <section class="screen" id="s-raise" data-title="Solicitar ampliación">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Ampliar mi cupo</h2></div>
+    <div class="body pad pb">
+      <div class="card">
+        <div class="kv"><span>Límite actual</span><b id="raLimit">$2.000,00</b></div>
+        <div class="kv"><span>Deuda</span><b id="raDebt">$1.240,00</b></div>
+        <div class="divide"></div>
+        <div class="kv"><span>Disponible</span><b id="raAvail" style="color:var(--green-600)">$760,00</b></div>
+      </div>
+
+      <div class="field" style="margin-top:16px"><label>¿Cuánto necesitas para esta operación?</label>
+        <input class="inp" id="raAmt" inputmode="numeric" placeholder="1.500"></div>
+      <div class="field"><label>¿Para qué es?</label>
+        <textarea class="inp" id="raWhy" placeholder="Ej. un cliente me pidió despachar $1.500 hoy y lo abona mañana cuando llegue el bongo"></textarea></div>
+
+      <div class="card" style="background:var(--gold-50);border-color:#F0DFBB;display:flex;gap:11px">
+        <svg class="i" style="stroke:var(--gold-700);flex:0 0 20px"><use href="#ic-alert"/></svg>
+        <p style="margin:0;font-size:12.5px;color:#7E570D;line-height:1.55">
+          La ampliación es <b>para una sola operación</b>. Al usarla se cierra y tu cupo vuelve
+          a $<span id="raBack">2.000,00</span>. Mientras esté activa, tu semáforo se calcula
+          sobre el cupo ampliado.</p>
+      </div>
+    </div>
+    <div class="pad pb"><button class="btn btn-p" id="raGo" disabled>Enviar solicitud</button></div>
+  </section>
+
+  <!-- ================= SOLICITUD ENVIADA ================= -->
+  <section class="screen fade" id="s-raise-sent" data-title="Solicitud enviada">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="body pad" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+      <div style="width:80px;height:80px;border-radius:50%;background:var(--gold-50);display:flex;align-items:center;justify-content:center;margin-bottom:18px">
+        <svg class="i" style="width:32px;height:32px;stroke:var(--gold-700)"><use href="#ic-clock"/></svg></div>
+      <h2 style="font-size:22px;margin:0 0 8px">Solicitud enviada</h2>
+      <p class="muted" style="margin:0 0 20px;line-height:1.6">El administrador la está revisando. Te avisamos apenas responda.</p>
+      <div class="card" style="width:100%;text-align:left">
+        <div class="kv"><span>Cupo solicitado</span><b id="rsAmt">$1.500,00</b></div>
+        <div class="kv"><span>Vigencia</span><b>Una sola operación</b></div>
+        <div class="kv"><span>Estado</span><span class="chip c-gold">● Esperando al admin</span></div>
+      </div>
+      <div class="card" style="width:100%;margin-top:12px;background:#FAFBFC;box-shadow:none">
+        <p class="tiny" style="margin:0;line-height:1.6">Antes esto era una llamada. Ahora queda escrito quién pidió, cuánto y por qué — y quién lo autorizó.</p>
+      </div>
+    </div>
+    <div class="pad pb"><button class="btn btn-p" data-go="home">Volver al inicio</button></div>
+  </section>
+
+  <!-- ================= BENEFICIARIO ================= -->
+  <section class="screen" id="s-op-benef" data-title="Elegir beneficiario">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>¿Quién recibe?</h2></div>
+    <div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div>
+    <div class="body pad pb">
+      <div class="input" style="margin-bottom:16px"><span class="ph">Buscar por nombre o cédula…</span></div>
+      <div class="card" style="padding:4px 16px" id="benefPick">
+        <div class="li" data-go="op-summary">
+          <div class="av" style="background:var(--navy);color:#fff;font-weight:650;font-size:13px">AR</div>
+          <div class="tx"><b>Ana Rodríguez</b><span>Banesco · ••••4471 · V-14.220.881</span></div>
+          <svg class="i m sm"><use href="#ic-next"/></svg>
+        </div>
+        <div class="li" data-go="op-summary">
+          <div class="av" style="background:var(--navy);color:#fff;font-weight:650;font-size:13px">LP</div>
+          <div class="tx"><b>Luis Pérez</b><span>Pago móvil · 0412 ••• 3390</span></div>
+          <svg class="i m sm"><use href="#ic-next"/></svg>
+        </div>
+        <div class="li" data-go="op-summary">
+          <div class="av" style="background:var(--navy);color:#fff;font-weight:650;font-size:13px">MG</div>
+          <div class="tx"><b>María González (yo)</b><span>Mercantil · ••••0182</span></div>
+          <svg class="i m sm"><use href="#ic-next"/></svg>
+        </div>
+      </div>
+      <button class="btn btn-o" style="margin-top:14px" data-go="benef-new">
+        <svg class="i b"><use href="#ic-plus"/></svg> Nuevo beneficiario</button>
+    </div>
+  </section>
+
+  <!-- ================= NUEVO BENEFICIARIO ================= -->
+  <section class="screen" id="s-benef-new" data-title="Nuevo beneficiario">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Nuevo beneficiario</h2></div>
+    <div class="body pad pb">
+      <div class="field"><label>Nombre y apellido</label>
+        <input class="inp" id="bfName" placeholder="Ej. Carmen Silva" autocomplete="off"></div>
+      <div class="field"><label>Cédula</label>
+        <input class="inp" id="bfDoc" placeholder="V-00.000.000" autocomplete="off"></div>
+
+      <div class="field"><label>Método de entrega</label>
+        <div class="mseg" id="bfMethod">
+          <div class="m on" data-m="transferencia">Transferencia</div>
+          <div class="m" data-m="movil">Pago móvil</div>
+          <div class="m" data-m="efectivo">Efectivo</div>
+        </div>
+      </div>
+
+      <!-- Transferencia -->
+      <div id="bfTransf">
+        <div class="field"><label>Banco</label>
+          <select class="inp" id="bfBank">
+            <option value="">Selecciona el banco</option>
+            <option>Banesco</option><option>Mercantil</option><option>Banco de Venezuela</option>
+            <option>Provincial</option><option>BNC</option><option>Bancamiga</option><option>Banplus</option>
+          </select></div>
+        <div class="field"><label>Número de cuenta</label>
+          <input class="inp" id="bfAcct" inputmode="numeric" placeholder="0000 0000 0000 0000 0000" maxlength="24"></div>
+      </div>
+
+      <!-- Pago móvil -->
+      <div id="bfMovil" class="hide">
+        <div class="field"><label>Banco</label>
+          <select class="inp" id="bfBank2">
+            <option value="">Selecciona el banco</option>
+            <option>Banesco</option><option>Mercantil</option><option>Banco de Venezuela</option>
+            <option>Provincial</option><option>BNC</option><option>Bancamiga</option>
+          </select></div>
+        <div class="field"><label>Teléfono asociado</label>
+          <input class="inp" id="bfPhone" inputmode="numeric" placeholder="0412 000 0000" maxlength="13"></div>
+      </div>
+
+      <!-- Efectivo -->
+      <div id="bfCash" class="hide">
+        <div class="field"><label>Ciudad de entrega</label>
+          <select class="inp" id="bfCity">
+            <option value="">Selecciona la ciudad</option>
+            <option>Valencia</option><option>Caracas</option><option>Maracaibo</option>
+            <option>Barquisimeto</option><option>Maracay</option><option>Puerto Ordaz</option>
+          </select></div>
+        <div class="field"><label>Punto de referencia</label>
+          <input class="inp" id="bfRef" placeholder="Ej. Av. Bolívar, C.C. Sambil, piso 2"></div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;margin:4px 0 14px;cursor:pointer" id="bfSaveChk">
+        <div class="radio on" style="border-radius:6px"><svg class="i sm w" style="width:13px;height:13px;stroke-width:3"><use href="#ic-check"/></svg></div>
+        <span style="font-size:13px;color:var(--ink-2)">Guardar para próximas operaciones</span>
+      </div>
+      <p class="tiny" style="line-height:1.5">Verifica bien los datos. Las transferencias enviadas a una cuenta equivocada no se pueden revertir.</p>
+    </div>
+    <div class="pad pb"><button class="btn btn-p" id="bfSave" disabled>Guardar y continuar</button></div>
+  </section>
+
+  <!-- ================= RESUMEN ================= -->
+  <section class="screen" id="s-op-summary" data-title="Resumen de la operación">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Revisa la operación</h2></div>
+    <div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+    <div class="body pad pb">
+      <div class="card" style="text-align:center;background:var(--navy);border:none;color:#fff">
+        <div style="font-size:12px;color:#9EC0EC">Tu beneficiario recibe</div>
+        <div style="font-size:30px;font-weight:700;margin:5px 0 3px">Bs 142.700,00</div>
+        <div style="font-size:12.5px;color:#9EC0EC">Enviando 500 USDT</div>
+      </div>
+
+      <div class="h-sec">Detalle</div>
+      <div class="card">
+        <div class="kv"><span>Tipo</span><b>USDT → Bolívares</b></div>
+        <div class="kv"><span>Tasa aplicada</span><b>285,40 Bs</b></div>
+        <div class="kv"><span>Comisión TAV (3%)</span><b>15,00 USDT</b></div>
+        <div class="divide"></div>
+        <div class="kv" style="font-size:15.5px"><span style="color:var(--ink);font-weight:600">Total a pagar</span><b style="color:var(--blue)">515,00 USDT</b></div>
+      </div>
+
+      <div class="h-sec">Beneficiario</div>
+      <div class="card">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div id="sumIni" style="width:42px;height:42px;border-radius:12px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:650;font-size:13px">AR</div>
+          <div style="flex:1"><b style="font-size:14.5px" id="sumName">Ana Rodríguez</b><div class="tiny" id="sumMeta">Banesco · 0134 ••• 4471 · V-14.220.881</div></div>
+          <svg class="i m sm" data-back><use href="#ic-edit"/></svg>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;background:var(--gold-50);border-color:#F0DFBB;display:flex;gap:11px">
+        <svg class="i" style="stroke:#8A6010;flex:0 0 20px"><use href="#ic-clock"/></svg>
+        <p style="margin:0;font-size:12.5px;color:#7E570D;line-height:1.55">Esta operación se registra <b>a crédito</b>: sumará a tu saldo pendiente hasta que la abones. Entrega estimada: 15–45 min.</p>
+      </div>
+    </div>
+    <div class="pad pb"><button class="btn btn-p" data-go="op-pay">Confirmar operación</button></div>
+  </section>
+
+  <!-- ================= PAGO ================= -->
+  <section class="screen" id="s-op-pay" data-title="Instrucciones de pago">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Realiza tu pago</h2></div>
+    <div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+    <div class="body pad pb">
+      <div class="card" style="border-color:var(--blue);background:var(--blue-50)">
+        <div class="row"><span style="font-size:12.5px;color:var(--blue-600);font-weight:600">Tasa congelada</span><b style="color:var(--blue-600)">14:52</b></div>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="tiny">Envía exactamente</div>
+        <div style="font-size:26px;font-weight:700;margin:3px 0 14px">515,00 <span style="font-size:14px;color:var(--ink-3)">USDT</span></div>
+        <div class="divide"></div>
+        <div class="tiny" style="margin-bottom:6px">Red · TRC20 (Tron)</div>
+        <div class="input" style="justify-content:space-between;font-size:12.5px;font-family:ui-monospace,monospace">
+          <span>TQm4vP...8jK2xL9d</span><svg class="i b sm"><use href="#ic-copy"/></svg></div>
+        <p class="hint">Enviar por otra red puede causar la pérdida de los fondos.</p>
+      </div>
+
+      <div class="h-sec">Comprobante</div>
+      <div class="upload" id="upl">
+        <svg class="i lg m" style="margin-bottom:8px"><use href="#ic-up"/></svg>
+        <div style="font-size:13.5px;font-weight:600">Sube tu comprobante</div>
+        <div class="tiny" style="margin-top:3px">Captura de pantalla o hash de la transacción</div>
+      </div>
+    </div>
+    <div class="pad pb"><button class="btn btn-p" id="opPaid">Ya realicé el pago</button></div>
+  </section>
+
+  <!-- ================= ÉXITO ================= -->
+  <section class="screen fade" id="s-op-ok" data-title="Confirmación">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="body pad" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+      <div style="width:86px;height:86px;border-radius:50%;background:var(--green-50);display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+        <div style="width:60px;height:60px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center">
+          <svg class="i w" style="width:30px;height:30px;stroke-width:2.4"><use href="#ic-check"/></svg></div>
+      </div>
+      <h2 style="font-size:22px;margin:0 0 8px">¡Operación registrada!</h2>
+      <p class="muted" style="margin:0 0 20px;line-height:1.6">Estamos verificando tu pago. Te avisamos aquí y por WhatsApp cuando el dinero sea entregado.</p>
+      <div class="card" style="width:100%;text-align:left">
+        <div class="kv"><span>N° de operación</span><b>#TAV-2482</b></div>
+        <div class="kv"><span>Beneficiario recibe</span><b>Bs 142.700,00</b></div>
+        <div class="kv"><span>Estado</span><span class="chip c-blue">En verificación</span></div>
+        <div class="kv"><span>Suma a tu deuda</span><b>$515,00</b></div>
+      </div>
+    </div>
+    <div class="pad pb">
+      <button class="btn btn-p" data-go="op-detail">Ver la operación</button>
+      <button class="btn btn-t" style="margin-top:6px" data-go="home">Volver al inicio</button>
+    </div>
+  </section>
+
+  <!-- ================= HISTORIAL ================= -->
+  <section class="screen" id="s-ops" data-title="Historial de operaciones">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Mis operaciones</h2>
+      <div class="iconbtn"><svg class="i"><use href="#ic-doc"/></svg></div></div>
+    <div class="seg"><div class="on">Todas</div><div>En proceso</div><div>Completadas</div></div>
+    <div class="body pad pb" style="padding-top:8px">
+      <div class="h-sec" style="margin-top:14px">Agosto 2026</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="op-detail">
+          <div class="av"><svg class="i b sm"><use href="#ic-clock"/></svg></div>
+          <div class="tx"><b>Ana Rodríguez</b><span>#TAV-2482 · USDT → Bs · hoy 9:38</span></div>
+          <div class="rt"><b>$515,00</b><span style="color:var(--blue)">En verificación</span></div></div>
+      </div>
+      <div class="h-sec">Julio 2026</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="op-detail">
+          <div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>Ana Rodríguez</b><span>#TAV-2477 · USDT → Bs · 31 jul</span></div>
+          <div class="rt"><b>$420,00</b><span style="color:var(--green-600)">Completada</span></div></div>
+        <div class="li" data-go="op-detail">
+          <div class="av"><svg class="i b sm"><use href="#ic-clock"/></svg></div>
+          <div class="tx"><b>Luis Pérez</b><span>#TAV-2471 · USDT → Bs · 30 jul</span></div>
+          <div class="rt"><b>$820,00</b><span style="color:var(--blue)">En proceso</span></div></div>
+        <div class="li" data-go="op-detail">
+          <div class="av gr"><svg class="i g sm"><use href="#ic-cash"/></svg></div>
+          <div class="tx"><b>Retiro efectivo · Valencia</b><span>#TAV-2465 · USD → Bs · 28 jul</span></div>
+          <div class="rt"><b>$300,00</b><span style="color:var(--green-600)">Completada</span></div></div>
+        <div class="li" data-go="op-detail">
+          <div class="av gd"><svg class="i sm" style="stroke:#8A6010"><use href="#ic-alert"/></svg></div>
+          <div class="tx"><b>Carmen Silva</b><span>#TAV-2460 · USDT → Bs · 24 jul</span></div>
+          <div class="rt"><b>$150,00</b><span style="color:#8A6010">Observada</span></div></div>
+        <div class="li" data-go="op-detail">
+          <div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>Ana Rodríguez</b><span>#TAV-2455 · USDT → Bs · 21 jul</span></div>
+          <div class="rt"><b>$1.000,00</b><span style="color:var(--green-600)">Completada</span></div></div>
+      </div>
+    </div>
+    <div class="tabbar">
+      <div class="tab" data-go="home"><svg class="i"><use href="#ic-home"/></svg>Inicio</div>
+      <div class="tab on"><svg class="i"><use href="#ic-list"/></svg>Operaciones</div>
+      <div class="fabwrap"><div class="fab" data-go="op-type"><svg class="i w lg"><use href="#ic-plus"/></svg></div></div>
+      <div class="tab" data-go="account"><svg class="i"><use href="#ic-wallet"/></svg>Cuenta</div>
+      <div class="tab" data-go="profile"><svg class="i"><use href="#ic-user"/></svg>Perfil</div>
+    </div>
+  </section>
+
+  <!-- ================= DETALLE ================= -->
+  <section class="screen" id="s-op-detail" data-title="Detalle de operación">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Operación #TAV-2482</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="text-align:center">
+        <span class="chip c-blue">En verificación</span>
+        <div style="font-size:30px;font-weight:700;margin:10px 0 2px">Bs 142.700,00</div>
+        <div class="muted">Enviaste 500 USDT · comisión 15 USDT</div>
+      </div>
+
+      <div class="h-sec">Seguimiento</div>
+      <div class="card">
+        <div class="tl">
+          <div class="n ok"><b>Operación registrada</b><span>Hoy · 9:38 a.m.</span></div>
+          <div class="n ok"><b>Comprobante recibido</b><span>Hoy · 9:41 a.m.</span></div>
+          <div class="n now"><b>Verificando pago</b><span>En curso · el operador está validando</span></div>
+          <div class="n"><b>Dinero entregado</b><span>Estimado 10:20 a.m.</span></div>
+        </div>
+      </div>
+
+      <div class="h-sec">Datos de la operación</div>
+      <div class="card">
+        <div class="kv"><span>Tipo</span><b>USDT → Bolívares</b></div>
+        <div class="kv"><span>Tasa aplicada</span><b>285,40 Bs</b></div>
+        <div class="kv"><span>Comisión</span><b>15,00 USDT (3%)</b></div>
+        <div class="kv"><span>Costo total</span><b>$515,00</b></div>
+        <div class="kv"><span>Fecha y hora</span><b>3 ago 2026 · 9:38 a.m.</b></div>
+        <div class="kv"><span>Operador</span><b>Caja Central</b></div>
+        <div class="divide"></div>
+        <div class="kv"><span>Beneficiario</span><b>Ana Rodríguez</b></div>
+        <div class="kv"><span>Cuenta destino</span><b>Banesco ••••4471</b></div>
+      </div>
+
+      <div class="card" style="margin-top:12px;display:flex;gap:11px;align-items:center">
+        <div style="width:42px;height:52px;border-radius:8px;background:#EDF1F6;display:flex;align-items:center;justify-content:center"><svg class="i m"><use href="#ic-doc"/></svg></div>
+        <div style="flex:1"><b style="font-size:13.5px">comprobante_usdt.png</b><div class="tiny">Subido hoy 9:41 a.m.</div></div>
+        <svg class="i b sm"><use href="#ic-down"/></svg>
+      </div>
+
+      <button class="btn btn-o" style="margin-top:14px"><svg class="i"><use href="#ic-down"/></svg> Descargar comprobante PDF</button>
+      <button class="btn btn-t" data-go="support">Reportar un problema</button>
+    </div>
+  </section>
+
+  <!-- ================= ESTADO DE CUENTA ================= -->
+  <section class="screen" id="s-account" data-title="Estado de cuenta">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Estado de cuenta</h2>
+      <div class="iconbtn"><svg class="i"><use href="#ic-down"/></svg></div></div>
+    <div class="body pad pb">
+
+      <div class="card" style="background:linear-gradient(155deg,var(--navy),#1B4272);border:none;color:#fff">
+        <div class="tiny" style="color:#9EC0EC">Deuda actual</div>
+        <div style="font-size:32px;font-weight:700;margin:4px 0 2px" id="accDebt">$1.240,00</div>
+        <div style="font-size:12.5px;color:#9EC0EC" id="accDebtBs">≈ Bs 353.896,00 a tasa de hoy</div>
+      </div>
+
+      <div class="h-sec">Semáforo de pago</div>
+      <div class="card">
+        <div class="row">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="display:flex;gap:5px" id="accLights">
+              <i style="width:13px;height:13px;border-radius:50%;background:#E5E8EC;display:block"></i>
+              <i style="width:13px;height:13px;border-radius:50%;background:#E5E8EC;display:block"></i>
+              <i style="width:13px;height:13px;border-radius:50%;background:#E5E8EC;display:block"></i>
+            </div>
+            <b style="font-size:14px" id="accDaysTxt">4 días transcurridos</b>
+          </div>
+          <span class="chip c-gold" id="accChip">Por vencer</span>
+        </div>
+        <div class="prog" style="margin-top:14px"><i id="accProg" style="width:57%;background:var(--gold)"></i></div>
+        <div class="row tiny" style="margin-top:6px"><span>0 días</span><span>Límite: 7 días</span></div>
+        <p class="tiny" style="margin:12px 0 0;line-height:1.55">Al llegar a 7 días tu cuenta pasa a rojo y se notifica al cobrador asignado a tu zona.</p>
+      </div>
+
+      <div class="h-sec">Resumen de julio</div>
+      <div style="display:flex;gap:10px">
+        <div class="card" style="flex:1;padding:14px">
+          <div class="tiny">Total cambiado</div><div style="font-size:19px;font-weight:700;margin-top:3px">$2.690</div></div>
+        <div class="card" style="flex:1;padding:14px;margin:0">
+          <div class="tiny">Operaciones</div><div style="font-size:19px;font-weight:700;margin-top:3px">7</div></div>
+        <div class="card" style="flex:1;padding:14px;margin:0">
+          <div class="tiny">Comisiones</div><div style="font-size:19px;font-weight:700;margin-top:3px">$80,70</div></div>
+      </div>
+
+      <div class="row h-sec"><span>Movimientos</span><span style="color:var(--blue);text-transform:none;letter-spacing:0;font-size:12.5px">Filtrar</span></div>
+      <div class="card" style="padding:4px 16px" id="accMoves">
+        <div class="li">
+          <div class="av rd"><svg class="i r sm"><use href="#ic-up"/></svg></div>
+          <div class="tx"><b>Cargo · Operación #TAV-2482</b><span>Hoy 9:38 a.m.</span></div>
+          <div class="rt"><b style="color:var(--red)">+$515,00</b><span>Saldo $1.240</span></div></div>
+        <div class="li">
+          <div class="av gr"><svg class="i g sm"><use href="#ic-down"/></svg></div>
+          <div class="tx"><b>Abono recibido</b><span>1 ago · Efectivo — recolector Valencia</span></div>
+          <div class="rt"><b style="color:var(--green-600)">−$600,00</b><span>Saldo $725</span></div></div>
+        <div class="li">
+          <div class="av rd"><svg class="i r sm"><use href="#ic-up"/></svg></div>
+          <div class="tx"><b>Cargo · Operación #TAV-2477</b><span>31 jul</span></div>
+          <div class="rt"><b style="color:var(--red)">+$420,00</b><span>Saldo $1.325</span></div></div>
+        <div class="li">
+          <div class="av rd"><svg class="i r sm"><use href="#ic-up"/></svg></div>
+          <div class="tx"><b>Cargo · Operación #TAV-2471</b><span>30 jul</span></div>
+          <div class="rt"><b style="color:var(--red)">+$820,00</b><span>Saldo $905</span></div></div>
+        <div class="li">
+          <div class="av gr"><svg class="i g sm"><use href="#ic-down"/></svg></div>
+          <div class="tx"><b>Abono recibido</b><span>29 jul · Transferencia</span></div>
+          <div class="rt"><b style="color:var(--green-600)">−$400,00</b><span>Saldo $85</span></div></div>
+      </div>
+
+      <button class="btn btn-o" style="margin-top:14px"><svg class="i"><use href="#ic-doc"/></svg> Exportar estado de cuenta (PDF)</button>
+      <button class="btn btn-g" style="margin-top:10px" data-go="pay-debt">Abonar a mi deuda</button>
+    </div>
+    <div class="tabbar">
+      <div class="tab" data-go="home"><svg class="i"><use href="#ic-home"/></svg>Inicio</div>
+      <div class="tab" data-go="ops"><svg class="i"><use href="#ic-list"/></svg>Operaciones</div>
+      <div class="fabwrap"><div class="fab" data-go="op-type"><svg class="i w lg"><use href="#ic-plus"/></svg></div></div>
+      <div class="tab on"><svg class="i"><use href="#ic-wallet"/></svg>Cuenta</div>
+      <div class="tab" data-go="profile"><svg class="i"><use href="#ic-user"/></svg>Perfil</div>
+    </div>
+  </section>
+
+  <!-- ================= ABONAR ================= -->
+  <section class="screen" id="s-pay-debt" data-title="Abonar a deuda">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Abonar a mi deuda</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="text-align:center;padding:20px">
+        <div class="tiny">Deuda actual</div>
+        <div style="font-size:28px;font-weight:700;margin:4px 0 14px" id="pdDebt">$1.240,00</div>
+        <div class="divide"></div>
+        <div class="tiny" style="margin-top:10px">Monto a abonar</div>
+        <div style="display:flex;align-items:baseline;justify-content:center;gap:3px;margin-top:4px">
+          <span style="font-size:24px;font-weight:700;color:var(--blue)">$</span>
+          <span style="font-size:32px;font-weight:700;color:var(--blue)" id="pdAmt">600,00</span>
+        </div>
+        <div class="tiny" id="pdAfter" style="margin-top:6px">Quedarías debiendo $640,00</div>
+      </div>
+
+      <div class="qc" id="pdQuick">
+        <div class="q" data-amt="300">$300</div>
+        <div class="q on" data-amt="600">$600</div>
+        <div class="q" data-amt="all">Todo</div>
+        <div class="q" data-amt="other">Otro</div>
+      </div>
+
+      <div id="pdKeys" class="hide">
+        <div class="keypad" style="padding:10px 0 0">
+          <div class="key" data-pda="1">1</div><div class="key" data-pda="2">2</div><div class="key" data-pda="3">3</div>
+          <div class="key" data-pda="4">4</div><div class="key" data-pda="5">5</div><div class="key" data-pda="6">6</div>
+          <div class="key" data-pda="7">7</div><div class="key" data-pda="8">8</div><div class="key" data-pda="9">9</div>
+          <div class="key" data-pda="00">00</div><div class="key" data-pda="0">0</div>
+          <div class="key" data-pda="del"><svg class="i m"><use href="#ic-back"/></svg></div>
+        </div>
+      </div>
+
+      <div class="h-sec">¿Cómo vas a pagar?</div>
+      <div class="card" style="padding:4px 16px" id="pdMethods">
+        <div class="li" data-pm="usdt"><div class="av"><svg class="i b sm"><use href="#ic-coin"/></svg></div>
+          <div class="tx"><b>USDT (TRC20)</b><span>Acreditación inmediata</span></div>
+          <div class="radio on"><svg class="i sm w" style="width:12px;height:12px;stroke-width:3"><use href="#ic-check"/></svg></div></div>
+        <div class="li" data-pm="efectivo"><div class="av"><svg class="i b sm"><use href="#ic-cash"/></svg></div>
+          <div class="tx"><b>Efectivo al recolector</b><span>Coordinamos visita en Valencia</span></div>
+          <div class="radio"><svg class="i sm w" style="width:12px;height:12px;stroke-width:3"><use href="#ic-check"/></svg></div></div>
+        <div class="li" data-pm="transfer"><div class="av"><svg class="i b sm"><use href="#ic-doc"/></svg></div>
+          <div class="tx"><b>Transferencia bancaria</b><span>Sujeta a verificación</span></div>
+          <div class="radio"><svg class="i sm w" style="width:12px;height:12px;stroke-width:3"><use href="#ic-check"/></svg></div></div>
+      </div>
+      <div class="card" style="margin-top:12px;background:var(--green-50);border-color:#CDE9CF">
+        <p style="margin:0;font-size:12.5px;color:#256B2A;line-height:1.55">Tras el abono tu semáforo vuelve a <b>verde</b> y el contador de días se reinicia.</p>
+      </div>
+    </div>
+    <div class="pad pb"><button class="btn btn-g" id="pdGo">Continuar al pago</button></div>
+  </section>
+
+  <!-- ================= PAGO DE DEUDA ================= -->
+  <section class="screen" id="s-debt-pay" data-title="Pagar el abono">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2 id="dpTitle">Realiza tu abono</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="text-align:center;padding:18px">
+        <div class="tiny">Monto del abono</div>
+        <div style="font-size:30px;font-weight:700;margin-top:3px" id="dpAmt">$600,00</div>
+        <div class="tiny" id="dpEq" style="margin-top:4px">≈ Bs 171.240,00 a tasa de hoy</div>
+      </div>
+
+      <!-- USDT -->
+      <div id="dpUsdt">
+        <div class="card" style="margin-top:12px">
+          <div class="tiny">Envía exactamente</div>
+          <div style="font-size:24px;font-weight:700;margin:3px 0 14px" id="dpUsdtAmt">600,00 <span style="font-size:13px;color:var(--ink-3)">USDT</span></div>
+          <div class="divide"></div>
+          <div class="tiny" style="margin-bottom:6px">Red · TRC20 (Tron)</div>
+          <div class="input" style="justify-content:space-between;font-size:12.5px;font-family:ui-monospace,monospace;cursor:pointer" id="dpCopy">
+            <span>TQm4vP...8jK2xL9d</span><svg class="i b sm"><use href="#ic-copy"/></svg></div>
+          <p class="hint">Enviar por otra red puede causar la pérdida de los fondos.</p>
+        </div>
+        <div class="h-sec">Comprobante</div>
+        <div class="upload" id="dpUpl">
+          <svg class="i lg m" style="margin-bottom:8px"><use href="#ic-up"/></svg>
+          <div style="font-size:13.5px;font-weight:600">Sube tu comprobante</div>
+          <div class="tiny" style="margin-top:3px">Captura o hash de la transacción</div>
+        </div>
+      </div>
+
+      <!-- EFECTIVO -->
+      <div id="dpCash" class="hide">
+        <div class="card" style="margin-top:12px">
+          <div class="field"><label>Ciudad</label>
+            <select class="inp"><option>Valencia</option><option>Caracas</option><option>Maracay</option></select></div>
+          <div class="field"><label>Dirección de recolección</label>
+            <input class="inp" placeholder="Av. Bolívar Norte, Torre Skyline, piso 3"></div>
+          <div class="field" style="margin-bottom:0"><label>¿Cuándo puedes entregar?</label>
+            <div class="mseg" id="dpWhen">
+              <div class="m on">Hoy</div><div class="m">Mañana</div><div class="m">Elegir</div>
+            </div>
+            <div class="mseg" style="margin-top:8px">
+              <div class="m">8–12 a.m.</div><div class="m on">12–4 p.m.</div><div class="m">4–6 p.m.</div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:12px;display:flex;gap:11px;align-items:center">
+          <div style="width:42px;height:42px;border-radius:12px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:650;font-size:12px;flex:0 0 42px">JR</div>
+          <div style="flex:1"><b style="font-size:13.5px">José Ramírez</b><div class="tiny">Recolector asignado · zona Valencia</div></div>
+          <svg class="i b sm"><use href="#ic-chat"/></svg>
+        </div>
+      </div>
+
+      <!-- TRANSFERENCIA -->
+      <div id="dpTransf" class="hide">
+        <div class="card" style="margin-top:12px">
+          <div class="tiny" style="margin-bottom:8px">Transfiere a esta cuenta</div>
+          <div class="kv"><span>Banco</span><b>Banesco</b></div>
+          <div class="kv"><span>Titular</span><b>Inversiones TAV C.A.</b></div>
+          <div class="kv"><span>RIF</span><b>J-40558217-3</b></div>
+          <div class="kv"><span>Cuenta</span><b>0134 0912 4500 1188 2043</b></div>
+          <div class="divide"></div>
+          <div class="kv"><span>Referencia obligatoria</span><b style="color:var(--blue)">ABN-2482</b></div>
+        </div>
+        <div class="h-sec">Comprobante</div>
+        <div class="upload" id="dpUpl2">
+          <svg class="i lg m" style="margin-bottom:8px"><use href="#ic-up"/></svg>
+          <div style="font-size:13.5px;font-weight:600">Sube tu comprobante</div>
+          <div class="tiny" style="margin-top:3px">Captura de la transferencia</div>
+        </div>
+      </div>
+    </div>
+    <div class="pad pb"><button class="btn btn-g" id="dpConfirm">Ya realicé el pago</button></div>
+  </section>
+
+  <!-- ================= ABONO OK ================= -->
+  <section class="screen fade" id="s-debt-ok" data-title="Abono registrado">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="body pad" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+      <div style="width:86px;height:86px;border-radius:50%;background:var(--green-50);display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+        <div style="width:60px;height:60px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center">
+          <svg class="i w" style="width:30px;height:30px;stroke-width:2.4"><use href="#ic-check"/></svg></div>
+      </div>
+      <h2 style="font-size:22px;margin:0 0 8px" id="doTitle">¡Abono registrado!</h2>
+      <p class="muted" style="margin:0 0 20px;line-height:1.6" id="doSub">Estamos verificando tu pago. Al confirmarlo, tu saldo se actualiza y el semáforo vuelve a verde.</p>
+      <div class="card" style="width:100%;text-align:left">
+        <div class="kv"><span>Abono</span><b id="doAmt">$600,00</b></div>
+        <div class="kv"><span>Método</span><b id="doMethod">USDT (TRC20)</b></div>
+        <div class="kv"><span>Deuda anterior</span><b id="doBefore">$1.240,00</b></div>
+        <div class="divide"></div>
+        <div class="kv" style="font-size:15px"><span style="color:var(--ink);font-weight:600">Nueva deuda</span><b id="doAfter" style="color:var(--green-600)">$640,00</b></div>
+        <div class="kv"><span>Semáforo</span><span class="chip c-green" id="doLight">● Verde · 0 días</span></div>
+      </div>
+    </div>
+    <div class="pad pb">
+      <button class="btn btn-p" data-go="account">Ver estado de cuenta</button>
+      <button class="btn btn-t" style="margin-top:6px" data-go="home">Volver al inicio</button>
+    </div>
+  </section>
+
+  <!-- ================= PERFIL ================= -->
+  <section class="screen" id="s-profile" data-title="Mi perfil">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Mi perfil</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="display:flex;gap:13px;align-items:center">
+        <div style="width:54px;height:54px;border-radius:18px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:650;font-size:18px">MG</div>
+        <div style="flex:1">
+          <b style="font-size:16px">María González</b>
+          <div class="tiny">V-18.442.907 · +58 414 855 2210</div>
+          <span class="chip c-green" style="margin-top:6px">✓ Cajero verificado</span>
+        </div>
+        <svg class="i m sm"><use href="#ic-edit"/></svg>
+      </div>
+
+      <div class="h-sec">Cuenta</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="benefs"><div class="av"><svg class="i b sm"><use href="#ic-users"/></svg></div>
+          <div class="tx"><b>Mis beneficiarios</b><span>3 registrados</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li" data-go="account"><div class="av"><svg class="i b sm"><use href="#ic-doc"/></svg></div>
+          <div class="tx"><b>Estado de cuenta</b><span>Deuda, movimientos y PDF</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li" data-go="security"><div class="av"><svg class="i b sm"><use href="#ic-lock"/></svg></div>
+          <div class="tx"><b>Seguridad</b><span>PIN, biometría y sesiones</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li" data-go="notifs"><div class="av"><svg class="i b sm"><use href="#ic-bell"/></svg></div>
+          <div class="tx"><b>Notificaciones</b><span>Operaciones, tasa y recordatorios</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+      </div>
+
+      <div class="h-sec">Ayuda</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="support"><div class="av"><svg class="i b sm"><use href="#ic-chat"/></svg></div>
+          <div class="tx"><b>Soporte</b><span>Escríbenos por WhatsApp</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li"><div class="av"><svg class="i b sm"><use href="#ic-help"/></svg></div>
+          <div class="tx"><b>Preguntas frecuentes</b><span>Tasas, tiempos y límites</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li"><div class="av"><svg class="i b sm"><use href="#ic-globe"/></svg></div>
+          <div class="tx"><b>Idioma</b><span>Español</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+      </div>
+
+      <button class="btn btn-o" style="margin-top:16px;color:var(--red)" data-go="welcome">
+        <svg class="i r"><use href="#ic-out"/></svg> Cerrar sesión</button>
+      <p class="tiny" style="text-align:center;margin-top:14px">TAV v1.0.0 · Prototipo</p>
+    </div>
+    <div class="tabbar">
+      <div class="tab" data-go="home"><svg class="i"><use href="#ic-home"/></svg>Inicio</div>
+      <div class="tab" data-go="ops"><svg class="i"><use href="#ic-list"/></svg>Operaciones</div>
+      <div class="fabwrap"><div class="fab" data-go="op-type"><svg class="i w lg"><use href="#ic-plus"/></svg></div></div>
+      <div class="tab" data-go="account"><svg class="i"><use href="#ic-wallet"/></svg>Cuenta</div>
+      <div class="tab on"><svg class="i"><use href="#ic-user"/></svg>Perfil</div>
+    </div>
+  </section>
+
+  <!-- ================= BENEFICIARIOS ================= -->
+  <section class="screen" id="s-benefs" data-title="Mis beneficiarios">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Mis beneficiarios</h2>
+      <div class="iconbtn" data-go="benef-new"><svg class="i b"><use href="#ic-plus"/></svg></div></div>
+    <div class="body pad pb">
+      <div class="input" style="margin-bottom:16px"><span class="ph">Buscar…</span></div>
+      <div class="card" style="padding:4px 16px" id="benefAll">
+        <div class="li"><div class="av" style="background:var(--navy);color:#fff;font-weight:650;font-size:13px">AR</div>
+          <div class="tx"><b>Ana Rodríguez</b><span>Banesco ••••4471 · 4 operaciones</span></div><svg class="i m sm"><use href="#ic-edit"/></svg></div>
+        <div class="li"><div class="av" style="background:var(--navy);color:#fff;font-weight:650;font-size:13px">LP</div>
+          <div class="tx"><b>Luis Pérez</b><span>Pago móvil 0412•••3390 · 2 operaciones</span></div><svg class="i m sm"><use href="#ic-edit"/></svg></div>
+        <div class="li"><div class="av" style="background:var(--navy);color:#fff;font-weight:650;font-size:13px">MG</div>
+          <div class="tx"><b>María González (yo)</b><span>Mercantil ••••0182 · 1 operación</span></div><svg class="i m sm"><use href="#ic-edit"/></svg></div>
+      </div>
+      <button class="btn btn-o" style="margin-top:14px" data-go="benef-new"><svg class="i b"><use href="#ic-plus"/></svg> Agregar beneficiario</button>
+    </div>
+  </section>
+
+  <!-- ================= SEGURIDAD ================= -->
+  <section class="screen" id="s-security" data-title="Seguridad">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Seguridad</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="padding:4px 16px">
+        <div class="li" data-go="pin-new"><div class="av"><svg class="i b sm"><use href="#ic-lock"/></svg></div>
+          <div class="tx"><b>Cambiar PIN</b><span>Última vez hace 2 meses</span></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li"><div class="av"><svg class="i b sm"><use href="#ic-shield"/></svg></div>
+          <div class="tx"><b>Face ID / huella</b><span>Activado</span></div>
+          <div style="width:42px;height:25px;border-radius:99px;background:var(--green);position:relative"><i style="position:absolute;right:3px;top:3px;width:19px;height:19px;border-radius:50%;background:#fff;display:block"></i></div></div>
+        <div class="li"><div class="av"><svg class="i b sm"><use href="#ic-bell"/></svg></div>
+          <div class="tx"><b>Alerta por operación nueva</b><span>WhatsApp y app</span></div>
+          <div style="width:42px;height:25px;border-radius:99px;background:var(--green);position:relative"><i style="position:absolute;right:3px;top:3px;width:19px;height:19px;border-radius:50%;background:#fff;display:block"></i></div></div>
+      </div>
+      <div class="h-sec">Sesiones activas</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li"><div class="av gr"><svg class="i g sm"><use href="#ic-check"/></svg></div>
+          <div class="tx"><b>iPhone 14 · este dispositivo</b><span>Valencia · hoy 9:38 a.m.</span></div></div>
+        <div class="li"><div class="av"><svg class="i m sm"><use href="#ic-clock"/></svg></div>
+          <div class="tx"><b>Android · Xiaomi</b><span>Valencia · 12 jul</span></div>
+          <span class="tiny" style="color:var(--red)">Cerrar</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SOPORTE ================= -->
+  <section class="screen" id="s-support" data-title="Soporte">
+    <div class="sbar"><span>9:41</span><span class="r">••• ▮</span></div>
+    <div class="topbar"><div class="iconbtn" data-back><svg class="i"><use href="#ic-back"/></svg></div><h2>Soporte</h2></div>
+    <div class="body pad pb">
+      <div class="card" style="text-align:center;padding:22px">
+        <div style="width:56px;height:56px;border-radius:18px;background:var(--green-50);display:flex;align-items:center;justify-content:center;margin:0 auto 12px">
+          <svg class="i g lg"><use href="#ic-chat"/></svg></div>
+        <b style="font-size:16px">¿Necesitas ayuda?</b>
+        <p class="muted" style="margin:7px 0 16px;line-height:1.55">Nuestro equipo responde de lunes a sábado, 8:00 a.m. – 6:00 p.m.</p>
+        <button class="btn btn-g">Escribir por WhatsApp</button>
+      </div>
+      <div class="h-sec">Temas frecuentes</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="li"><div class="tx"><b>¿Cómo se calcula la tasa?</b></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li"><div class="tx"><b>¿Cuánto tarda la entrega?</b></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li"><div class="tx"><b>¿Qué pasa si paso los 7 días?</b></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+        <div class="li"><div class="tx"><b>Envié a la cuenta equivocada</b></div><svg class="i m sm"><use href="#ic-next"/></svg></div>
+      </div>
+      <div class="card" style="margin-top:12px;text-align:center">
+        <div class="tiny">TAV · Operaciones de cambio</div>
+        <div style="font-size:12.5px;font-weight:600;margin-top:4px">soporte@tav.app · +592 000 0000</div>
+      </div>
+    </div>
+  </section>
+
+  </div><!-- /viewport -->
+  <div id="toast"><svg class="i w sm"><use href="#ic-check"/></svg><span id="toastTx"></span></div>
+</div><!-- /phone -->
+</main>
+
+<script>
+(function(){
+  const vp = document.getElementById('vp');
+  const nameEl = document.getElementById('scr-name');
+  let stack = [];
+  let current = 'splash';
+
+  window.go = function(id, push){
+    const el = document.getElementById('s-'+id);
+    if(!el){ console.warn('Pantalla no encontrada:', id); return; }
+    if(push !== false && current && current !== id) stack.push(current);
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    el.classList.add('active');
+    el.querySelectorAll('.body').forEach(b=>b.scrollTop=0);
+    current = id;
+    nameEl.textContent = el.dataset.title || id;
+    document.querySelectorAll('.map a').forEach(a=>a.classList.toggle('on', a.dataset.go===id));
+    if(id==='splash'){ stack=[]; }
+  };
+
+  function back(){
+    const prev = stack.pop();
+    go(prev || 'home', false);
+  }
+
+  document.addEventListener('click', function(e){
+    const b = e.target.closest('[data-back]');
+    if(b){ back(); return; }
+    const g = e.target.closest('[data-go]');
+    if(g){ go(g.dataset.go); return; }
+  });
+
+  // Hotspots
+  const hsBtn = document.getElementById('hsBtn');
+  hsBtn.addEventListener('click', ()=>{
+    document.body.classList.toggle('hs');
+    hsBtn.classList.toggle('on');
+  });
+
+  // PIN crear
+  let p1 = 2;
+  document.querySelectorAll('[data-pin]').forEach(k=>k.addEventListener('click', ()=>{
+    const v = k.dataset.pin;
+    p1 = v==='del' ? Math.max(0,p1-1) : Math.min(4,p1+1);
+    document.querySelectorAll('#pd1 i').forEach((d,i)=>d.classList.toggle('f', i<p1));
+    if(p1===4) setTimeout(()=>{ p1=0; document.querySelectorAll('#pd1 i').forEach(d=>d.classList.remove('f')); go('home'); }, 320);
+  }));
+  // PIN login
+  let p2 = 0;
+  document.querySelectorAll('[data-pin2]').forEach(k=>k.addEventListener('click', ()=>{
+    const v = k.dataset.pin2;
+    p2 = v==='del' ? Math.max(0,p2-1) : Math.min(4,p2+1);
+    document.querySelectorAll('#pd2 i').forEach((d,i)=>d.classList.toggle('f', i<p2));
+    if(p2===4) setTimeout(()=>{ p2=0; document.querySelectorAll('#pd2 i').forEach(d=>d.classList.remove('f')); go('home'); }, 320);
+  }));
+
+  // Calculadora de monto
+  const RATE = 285.40, FEE = 0.03;
+  let amt = '500';
+  const inEl = document.getElementById('amtIn'), outEl = document.getElementById('amtOut');
+  const fmt = n => n.toLocaleString('es-VE',{minimumFractionDigits:2, maximumFractionDigits:2});
+  function render(){
+    const n = parseFloat(amt||'0');
+    inEl.textContent = amt==='' ? '0' : parseFloat(amt).toLocaleString('es-VE');
+    outEl.textContent = fmt(n*RATE);
+    const kvs = inEl.closest('.body').querySelectorAll('.kv b');
+    if(kvs.length>=3){
+      kvs[1].textContent = fmt(n*FEE)+' USDT';
+      kvs[2].textContent = fmt(n*(1+FEE))+' USDT';
+    }
+  }
+  document.querySelectorAll('[data-amt]').forEach(k=>k.addEventListener('click', ()=>{
+    const v = k.dataset.amt;
+    if(v==='del') amt = amt.slice(0,-1);
+    else if(amt.length < 8) amt = (amt==='0'?'':amt) + v;
+    render();
+  }));
+
+  // Comprobante (operación)
+  function wireUpload(el, txt){
+    if(!el) return;
+    el.addEventListener('click', ()=>{
+      el.classList.add('done');
+      el.innerHTML = '<svg class="i lg g" style="margin-bottom:8px"><use href="#ic-check"/></svg><div style="font-size:13.5px;font-weight:600;color:#256B2A">'+txt+'</div><div class="tiny" style="margin-top:3px">Listo para enviar · toca para cambiar</div>';
+    });
+  }
+  wireUpload(document.getElementById('upl'), 'comprobante_usdt.png');
+  wireUpload(document.getElementById('dpUpl'), 'comprobante_abono.png');
+  wireUpload(document.getElementById('dpUpl2'), 'transferencia_abono.png');
+
+  // ---------- Toast ----------
+  const toast = document.getElementById('toast'), toastTx = document.getElementById('toastTx');
+  let tT;
+  function say(msg){
+    toastTx.textContent = msg; toast.classList.add('on');
+    clearTimeout(tT); tT = setTimeout(()=>toast.classList.remove('on'), 2200);
+  }
+
+  // ================= BENEFICIARIOS =================
+  const $ = id => document.getElementById(id);
+  let bfMethod = 'transferencia', bfSaveIt = true;
+  const money = n => n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const initials = n => n.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?';
+  const mask = s => s.length>4 ? '••••'+s.slice(-4) : s;
+
+  $('bfMethod').addEventListener('click', e=>{
+    const m = e.target.closest('[data-m]'); if(!m) return;
+    bfMethod = m.dataset.m;
+    $('bfMethod').querySelectorAll('.m').forEach(x=>x.classList.toggle('on', x===m));
+    $('bfTransf').classList.toggle('hide', bfMethod!=='transferencia');
+    $('bfMovil').classList.toggle('hide', bfMethod!=='movil');
+    $('bfCash').classList.toggle('hide', bfMethod!=='efectivo');
+    validateBf();
+  });
+
+  $('bfSaveChk').addEventListener('click', ()=>{
+    bfSaveIt = !bfSaveIt;
+    $('bfSaveChk').querySelector('.radio').classList.toggle('on', bfSaveIt);
+  });
+
+  function bfData(){
+    const name = $('bfName').value.trim();
+    const doc  = $('bfDoc').value.trim();
+    let meta = '', ok = false;
+    if(bfMethod==='transferencia'){
+      const b=$('bfBank').value, a=$('bfAcct').value.replace(/\s/g,'');
+      ok = !!(name && b && a.length>=6);
+      meta = [b, a && mask(a), doc].filter(Boolean).join(' · ');
+    } else if(bfMethod==='movil'){
+      const b=$('bfBank2').value, p=$('bfPhone').value.replace(/\s/g,'');
+      ok = !!(name && b && p.length>=10);
+      meta = ['Pago móvil', b, p && mask(p), doc].filter(Boolean).join(' · ');
+    } else {
+      const c=$('bfCity').value, r=$('bfRef').value.trim();
+      ok = !!(name && c);
+      meta = ['Efectivo', c, r, doc].filter(Boolean).join(' · ');
+    }
+    return {name, doc, meta, ok};
+  }
+  function validateBf(){ $('bfSave').disabled = !bfData().ok; }
+  ['bfName','bfDoc','bfBank','bfAcct','bfBank2','bfPhone','bfCity','bfRef']
+    .forEach(id=>{ const el=$(id); el.addEventListener('input',validateBf); el.addEventListener('change',validateBf); });
+
+  function benefRow(b, pick){
+    const d = document.createElement('div');
+    d.className = 'li';
+    if(pick) d.dataset.go = 'op-summary';
+    d.innerHTML = '<div class="av" style="background:var(--navy);color:#fff;font-weight:650;font-size:13px">'+initials(b.name)+'</div>'
+      + '<div class="tx"><b>'+b.name+'</b><span>'+b.meta+'</span></div>'
+      + '<svg class="i m sm"><use href="#'+(pick?'ic-next':'ic-edit')+'"/></svg>';
+    if(pick) d.addEventListener('click', ()=>selectBenef(b));
+    return d;
+  }
+  function selectBenef(b){
+    $('sumIni').textContent = initials(b.name);
+    $('sumName').textContent = b.name;
+    $('sumMeta').textContent = b.meta;
+  }
+  // Seleccionar beneficiarios existentes también actualiza el resumen
+  $('benefPick').querySelectorAll('.li').forEach(li=>{
+    li.addEventListener('click', ()=>{
+      selectBenef({ name: li.querySelector('b').textContent, meta: li.querySelector('span').textContent });
+    });
+  });
+
+  $('bfSave').addEventListener('click', ()=>{
+    const b = bfData(); if(!b.ok) return;
+    if(bfSaveIt){
+      $('benefPick').prepend(benefRow(b, true));
+      $('benefAll').prepend(benefRow(b, false));
+      const c = document.querySelector('#s-profile .li[data-go="benefs"] span');
+      if(c) c.textContent = ($('benefAll').children.length)+' registrados';
+    }
+    selectBenef(b);
+    say(bfSaveIt ? 'Beneficiario guardado' : 'Beneficiario listo');
+    // limpiar
+    ['bfName','bfDoc','bfAcct','bfPhone','bfRef'].forEach(id=>$(id).value='');
+    ['bfBank','bfBank2','bfCity'].forEach(id=>$(id).value='');
+    validateBf();
+    // volver al flujo o a la lista
+    const from = stack[stack.length-1];
+    go(from === 'op-benef' ? 'op-summary' : 'benefs');
+  });
+
+  // ================= CRÉDITO Y DEUDA =================
+  // Semáforo de dos ejes: días (7) y % del límite consumido (75% ámbar, 100% rojo y bloqueo).
+  const state = { debt: 1240, limit: 2000, days: 4, method: 'usdt', amount: 600, custom: '' };
+  const PCT_AMBER = 0.75;
+  const METHOD_LABEL = { usdt:'USDT (TRC20)', efectivo:'Efectivo al recolector', transfer:'Transferencia bancaria' };
+
+  function lightOf(d){
+    const p = state.limit ? state.debt/state.limit : 0;
+    const byDays = d>=7 ? 2 : d>=4 ? 1 : 0;
+    const byPct  = p>=1 ? 2 : p>=PCT_AMBER ? 1 : 0;
+    const i = Math.max(byDays, byPct);
+    const txt = p>=1 ? 'Sin cupo' : (d>=7 ? 'Vencida' : (i===1 ? 'Por vencer' : 'Al día'));
+    return [{k:'green',c:'c-green',color:'var(--green)',txt:txt,idx:0},
+            {k:'gold', c:'c-gold', color:'var(--gold)', txt:txt,idx:1},
+            {k:'red',  c:'c-red',  color:'var(--red)',  txt:txt,idx:2}][i];
+  }
+  function refresh(){
+    const L = lightOf(state.days);
+    const used = state.limit ? state.debt/state.limit : 0;
+    const avail = Math.max(0, state.limit - state.debt);
+    const pct = Math.min(100, used*100);
+    const due = new Date(2026,7,3 + (7-state.days));
+    const dueTxt = 'Vence el '+due.getDate()+' '+['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][due.getMonth()];
+    // Home — el número grande es el crédito disponible, no la deuda
+    $('homeAvail').textContent = '$'+money(avail);
+    $('homeOf').textContent = 'de un límite de $'+money(state.limit);
+    $('homeUsed').textContent = 'Debes $'+money(state.debt)+' · '+Math.round(used*100)+'% usado';
+    $('homeDays').textContent = avail<=0 ? '● Sin cupo' : '● '+state.days+' día'+(state.days===1?'':'s');
+    $('homeDays').className = 'chip '+L.c;
+    $('homeProg').style.width = pct+'%';
+    $('homeProg').style.background = L.color;
+    $('homeDayLbl').textContent = state.days===0 ? 'Sin saldo vencido' : 'Día '+state.days+' de 7';
+    $('blockCard').classList.toggle('hide', avail > 0);
+    $('blkLimit').textContent = money(state.limit);
+    // Ampliación
+    $('raLimit').textContent = '$'+money(state.limit);
+    $('raDebt').textContent = '$'+money(state.debt);
+    $('raAvail').textContent = '$'+money(avail);
+    $('raBack').textContent = money(state.limit);
+    // Nueva operación: bloqueo por cupo
+    const need = 515; // total de la operación de ejemplo
+    const over = Math.max(0, need - avail);
+    $('opAvail').textContent = '$'+money(avail);
+    $('opAvail').style.color = over>0 ? 'var(--red-700)' : 'var(--green-600)';
+    $('opBlock').classList.toggle('hide', over<=0);
+    $('opRaise').classList.toggle('hide', over<=0);
+    $('opOver').textContent = '$'+money(over);
+    $('opNext').disabled = over>0;
+    $('opNext').textContent = over>0 ? 'Sin cupo para esta operación' : 'Continuar';
+    // Estado de cuenta
+    $('accDebt').textContent = '$'+money(state.debt);
+    $('accDebtBs').textContent = '≈ Bs '+money(state.debt*285.40)+' a tasa de hoy';
+    $('accDaysTxt').textContent = state.days+' día'+(state.days===1?'':'s')+' · '+Math.round(used*100)+'% del cupo';
+    $('accChip').textContent = L.txt;
+    $('accChip').className = 'chip '+L.c;
+    $('accProg').style.width = pct+'%';
+    $('accProg').style.background = L.color;
+    const cols = ['var(--green)','var(--gold)','var(--red)'];
+    $('accLights').querySelectorAll('i').forEach((el,i)=>{
+      const on = i===L.idx;
+      el.style.background = on ? cols[i] : '#E5E8EC';
+      el.style.boxShadow = on ? '0 0 0 3px '+cols[i].replace('var(--','rgba(').replace(')','') : 'none';
+      if(on) el.style.boxShadow = '0 0 0 3px rgba(0,0,0,.07)';
+    });
+    // Pantalla de abono
+    $('pdDebt').textContent = '$'+money(state.debt);
+    $('pdAmt').textContent = money(state.amount);
+    const rest = Math.max(0, state.debt - state.amount);
+    $('pdAfter').textContent = rest===0 ? 'Quedarías al día ✓' : 'Quedarías debiendo $'+money(rest);
+    $('pdGo').disabled = state.amount <= 0;
+  }
+
+  // Montos rápidos
+  $('pdQuick').addEventListener('click', e=>{
+    const q = e.target.closest('[data-amt]'); if(!q) return;
+    $('pdQuick').querySelectorAll('.q').forEach(x=>x.classList.toggle('on', x===q));
+    const v = q.dataset.amt;
+    if(v==='all'){ state.amount = state.debt; $('pdKeys').classList.add('hide'); }
+    else if(v==='other'){ state.custom=''; state.amount=0; $('pdKeys').classList.remove('hide'); }
+    else { state.amount = Math.min(parseFloat(v), state.debt); $('pdKeys').classList.add('hide'); }
+    refresh();
+  });
+  document.querySelectorAll('[data-pda]').forEach(k=>k.addEventListener('click', ()=>{
+    const v = k.dataset.pda;
+    if(v==='del') state.custom = state.custom.slice(0,-1);
+    else if(state.custom.length < 7) state.custom = (state.custom==='0'?'':state.custom)+v;
+    state.amount = Math.min(parseFloat(state.custom||'0'), state.debt);
+    refresh();
+  }));
+
+  // Método de pago
+  $('pdMethods').addEventListener('click', e=>{
+    const li = e.target.closest('[data-pm]'); if(!li) return;
+    state.method = li.dataset.pm;
+    $('pdMethods').querySelectorAll('.li').forEach(x=>x.querySelector('.radio').classList.toggle('on', x===li));
+  });
+
+  $('pdGo').addEventListener('click', ()=>{
+    if(state.amount<=0){ say('Elige un monto'); return; }
+    $('dpAmt').textContent = '$'+money(state.amount);
+    $('dpEq').textContent = '≈ Bs '+money(state.amount*285.40)+' a tasa de hoy';
+    $('dpUsdtAmt').innerHTML = money(state.amount)+' <span style="font-size:13px;color:var(--ink-3)">USDT</span>';
+    $('dpUsdt').classList.toggle('hide', state.method!=='usdt');
+    $('dpCash').classList.toggle('hide', state.method!=='efectivo');
+    $('dpTransf').classList.toggle('hide', state.method!=='transfer');
+    $('dpTitle').textContent = state.method==='efectivo' ? 'Coordina la entrega' : 'Realiza tu abono';
+    $('dpConfirm').textContent = state.method==='efectivo' ? 'Confirmar recolección' : 'Ya realicé el pago';
+    go('debt-pay');
+  });
+
+  $('dpCopy').addEventListener('click', ()=>say('Dirección copiada'));
+
+  // ---------- LA OPERACIÓN CONSUME CUPO ----------
+  $('opPaid').addEventListener('click', ()=>{
+    state.debt += 515;
+    if(state.days === 0) state.days = 1;
+    refresh();
+    go('op-ok');
+  });
+
+  // ---------- AMPLIACIÓN DE CUPO ----------
+  function raCheck(){ $('raGo').disabled = !(parseFloat(($('raAmt').value||'').replace(/\./g,''))>0) || $('raWhy').value.trim().length<8; }
+  $('raAmt').addEventListener('input', raCheck);
+  $('raWhy').addEventListener('input', raCheck);
+  $('raGo').addEventListener('click', ()=>{
+    const v = parseFloat(($('raAmt').value||'').replace(/\./g,''))||0;
+    $('rsAmt').textContent = '$'+money(v);
+    $('raAmt').value=''; $('raWhy').value=''; raCheck();
+    go('raise-sent');
+  });
+
+  $('dpConfirm').addEventListener('click', ()=>{
+    const before = state.debt, amt = state.amount, cash = state.method==='efectivo';
+    $('doAmt').textContent = '$'+money(amt);
+    $('doMethod').textContent = METHOD_LABEL[state.method];
+    $('doBefore').textContent = '$'+money(before);
+    $('doAfter').textContent = '$'+money(Math.max(0, before-amt));
+    $('doTitle').textContent = cash ? '¡Recolección agendada!' : '¡Abono registrado!';
+    $('doSub').textContent = cash
+      ? 'José Ramírez pasará hoy entre 12 y 4 p.m. Tu saldo se descuenta al confirmar la entrega.'
+      : 'Estamos verificando tu pago. Al confirmarlo, tu saldo se actualiza y el semáforo vuelve a verde.';
+    // aplicar
+    state.debt = Math.max(0, before-amt);
+    state.days = state.debt===0 ? 0 : Math.max(0, state.days-2);
+    const L = lightOf(state.days);
+    $('doLight').textContent = '● '+L.txt+' · '+state.days+' días';
+    $('doLight').className = 'chip '+L.c;
+    // movimiento en el estado de cuenta
+    const mv = document.createElement('div');
+    mv.className = 'li';
+    mv.innerHTML = '<div class="av gr"><svg class="i g sm"><use href="#ic-down"/></svg></div>'
+      + '<div class="tx"><b>Abono '+(cash?'agendado':'registrado')+'</b><span>Hoy · '+METHOD_LABEL[state.method]+'</span></div>'
+      + '<div class="rt"><b style="color:var(--green-600)">−$'+money(amt)+'</b><span>Saldo $'+money(state.debt)+'</span></div>';
+    $('accMoves').prepend(mv);
+    // reset del selector
+    state.amount = Math.min(600, state.debt); state.custom='';
+    $('pdKeys').classList.add('hide');
+    $('pdQuick').querySelectorAll('.q').forEach((x,i)=>x.classList.toggle('on', i===1));
+    refresh();
+    go('debt-ok');
+  });
+
+  refresh();
+
+  // Splash automático
+  setTimeout(()=>{ if(current==='splash') go('welcome'); }, 2200);
+})();
+</script>
+</body>
+</html>
