@@ -173,3 +173,37 @@ Marcar en el código con `// PENDIENTE DE DEFINIR:` y no inventar.
 4. Cómo se salda una diferencia de cierre (¿se descuenta de la comisión del cobrador?).
 5. Si el admin puede registrar operaciones en nombre de un cajero, o solo pagos.
 6. Política de retención: cuánto tiempo se guardan comprobantes e imágenes.
+
+### Surgidos al implementar el ledger (Fase 2)
+
+Detalle completo en `docs/05-contrato-ledger.md`, casos 13 a 21.
+Mientras no se decidan, el código mantiene el comportamiento actual y los tests lo fijan.
+
+7. **Imputación de pagos y fecha de la deuda.** ¿Los abonos saldan primero el cargo
+   más viejo (FIFO)? Hoy `deudaDesde` no se reconstruye al anular, así que una anulación
+   puede reiniciar el contador de días y dejar el semáforo más benévolo de lo justo.
+   FIFO es la respuesta natural en este negocio, pero hay que confirmarla con Iván.
+   **Es la más importante de esta lista:** el eje de días del semáforo depende de esto.
+
+8. **Saldo negativo.** Un cajero puede pagar de más y quedar con saldo a favor.
+   Hoy se permite. ¿Es correcto? Si lo es, hay que mostrarlo como "tienes $X a favor"
+   en la app, no como una deuda negativa.
+
+9. **Cobro después de cerrar el día.** Como no hay hora límite, un cobrador puede cerrar
+   a las 6 y cobrar a las 7. Hoy se rechaza. ¿Debe ir al cierre del día siguiente,
+   o el admin puede reabrir el cierre?
+
+10. **Anular una operación que consumió una ampliación.** Hoy el cupo extra se pierde.
+    ¿Debería devolverse?
+
+11. **Dos ampliaciones aprobadas al mismo tiempo.** Hoy se usa solo la más antigua y
+    nunca se suman. El flujo del admin debería impedir que existan dos activas.
+
+12. **Validación aritmética de la operación.** El ledger asienta lo que le mandan:
+    no comprueba que `totalCents == montoOrigenCents + comisionCents`.
+    Debe validarse en la capa HTTP en la Fase 4.
+
+13. **Identidad del actor.** `cajeroId` y `cobradorId` sí se validan desde la Fase 2
+    (`CajeroNoValidoException`, `CobradorNoValidoException`), pero `creadaPorId`
+    y `actorId` todavía no se comprueban contra `Usuario`. Cerrarlo en la Fase 3,
+    cuando esos valores pasen a salir del JWT y no del cuerpo de la petición.
