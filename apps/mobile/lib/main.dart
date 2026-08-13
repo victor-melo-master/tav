@@ -1,28 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'config/app_config.dart';
+import 'router/tav_router.dart';
+import 'state/auth_state.dart';
+import 'theme/tav_theme.dart';
 
 void main() {
-  runApp(const TavApp());
+  runApp(const ProviderScope(child: TavApp()));
 }
 
-class TavApp extends StatelessWidget {
+class TavApp extends ConsumerStatefulWidget {
   const TavApp({super.key});
 
   @override
+  ConsumerState<TavApp> createState() => _TavAppState();
+}
+
+class _TavAppState extends ConsumerState<TavApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Al arrancar, comprobar si hay sesión guardada.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(authProvider.notifier).checkSession();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    final router = ref.watch(tavRouterProvider);
+
+    return MaterialApp.router(
       title: 'TAV',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E7D32)),
-        useMaterial3: true,
-      ),
-      home: const Scaffold(
-        body: Center(
-          child: Text('TAV — ${AppConfig.apiBaseUrl}'),
-        ),
-      ),
+      theme: buildTavTheme(),
+      routerConfig: router,
     );
   }
 }
