@@ -47,13 +47,76 @@ Despliegue con Docker Compose en VPS propio. Menos de 50 usuarios: no hace falta
 
 ---
 
+## Estructura del repo
+
+```
+tav/
+├── AGENTS.md                  ← reglas innegociables
+├── docs/                      ← especificación
+├── design/                    ← prototipos navegables = especificación de UI
+├── docker-compose.yml         ← Postgres 16 + API
+├── package.json               ← workspaces, ESLint y Prettier compartidos
+└── apps/
+    ├── api/                   NestJS + Prisma + PostgreSQL
+    ├── admin/                 Next.js 15 + Tailwind + shadcn/ui
+    └── mobile/                Flutter (cajero y cobrador)
+```
+
 ## Arrancar en local
 
+### 0. Requisitos
+
+- Node.js ≥ 20
+- Docker y Docker Compose
+- Flutter ≥ 3.6 (solo para la app móvil)
+
+### 1. Variables de entorno
+
+Copia los `.env.example` de cada app a `.env`:
+
 ```bash
-docker compose up -d          # Postgres
-cd apps/api && npm install && npx prisma migrate dev && npm run seed && npm run start:dev
-cd apps/admin && npm install && npm run dev
-cd apps/mobile && flutter pub get && flutter run
+cp apps/api/.env.example apps/api/.env
+cp apps/admin/.env.example apps/admin/.env
+```
+
+### 2. Docker (Postgres + API)
+
+```bash
+docker compose up -d                    # levanta Postgres y la API
+curl http://localhost:3001/health       # → {"status":"ok","timestamp":"..."}
+```
+
+### 3. API en modo desarrollo (opcional, sin Docker)
+
+```bash
+cd apps/api
+npm install
+npx prisma generate
+npx prisma migrate dev
+npm run start:dev                       # http://localhost:3001
+```
+
+### 4. Panel admin
+
+```bash
+cd apps/admin
+npm install
+npm run dev                             # http://localhost:3000
+```
+
+### 5. App móvil
+
+```bash
+cd apps/mobile
+flutter pub get
+flutter run
+```
+
+### Linting y formato
+
+```bash
+npm run lint          # ESLint en toda la raíz
+npm run format        # Prettier en toda la raíz
 ```
 
 ---

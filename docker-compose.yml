@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tav
+      POSTGRES_PASSWORD: tav
+      POSTGRES_DB: tav
+    ports:
+      - '5432:5432'
+    volumes:
+      - tav_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tav -d tav']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://tav:tav@db:5432/tav?schema=public
+      JWT_SECRET: cambiar-en-produccion
+    ports:
+      - '3001:3001'
+
+volumes:
+  tav_pgdata:
