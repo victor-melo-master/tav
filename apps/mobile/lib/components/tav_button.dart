@@ -41,6 +41,7 @@ class TavButton extends StatelessWidget {
     this.icon,
     this.expanded = true,
     this.small = false,
+    this.loading = false,
   });
 
   final String label;
@@ -50,9 +51,12 @@ class TavButton extends StatelessWidget {
   final bool expanded;
   final bool small;
 
+  /// Cuando es true, el botón muestra un spinner y queda deshabilitado.
+  final bool loading;
+
   @override
   Widget build(BuildContext context) {
-    final isDisabled = onPressed == null;
+    final isDisabled = onPressed == null || loading;
     final height = small ? 40.0 : (variant == TavButtonVariant.text ? 44.0 : 52.0);
     final radius = small ? 11.0 : TavRadius.card;
     final fontSize = small ? 13.5 : 15.0;
@@ -63,7 +67,7 @@ class TavButton extends StatelessWidget {
       width: expanded ? double.infinity : null,
       height: height,
       child: ElevatedButton(
-        onPressed: onPressed,
+        onPressed: isDisabled ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: colors.background,
           foregroundColor: colors.foreground,
@@ -80,23 +84,32 @@ class TavButton extends StatelessWidget {
           ),
           shadowColor: colors.shadow?.color,
         ),
-        child: Row(
-          mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (icon != null) ...[
-              icon!,
-              const SizedBox(width: 8),
-            ],
-            Text(
-              label,
-              style: TavText.button.copyWith(
-                fontSize: fontSize,
-                color: colors.foreground,
+        child: loading
+            ? SizedBox(
+                width: small ? 16 : 20,
+                height: small ? 16 : 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: colors.foreground,
+                ),
+              )
+            : Row(
+                mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (icon != null) ...[
+                    icon!,
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    label,
+                    style: TavText.button.copyWith(
+                      fontSize: fontSize,
+                      color: colors.foreground,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }

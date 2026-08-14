@@ -1,8 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Permiso de INTERNET en el manifiesto principal, no solo en debug.
+         En debug el Flutter tool lo añade automáticamente, pero en release
+         no está si no lo declaramos aquí. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="tav_mobile"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

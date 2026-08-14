@@ -114,6 +114,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     TavButton(
                       label: 'Entrar',
                       onPressed: _loading ? null : _login,
+                      loading: _loading,
                     ),
                     const SizedBox(height: TavSpace.lg),
                     Text(

@@ -113,9 +113,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (code == 'PIN_BLOQUEADO') {
         state = const AuthError('PIN_BLOQUEADO');
       } else {
+        // err.message ya viene traducido por ErrorInterceptor.
         state = AuthError(
-          e.response?.data?['message'] as String? ??
-              'No pudimos conectar. Revisa tu conexión.',
+          e.message ?? 'No pudimos conectar. Revisa tu conexión.',
         );
       }
     } catch (e) {
