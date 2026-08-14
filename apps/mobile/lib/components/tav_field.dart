@@ -70,7 +70,7 @@ class TavField extends StatelessWidget {
               prefixIcon: prefix != null
                   ? Padding(
                       padding: const EdgeInsets.only(left: TavSpace.md),
-                      child: Center(child: prefix),
+                      child: prefix,
                     )
                   : null,
               prefixIconConstraints: const BoxConstraints(
