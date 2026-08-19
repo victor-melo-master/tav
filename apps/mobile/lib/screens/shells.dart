@@ -51,8 +51,7 @@ class CajeroShell extends StatelessWidget {
   }
 
   void _onFabTap(BuildContext context) {
-    // PENDIENTE DE DEFINIR: navegar al flujo de nueva operación.
-    // Por ahora no hace nada — las pantallas de contenido son Fase 6.
+    context.push('/cajero/operacion/tipo');
   }
 }
 

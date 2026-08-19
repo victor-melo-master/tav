@@ -1,30 +1,33 @@
 #!/usr/bin/env bash
-# Lanza la app Flutter en un dispositivo físico o emulador con la URL
-# correcta de la API. Resuelve la IP local del Mac automáticamente.
+# Lanza la app Flutter en un dispositivo.
 #
-# Uso:
-#   ./run-device.sh                  # detecta el primer dispositivo
-#   ./run-device.sh -d <device-id>   # dispositivo específico
-#   ./run-device.sh --release        # modo release
+# Por defecto la API apunta a https://api.tav.rolapro.com (production).
+# Para desarrollo local, pasa la URL del backend:
+#
+#   ./run-device.sh                                    # producción
+#   ./run-device.sh --local                            # localhost (iOS Simulator)
+#   ./run-device.sh --local --ip                       # IP del Mac (Android USB)
+#   ./run-device.sh -d <device-id>                     # dispositivo específico
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-IP=""
-for iface in en0 en1; do
-  IP=$(ipconfig getifaddr "$iface" 2>/dev/null || true)
-  if [ -n "$IP" ]; then
-    break
+if [[ "${1:-}" == "--local" ]]; then
+  shift
+  if [[ "${1:-}" == "--ip" ]]; then
+    shift
+    IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
+    if [ -z "$IP" ]; then
+      echo "ERROR: no se pudo determinar la IP local del Mac."
+      exit 1
+    fi
+    BASE_URL="http://${IP}:3001"
+  else
+    BASE_URL="http://localhost:3001"
   fi
-done
-
-if [ -z "$IP" ]; then
-  echo "ERROR: no se pudo determinar la IP local del Mac."
-  echo "       Verifica que estás conectado a WiFi (en0 o en1)."
-  exit 1
+  echo "→ API local: $BASE_URL"
+  exec flutter run --dart-define="API_BASE_URL=$BASE_URL" "$@"
 fi
 
-BASE_URL="http://${IP}:3001"
-echo "→ API: $BASE_URL"
-echo "→ flutter run --dart-define=API_BASE_URL=$BASE_URL $*"
-exec flutter run --dart-define="API_BASE_URL=$BASE_URL" "$@"
+echo "→ API: https://api.tav.rolapro.com (producción)"
+exec flutter run "$@"

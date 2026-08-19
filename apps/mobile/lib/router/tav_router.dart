@@ -1,6 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../screens/cajero/abono_screen.dart';
+import '../screens/cajero/ampliacion_screen.dart';
+import '../screens/cajero/beneficiarios_screen.dart';
+import '../screens/cajero/estado_cuenta_screen.dart';
+import '../screens/cajero/historial_screen.dart';
+import '../screens/cajero/inicio_screen.dart';
+import '../screens/cajero/notificaciones_screen.dart';
+import '../screens/cajero/nueva_operacion_screen.dart';
+import '../screens/cajero/operacion_detail_screen.dart';
+import '../screens/cajero/perfil_screen.dart';
+import '../screens/cajero/seguridad_screen.dart';
+import '../screens/cajero/soporte_screen.dart';
+import '../screens/cajero/tasas_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/pin_bloqueado_screen.dart';
 import '../screens/pin_login_screen.dart';
@@ -81,7 +94,7 @@ final tavRouterProvider = Provider<GoRouter>((ref) {
         path: '/pin-bloqueado',
         builder: (context, state) => const PinBloqueadoScreen(),
       ),
-      // Shell del cajero — 4 destinos
+      // Shell del cajero — 4 destinos del bottom nav
       ShellRoute(
         builder: (context, state, child) {
           final index = _cajeroIndex(state.matchedLocation);
@@ -90,25 +103,60 @@ final tavRouterProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: '/cajero/inicio',
-            builder: (context, state) =>
-                const PlaceholderScreen(title: 'Inicio'),
+            builder: (context, state) => const CajeroInicioScreen(),
           ),
           GoRoute(
             path: '/cajero/operaciones',
-            builder: (context, state) =>
-                const PlaceholderScreen(title: 'Operaciones'),
+            builder: (context, state) => const HistorialScreen(),
           ),
           GoRoute(
             path: '/cajero/cuenta',
-            builder: (context, state) =>
-                const PlaceholderScreen(title: 'Estado de cuenta'),
+            builder: (context, state) => const EstadoCuentaScreen(),
           ),
           GoRoute(
             path: '/cajero/perfil',
-            builder: (context, state) =>
-                const PlaceholderScreen(title: 'Perfil'),
+            builder: (context, state) => const PerfilScreen(),
           ),
         ],
+      ),
+      // Rutas del cajero fuera del shell (pantallas a pantalla completa)
+      GoRoute(
+        path: '/cajero/operacion/tipo',
+        builder: (context, state) => const NuevaOperacionScreen(),
+      ),
+      GoRoute(
+        path: '/cajero/operacion/:id',
+        builder: (context, state) => OperacionDetailScreen(
+          operacionId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/cajero/abono',
+        builder: (context, state) => const AbonoScreen(),
+      ),
+      GoRoute(
+        path: '/cajero/ampliacion',
+        builder: (context, state) => const AmpliacionScreen(),
+      ),
+      GoRoute(
+        path: '/cajero/tasas',
+        builder: (context, state) => const TasasScreen(),
+      ),
+      GoRoute(
+        path: '/cajero/notificaciones',
+        builder: (context, state) => const NotificacionesScreen(),
+      ),
+      GoRoute(
+        path: '/cajero/beneficiarios',
+        builder: (context, state) => const BeneficiariosScreen(),
+      ),
+      GoRoute(
+        path: '/cajero/seguridad',
+        builder: (context, state) => const SeguridadScreen(),
+      ),
+      GoRoute(
+        path: '/cajero/soporte',
+        builder: (context, state) => const SoporteScreen(),
       ),
       // Shell del cobrador — 4 destinos
       ShellRoute(

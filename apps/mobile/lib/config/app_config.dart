@@ -17,9 +17,11 @@ class AppConfig {
   const AppConfig._();
 
   /// URL base de la API, sin slash final.
+  /// Por defecto apunta a la API de producción. Para desarrollo local,
+  /// pasar --dart-define=API_BASE_URL=http://localhost:3001.
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:3001',
+    defaultValue: 'https://api.tav.rolapro.com',
   );
 
   /// Imprime la URL efectiva al arrancar para diagnosticar problemas

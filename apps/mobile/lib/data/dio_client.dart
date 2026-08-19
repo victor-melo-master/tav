@@ -79,7 +79,7 @@ class ErrorInterceptor extends Interceptor {
         return 'El servidor tardó demasiado en responder. Intenta de nuevo.';
       case DioExceptionType.connectionError:
         return 'No pudimos conectar con el servidor. '
-            'Verifica que estás en la misma red WiFi que tu Mac.';
+            'Verifica tu conexión a internet e intenta de nuevo.';
       case DioExceptionType.badCertificate:
         return 'El certificado del servidor no es válido.';
       case DioExceptionType.cancel:
