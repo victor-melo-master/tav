@@ -6,7 +6,11 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci
+# npm install (no npm ci): el proyecto es un monorepo con workspaces de npm
+# y el package-lock.json raíz está en la raíz del repo, no en apps/api.
+# En el paquete de despliegue solo se copia apps/api/, así que npm ci falla
+# porque no encuentra el lockfile que coincide. npm install resuelve desde cero.
+RUN npm install
 
 COPY prisma ./prisma
 RUN npx prisma generate
@@ -25,7 +29,8 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev && npm cache clean --force
+# Mismo motivo que en build: npm install, no npm ci.
+RUN npm install --omit=dev && npm cache clean --force
 
 # El cliente de Prisma se genera con el schema. Necesita el schema en runtime.
 COPY prisma ./prisma
