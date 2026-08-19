@@ -14,7 +14,10 @@ import { RolesGuard } from './roles.guard';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET') ?? 'cambiar-en-produccion',
+        secret: config.get<string>('JWT_SECRET') ??
+          (process.env.NODE_ENV === 'production'
+            ? (() => { throw new Error('JWT_SECRET no definido en producción'); })()
+            : 'dev-secret-no-prod'),
         signOptions: {
           // JwtSignOptions.expiresIn es `number | StringValue` donde StringValue
           // es un template literal type de `ms` (ej. "15m", "30d"). Un string

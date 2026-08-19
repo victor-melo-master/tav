@@ -18,6 +18,15 @@ const DEV_PASSWORD = 'tav1234';
 // ───────────────────────── estructura del seed ─────────────────────────
 
 async function main() {
+  // GUARDA: el seed crea usuarios con contraseña tav1234.
+  // Eso es aceptable en desarrollo; inaceptable en un servidor público.
+  if (process.env.NODE_ENV === 'production') {
+    console.error('ABORTADO: el seed no puede correr en producción.');
+    console.error('Los usuarios del seed tienen contraseña tav1234.');
+    console.error('En producción, el admin crea las cuentas desde la API.');
+    process.exit(1);
+  }
+
   // Hash real con argon2 — mismo algoritmo que usa auth.service.ts en runtime.
   const PASS_HASH = await argon2.hash(DEV_PASSWORD);
 

@@ -158,8 +158,20 @@ npm run dev                             # http://localhost:3000
 ```bash
 cd apps/mobile
 flutter pub get
-flutter run
+
+# Dispositivo físico Android/iOS (resuelve la IP del Mac automáticamente):
+./run-device.sh
+
+# iOS Simulator (localhost = tu Mac):
+flutter run --dart-define=API_BASE_URL=http://localhost:3001
+
+# Android Emulator (10.0.2.2 = loopback al host):
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3001
 ```
+
+> **Importante:** `localhost` y `10.0.2.2` no funcionan en un dispositivo físico.
+> Usa `./run-device.sh` o pasa la IP de tu Mac con `--dart-define`.
+> El `--dart-define` es de tiempo de compilación: un hot reload no lo aplica.
 
 ### Linting y formato
 

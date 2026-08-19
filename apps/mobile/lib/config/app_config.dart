@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// Configuración de la app que viene de fuera del código.
 ///
 /// La URL base de la API se pasa con `--dart-define=API_BASE_URL=...` en el
@@ -19,4 +21,12 @@ class AppConfig {
     'API_BASE_URL',
     defaultValue: 'http://localhost:3001',
   );
+
+  /// Imprime la URL efectiva al arrancar para diagnosticar problemas
+  /// de conectividad en dispositivo físico.
+  static void logConfig() {
+    if (kDebugMode) {
+      debugPrint('[AppConfig] API_BASE_URL = $apiBaseUrl');
+    }
+  }
 }

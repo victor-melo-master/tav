@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { LedgerExceptionFilter } from './ledger-exception.filter';
 
@@ -20,7 +21,17 @@ BigInt.prototype.toJSON = function () {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors();
+  const config = app.get(ConfigService);
+
+  // CORS: en producción, solo el dominio del panel admin puede llamar a la API.
+  // CORS_ORIGIN viene de .env.prod. Si no está definida, se permite cualquier
+  // origen (modo desarrollo local).
+  const corsOrigin = config.get<string>('CORS_ORIGIN');
+  app.enableCors({
+    origin: corsOrigin ?? true,
+    credentials: true,
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true, // descarta campos que no están en el DTO
@@ -33,15 +44,16 @@ async function bootstrap() {
   app.useGlobalFilters(new LedgerExceptionFilter());
 
   // Documentación Swagger en /docs
-  const config = new DocumentBuilder()
+  const swaggerConfig = new DocumentBuilder()
     .setTitle('TAV API')
     .setDescription('Casa de cambio — libro de cuentas compartido')
     .setVersion('0.1.0')
     .addBearerAuth()
     .build();
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3001);
+  const port = config.get<number>('PORT') ?? 3001;
+  await app.listen(port);
 }
 bootstrap();

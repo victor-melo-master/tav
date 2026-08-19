@@ -1,0 +1,58 @@
+# docker-compose.prod.yml — despliegue de producción.
+#
+# Diferencias con docker-compose.yml (desarrollo):
+# - Postgres NO publica puerto al host. Solo accesible dentro de la red Docker.
+# - API publica en 127.0.0.1:3001, nunca en 0.0.0.0. Nginx (aaPanel) la alcanza.
+# - Todas las credenciales desde .env.prod. Sin valores por defecto.
+# - restart: unless-stopped en ambos.
+#
+# Uso:
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tav
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: tav
+    # Sin ports: la base no es accesible desde fuera de Docker.
+    volumes:
+      - tav_pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tav -d tav']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tav_internal
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: 3001
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-30d}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+    # 127.0.0.1: nunca 0.0.0.0. Solo nginx (aaPanel) puede alcanzar la API.
+    ports:
+      - '127.0.0.1:3001:3001'
+    networks:
+      - tav_internal
+
+volumes:
+  tav_pgdata_prod:
+
+networks:
+  tav_internal:
+    driver: bridge
