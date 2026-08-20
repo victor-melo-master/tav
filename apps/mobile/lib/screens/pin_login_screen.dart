@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:local_auth/local_auth.dart';
 
 import '../components/tav_keypad.dart';
 import '../state/auth_state.dart';
@@ -8,15 +7,15 @@ import '../theme/tav_colors.dart';
 import '../theme/tav_space.dart';
 import '../theme/tav_text.dart';
 
-/// Pantalla de reingreso con PIN + biometría.
+/// Pantalla de reingreso con PIN.
 ///
 /// Replica el prototipo s-login:
 /// - Avatar con iniciales (fondo navy)
 /// - "Hola, {nombre}"
 /// - "Ingresa tu PIN para continuar"
 /// - 4 puntos del PIN
-/// - Botón "Usar Face ID" / "Huella"
 /// - Keypad 3x3 con "Salir" en esquina inferior izquierda
+/// - Botón "Entrar con contraseña" para volver al login
 class PinLoginScreen extends ConsumerStatefulWidget {
   const PinLoginScreen({super.key});
 
@@ -26,14 +25,6 @@ class PinLoginScreen extends ConsumerStatefulWidget {
 
 class _PinLoginScreenState extends ConsumerState<PinLoginScreen> {
   String _pin = '';
-  final LocalAuthentication _localAuth = LocalAuthentication();
-
-  @override
-  void initState() {
-    super.initState();
-    // Intentar biometría automáticamente al entrar
-    WidgetsBinding.instance.addPostFrameCallback((_) => _tryBiometric());
-  }
 
   void _onDigit(int d) {
     if (_pin.length >= 4) return;
@@ -49,49 +40,10 @@ class _PinLoginScreenState extends ConsumerState<PinLoginScreen> {
   }
 
   Future<void> _verifyPin() async {
-    // El PIN se valida contra el almacenamiento local (no contra la API).
-    // La API ya validó teléfono+contraseña en el login inicial.
-    final storage = ref.read(tokenStorageProvider);
-    final savedPin = await storage.getPin();
-
-    if (_pin == savedPin) {
-      // PIN correcto: el router redirige al shell del rol.
-      // El estado ya es AuthAuthenticated, solo necesitamos disparar
-      // la navegación que el router hace automáticamente.
+    // Validar PIN contra el servidor usando /auth/login-pin
+    await ref.read(authProvider.notifier).loginPin(_pin);
+    if (mounted) {
       setState(() => _pin = '');
-    } else {
-      // PIN incorrecto: limpiar y mostrar error
-      setState(() => _pin = '');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('PIN incorrecto. Intenta de nuevo.'),
-            backgroundColor: TavColors.red,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _tryBiometric() async {
-    try {
-      final available = await _localAuth.canCheckBiometrics;
-      if (!available) return;
-
-      final didAuth = await _localAuth.authenticate(
-        localizedReason: 'Usa Face ID para entrar a TAV',
-        options: const AuthenticationOptions(
-          biometricOnly: true,
-          stickyAuth: true,
-        ),
-      );
-
-      if (didAuth && mounted) {
-        // Biometría exitosa: el router redirige al shell del rol.
-      }
-    } catch (_) {
-      // Si la biometría falla, el usuario usa el PIN manualmente.
     }
   }
 
@@ -155,9 +107,11 @@ class _PinLoginScreenState extends ConsumerState<PinLoginScreen> {
                     TavPinDots(filled: _pin.length),
                     const SizedBox(height: TavSpace.sm),
                     TextButton(
-                      onPressed: _tryBiometric,
+                      onPressed: () async {
+                        await ref.read(authProvider.notifier).logout();
+                      },
                       child: Text(
-                        'Usar Face ID',
+                        'Entrar con contraseña',
                         style: TavText.button.copyWith(color: TavColors.blue),
                       ),
                     ),

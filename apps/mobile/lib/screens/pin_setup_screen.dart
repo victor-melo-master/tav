@@ -49,17 +49,26 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
     setState(() => _saving = false);
 
     if (success) {
-      ref.read(authProvider.notifier).markPinEstablecido();
       // El router redirige automáticamente según el estado.
     } else {
-      // Mostrar error y limpiar
+      // Mostrar error del servidor y limpiar
       setState(() => _pin = '');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No pudimos guardar el PIN. Intenta de nuevo.'),
-          backgroundColor: TavColors.red,
-        ),
-      );
+      final authState = ref.read(authProvider);
+      if (authState is AuthError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authState.message),
+            backgroundColor: TavColors.red,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No pudimos guardar el PIN. Intenta de nuevo.'),
+            backgroundColor: TavColors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -70,12 +79,18 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Topbar con botón de retroceso
+            // Topbar con botón de cerrar sesión
             Align(
               alignment: Alignment.centerLeft,
-              child: IconButton(
-                onPressed: () => context.pop(),
-                icon: const Icon(Icons.arrow_back, color: TavColors.ink),
+              child: TextButton(
+                onPressed: () async {
+                  await ref.read(authProvider.notifier).logout();
+                  if (context.mounted) context.go('/login');
+                },
+                child: Text(
+                  'Cerrar sesión',
+                  style: TavText.button.copyWith(color: TavColors.ink2),
+                ),
               ),
             ),
             // Steps (4/4 activos en esta pantalla final del flujo)
@@ -129,7 +144,6 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
             TavKeypad(
               onDigit: _onDigit,
               onDelete: _onDelete,
-              auxiliaryLabel: 'Face ID',
             ),
           ],
         ),

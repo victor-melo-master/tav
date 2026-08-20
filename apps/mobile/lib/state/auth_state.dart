@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth_api.dart';
@@ -57,25 +58,68 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final TokenStorage storage;
 
   /// Al arrancar la app, comprueba si hay sesión guardada.
+  /// Si hay tokens, llama a /auth/me para obtener pinEstablecido del servidor.
+  ///
+  /// Guarda contra respuestas tardías: si el usuario loguea o sale antes de
+  /// que /auth/me responda, no se pisa el estado. Esto previene el bucle
+  /// pin-setup → pin-login → pin-setup que ocurría cuando checkSession
+  /// llegaba tarde con pinEstablecido=false y el router mandaba atrás.
   Future<void> checkSession() async {
     final token = await storage.getAccessToken();
     final userId = await storage.getUserId();
     final role = await storage.getUserRole();
     final name = await storage.getUserName();
 
-    if (token != null && userId != null && role != null && name != null) {
-      final pin = await storage.getPin();
+    if (token == null || userId == null || role == null || name == null) {
+      state = const AuthUnauthenticated();
+      return;
+    }
+
+    // Si el estado ya dejó de ser AuthInitial (el usuario logueó antes
+    // de que esta llamada terminara), no pisar el estado.
+    if (state is! AuthInitial) {
+      if (kDebugMode) {
+        debugPrint('[AuthState] checkSession descartada: el estado ya cambió '
+            'a ${state.runtimeType}');
+      }
+      return;
+    }
+
+    try {
+      final response = await dio.get('/auth/me');
+      // Doble guard: si el usuario logueó mientras /auth/me estaba en vuelo,
+      // no sobrescribir.
+      if (state is! AuthInitial) {
+        if (kDebugMode) {
+          debugPrint('[AuthState] checkSession descartada tras /auth/me: '
+              'el estado ya cambió a ${state.runtimeType}');
+        }
+        return;
+      }
+      final usuarioData = response.data as Map<String, dynamic>;
+      final pinEstablecido = (usuarioData['pinEstablecido'] as bool?) ?? false;
       state = AuthAuthenticated(
         usuario: UsuarioDto(
-          id: userId,
-          telefono: '',
-          nombre: name,
-          rol: role,
-          pinEstablecido: pin != null,
+          id: usuarioData['id'] as String,
+          telefono: usuarioData['telefono'] as String,
+          nombre: usuarioData['nombre'] as String,
+          rol: usuarioData['rol'] as String,
+          pinEstablecido: pinEstablecido,
         ),
-        pinEstablecido: pin != null,
+        pinEstablecido: pinEstablecido,
       );
-    } else {
+    } catch (e) {
+      // Si /auth/me falla, limpiar sesión y mandar a login — pero solo si
+      // el estado no cambió mientras tanto.
+      if (state is! AuthInitial) {
+        if (kDebugMode) {
+          debugPrint('[AuthState] checkSession error descartado: el estado '
+              'ya cambió a ${state.runtimeType}');
+        }
+        return;
+      }
+      if (kDebugMode) debugPrint('[AuthState] Error calling /auth/me: $e');
+      await storage.clearAll();
       state = const AuthUnauthenticated();
     }
   }
@@ -103,10 +147,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         name: loginResp.usuario.nombre,
       );
 
-      final pin = await storage.getPin();
       state = AuthAuthenticated(
         usuario: loginResp.usuario,
-        pinEstablecido: pin != null,
+        pinEstablecido: loginResp.usuario.pinEstablecido,
       );
     } on DioException catch (e) {
       final code = e.response?.data?['code'] as String?;
@@ -123,20 +166,91 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Establecer PIN de 4 dígitos.
+  /// Reingreso con PIN (login-pin): usa refresh token + PIN para obtener nuevos tokens.
+  Future<void> loginPin(String pin) async {
+    state = const AuthLoading();
+    try {
+      final refreshToken = await storage.getRefreshToken();
+      if (refreshToken == null) {
+        state = const AuthError('No hay sesión guardada. Ingresa con tu contraseña.');
+        return;
+      }
+
+      final response = await dio.post(
+        '/auth/login-pin',
+        data: LoginPinRequest(refreshToken: refreshToken, pin: pin).toJson(),
+      );
+
+      final loginPinResp = LoginPinResponse.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+
+      await storage.saveTokens(
+        accessToken: loginPinResp.accessToken,
+        refreshToken: loginPinResp.refreshToken,
+      );
+
+      // Tras loginPin exitoso, obtener datos actualizados del usuario.
+      // pinEstablecido viene como booleano explícito en la respuesta.
+      final meResponse = await dio.get('/auth/me');
+      final usuarioData = meResponse.data as Map<String, dynamic>;
+      final pinEstablecido = (usuarioData['pinEstablecido'] as bool?) ?? true;
+
+      await storage.saveSession(
+        userId: usuarioData['id'] as String,
+        role: usuarioData['rol'] as String,
+        name: usuarioData['nombre'] as String,
+      );
+
+      state = AuthAuthenticated(
+        usuario: UsuarioDto(
+          id: usuarioData['id'] as String,
+          telefono: usuarioData['telefono'] as String,
+          nombre: usuarioData['nombre'] as String,
+          rol: usuarioData['rol'] as String,
+          pinEstablecido: pinEstablecido,
+        ),
+        pinEstablecido: pinEstablecido,
+      );
+    } on DioException catch (e) {
+      // err.message ya viene traducido por ErrorInterceptor.
+      state = AuthError(
+        e.message ?? 'No pudimos conectar. Revisa tu conexión.',
+      );
+    } catch (e) {
+      state = const AuthError('Ocurrió un error inesperado.');
+    }
+  }
+
+  /// Establecer PIN de 4 dígitos en el servidor.
   Future<bool> setPin(String pin) async {
     try {
       await dio.post(
         '/auth/pin',
         data: SetPinRequest(pin: pin).toJson(),
       );
-      await storage.savePin(pin);
+      // Tras setPin exitoso, actualizar estado para reflejar pinEstablecido=true
       state = AuthAuthenticated(
         usuario: (state as AuthAuthenticated).usuario,
         pinEstablecido: true,
       );
       return true;
-    } catch (_) {
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      final serverCode = e.response?.data?['code'] as String?;
+      final serverMessage = e.response?.data?['message'] as String?;
+      if (kDebugMode) {
+        debugPrint('[AuthState] setPin error: status=$statusCode code=$serverCode message=$serverMessage');
+      }
+      // El ErrorInterceptor ya traduce serverMessage, así que el estado AuthError
+      // tendrá el mensaje real del servidor.
+      state = AuthError(
+        serverMessage ?? e.message ?? 'No pudimos guardar el PIN.',
+      );
+      return false;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[AuthState] setPin error: $e');
+      state = const AuthError('Ocurrió un error inesperado al guardar el PIN.');
       return false;
     }
   }
@@ -150,16 +264,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
     await storage.clearAll();
     state = const AuthUnauthenticated();
-  }
-
-  /// Marca que el PIN ya fue establecido (tras crearlo localmente).
-  void markPinEstablecido() {
-    if (state is AuthAuthenticated) {
-      state = AuthAuthenticated(
-        usuario: (state as AuthAuthenticated).usuario,
-        pinEstablecido: true,
-      );
-    }
   }
 }
 

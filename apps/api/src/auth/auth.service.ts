@@ -22,8 +22,12 @@ type UsuarioConPerfiles = Prisma.UsuarioGetPayload<{
 
 /**
  * Usuario sin campos sensibles: lo que se devuelve al cliente.
+ * `pinEstablecido` es un booleano derivado de `pinHash`, porque el hash
+ * en sí nunca se envía al cliente.
  */
-type UsuarioPublico = Omit<UsuarioConPerfiles, 'passwordHash' | 'pinHash'>;
+type UsuarioPublico = Omit<UsuarioConPerfiles, 'passwordHash' | 'pinHash'> & {
+  pinEstablecido: boolean;
+};
 
 /** Mínimo para firmar un JWT: quien es y qué versión de token tiene. */
 type UsuarioParaToken = Pick<UsuarioConPerfiles, 'id' | 'rol' | 'nombre' | 'tokenVersion'>;
@@ -231,10 +235,11 @@ export class AuthService {
 
   /**
    * Quita campos sensibles (passwordHash, pinHash) antes de devolver el usuario.
+   * Añade `pinEstablecido` como booleano derivado, porque el hash no se envía.
    * BigInt se serializa como string (ver main.ts).
    */
   private perfilPublico(usuario: UsuarioConPerfiles): UsuarioPublico {
     const { passwordHash: _ph, pinHash: _pin, ...resto } = usuario;
-    return resto;
+    return { ...resto, pinEstablecido: usuario.pinHash !== null };
   }
 }

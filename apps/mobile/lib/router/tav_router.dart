@@ -21,6 +21,7 @@ import '../screens/pin_setup_screen.dart';
 import '../screens/placeholder_screen.dart';
 import '../screens/shells.dart';
 import '../state/auth_state.dart';
+import 'router_notifier.dart';
 
 /// Proveedor del router.
 ///
@@ -32,11 +33,17 @@ import '../state/auth_state.dart';
 ///
 /// El rol se lee del JWT: cajero va al shell del cajero,
 /// cobrador al del cobrador.
+///
+/// Usa refreshListenable con RouterNotifier para re-evaluar
+/// redirects cuando cambia authProvider (login, logout, PIN).
 final tavRouterProvider = Provider<GoRouter>((ref) {
+  final routerNotifier = ref.read(routerNotifierProvider);
+
   return GoRouter(
     initialLocation: '/login',
+    refreshListenable: routerNotifier,
     redirect: (context, state) {
-      final authState = ref.read(authProvider);
+      final authState = routerNotifier.authState;
       final location = state.matchedLocation;
 
       // Rutas públicas

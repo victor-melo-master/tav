@@ -78,6 +78,35 @@ class SetPinRequest {
   Map<String, dynamic> toJson() => {'pin': pin};
 }
 
+class LoginPinRequest {
+  const LoginPinRequest({required this.refreshToken, required this.pin});
+
+  final String refreshToken;
+  final String pin;
+
+  Map<String, dynamic> toJson() => {
+        'refreshToken': refreshToken,
+        'pin': pin,
+      };
+}
+
+class LoginPinResponse {
+  const LoginPinResponse({
+    required this.accessToken,
+    required this.refreshToken,
+  });
+
+  final String accessToken;
+  final String refreshToken;
+
+  factory LoginPinResponse.fromJson(Map<String, dynamic> json) {
+    return LoginPinResponse(
+      accessToken: json['accessToken'] as String,
+      refreshToken: json['refreshToken'] as String,
+    );
+  }
+}
+
 /// Decodifica el JWT para extraer el rol sin verificar la firma.
 /// La verificación la hace el servidor; esto es solo para enrutado.
 String extractRoleFromJwt(String jwt) {
