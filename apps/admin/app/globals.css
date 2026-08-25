@@ -1,3 +1,76 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Variables de shadcn/ui mapeadas a los tokens de design/TAV_design_system.html.
+ * Los valores van en HSL (sin hsl()) porque Tailwind los envuelve con hsl(var(--x)).
+ *   navy #0B1B33 · azul #1F6FEB · verde #4CAF50 · ámbar #D9A441 · rojo #E5484D
+ *   fondo #F4F5F7 · superficie #FFFFFF · borde #E5E8EC · tinta #101828
+ */
+@layer base {
+  :root {
+    --background: 220 16% 96%; /* bg #F4F5F7 */
+    --foreground: 220 43% 11%; /* ink #101828 */
+
+    --card: 0 0% 100%; /* surface #FFFFFF */
+    --card-foreground: 220 43% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 43% 11%;
+
+    --primary: 216 84% 52%; /* azul acción #1F6FEB */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 216 22% 95%; /* gris claro */
+    --secondary-foreground: 216 18% 34%; /* ink-2 */
+
+    --muted: 216 22% 95%;
+    --muted-foreground: 221 13% 46%; /* ink-3 #667085 */
+
+    --accent: 216 91% 96%; /* azul tinte #EAF2FE */
+    --accent-foreground: 217 81% 43%; /* blue-600 #1558C7 */
+
+    --destructive: 358 75% 53%; /* rojo #E5484D */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 16% 91%; /* line #E5E8EC */
+    --input: 214 16% 91%;
+    --ring: 216 84% 52%; /* azul foco */
+
+    --radius: 14px; /* radio de tarjeta del design system */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'tnum'; /* cifras de dinero alineadas en columna */
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Scrollbar discreto para tablas densas (panel de escritorio). */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #C7CCD3 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #C7CCD3;
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: #AEB4BD;
+    background-clip: content-box;
+  }
+}

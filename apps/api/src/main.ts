@@ -24,11 +24,33 @@ async function bootstrap() {
   const config = app.get(ConfigService);
 
   // CORS: en producción, solo el dominio del panel admin puede llamar a la API.
-  // CORS_ORIGIN viene de .env.prod. Si no está definida, se permite cualquier
-  // origen (modo desarrollo local).
+  // CORS_ORIGIN viene de .env.prod (un único origen o lista CSV).
+  //
+  // En desarrollo (NODE_ENV !== 'production') se permiten además los orígenes
+  // locales del panel admin (localhost:3000 y 127.0.0.1:3000) para que Next.js
+  // dev server pueda llamar a la API sin que el navegador bloquee la petición.
+  // Sin esto, desarrollar el panel en local es imposible: el navegador rechaza
+  // todas las llamadas por la política same-origin.
   const corsOrigin = config.get<string>('CORS_ORIGIN');
+  const isProd = config.get<string>('NODE_ENV') === 'production';
+
+  const devOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ];
+  const prodOrigins = corsOrigin ? corsOrigin.split(',').map((o) => o.trim()) : [];
+
+  // En producción se usa la lista de CORS_ORIGIN exclusivamente. Si no está
+  // definida (mal configurada), se rechaza todo para no abrir la API al mundo.
+  // En desarrollo se une CORS_ORIGIN (si lo hay) con los orígenes locales.
+  const origins = isProd
+    ? prodOrigins.length
+      ? prodOrigins
+      : false
+    : Array.from(new Set([...prodOrigins, ...devOrigins]));
+
   app.enableCors({
-    origin: corsOrigin ?? true,
+    origin: origins,
     credentials: true,
   });
 
