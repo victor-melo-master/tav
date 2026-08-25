@@ -127,10 +127,11 @@ class _OperacionDetailScreenState extends ConsumerState<OperacionDetailScreen> {
                     cents: op.montoDestinoCents,
                     currency: TavMoneyCurrency.bsd,
                     style: TavText.moneyDisplay.copyWith(fontSize: 30),
+                    fitted: true,
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Enviaste ${formatCents(op.montoOrigenCents, currency: op.monedaOrigen == 'USDT' ? TavMoneyCurrency.usdt : TavMoneyCurrency.usd)} · comisión ${formatCents(op.comisionCents, currency: op.monedaOrigen == 'USDT' ? TavMoneyCurrency.usdt : TavMoneyCurrency.usd)}',
+                    'Enviaste ${formatCents(op.montoOrigenCents, currency: op.monedaOrigen == 'USDT' ? TavMoneyCurrency.usdt : TavMoneyCurrency.usd)}',
                     style: TavText.body2.copyWith(color: TavColors.ink3),
                   ),
                 ],
@@ -151,8 +152,6 @@ class _OperacionDetailScreenState extends ConsumerState<OperacionDetailScreen> {
               children: [
                 _kvRow('Tipo', tipoOperacionLabel(op.tipo)),
                 _kvRow('Tasa aplicada', '${_formatTasa(op.tasaAplicada)} Bs'),
-                _kvRow('Comisión', '${formatCents(op.comisionCents, currency: op.monedaOrigen == 'USDT' ? TavMoneyCurrency.usdt : TavMoneyCurrency.usd)} (3%)'),
-                _kvRow('Costo total', formatCents(op.totalCents, currency: op.monedaOrigen == 'USDT' ? TavMoneyCurrency.usdt : TavMoneyCurrency.usd)),
                 _kvRow('Fecha y hora', _fechaHora(op.creadaAt)),
                 const Divider(height: 16),
                 _kvRow('Beneficiario', op.beneficiario.nombre),

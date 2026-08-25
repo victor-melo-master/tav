@@ -136,6 +136,7 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
             cents: deuda,
             color: TavColors.surface,
             style: TavText.moneyDisplay.copyWith(fontSize: 32),
+            fitted: true,
           ),
           const SizedBox(height: 2),
           if (tasaUsdt > 0)

@@ -207,6 +207,8 @@ void main() {
     final stateAfterLogin = auth.state as AuthAuthenticated;
     expect(stateAfterLogin.pinEstablecido, isFalse,
         reason: 'Tras login sin PIN previo, pinEstablecido debe ser false');
+    expect(stateAfterLogin.desbloqueado, isTrue,
+        reason: 'Tras login con contraseña, desbloqueado debe ser true');
     expect(stateAfterLogin.usuario.nombre, _testUserName);
 
     // 2. Establecer PIN
@@ -215,6 +217,8 @@ void main() {
     final stateAfterSetPin = auth.state as AuthAuthenticated;
     expect(stateAfterSetPin.pinEstablecido, isTrue,
         reason: 'Tras setPin, pinEstablecido debe ser true');
+    expect(stateAfterSetPin.desbloqueado, isTrue,
+        reason: 'Tras setPin, desbloqueado se mantiene (venía de login)');
 
     // 3. Simular reinicio de app: nuevo AuthNotifier, mismo storage
     final dio2 = _buildMockDio(_buildHandlers(server));
@@ -227,6 +231,9 @@ void main() {
     expect(stateAfterRestart.pinEstablecido, isTrue,
         reason: 'Tras reinicio con PIN ya guardado, pinEstablecido debe ser '
             'true (leído del servidor, no de pinHash)');
+    expect(stateAfterRestart.desbloqueado, isFalse,
+        reason: 'Tras reinicio en frío, desbloqueado debe ser false: '
+            'tiene sesión pero debe validar el PIN');
     expect(stateAfterRestart.usuario.nombre, _testUserName,
         reason: 'El nombre debe venir de /auth/me, no estar vacío');
 
@@ -236,6 +243,8 @@ void main() {
     final stateAfterPinLogin = auth2.state as AuthAuthenticated;
     expect(stateAfterPinLogin.pinEstablecido, isTrue,
         reason: 'Tras loginPin, pinEstablecido debe seguir siendo true');
+    expect(stateAfterPinLogin.desbloqueado, isTrue,
+        reason: 'Tras loginPin, desbloqueado debe ser true: probó su identidad');
     expect(stateAfterPinLogin.usuario.nombre, _testUserName);
 
     // 5. Logout
@@ -273,6 +282,8 @@ void main() {
         reason: 'checkSession tardío no debe cambiar el usuario');
     expect(stateAfterCheck.pinEstablecido, isTrue,
         reason: 'checkSession tardío no debe resetear pinEstablecido');
+    expect(stateAfterCheck.desbloqueado, isTrue,
+        reason: 'checkSession tardío no debe resetear desbloqueado a false');
   });
 
   test('checkSession sin tokens → AuthUnauthenticated', () async {
@@ -328,4 +339,136 @@ void main() {
     expect(auth.state, isA<AuthError>());
     expect((auth.state as AuthError).message, contains('PIN'));
   });
+
+  test('caso que fallaba: usuario con PIN que valida PIN y llega al shell', () async {
+    // Este test cubre el bug original: un usuario autenticado con PIN
+    // establecido, ubicado en /pin-login, no tenía a dónde ir porque ninguna
+    // rama del redirect coincidía. Con el campo `desbloqueado`, loginPin
+    // pone desbloqueado=true y la regla 4 lo manda al shell.
+    final server = _MockServer();
+    server.pinEstablecido = true; // El usuario ya tiene PIN
+
+    final storage = _FakeTokenStorage();
+    final dio = _buildMockDio(_buildHandlers(server));
+    final auth = AuthNotifier(dio: dio, storage: storage);
+
+    // Simular arranque en frío con sesión guardada
+    await storage.saveTokens(accessToken: 'access-1', refreshToken: 'refresh-1');
+    await storage.saveSession(
+        userId: _testUserId, role: _testUserRole, name: _testUserName);
+
+    await auth.checkSession();
+    expect(auth.state, isA<AuthAuthenticated>());
+    final stateBefore = auth.state as AuthAuthenticated;
+    expect(stateBefore.pinEstablecido, isTrue);
+    expect(stateBefore.desbloqueado, isFalse,
+        reason: 'Arranque en frío: desbloqueado debe ser false');
+
+    // El redirect debe mandar a /pin-login (regla 3)
+    expect(_resolveRedirect(auth.state, '/pin-login'), isNull,
+        reason: 'Ya está en /pin-login, regla 3 devuelve null');
+    expect(_resolveRedirect(auth.state, '/login'), '/pin-login',
+        reason: 'Desde /login, regla 3 debe mandar a /pin-login');
+    expect(_resolveRedirect(auth.state, '/cajero/inicio'), '/pin-login',
+        reason: 'Desde el shell, regla 3 debe mandar a /pin-login (no desbloqueado)');
+
+    // Usuario valida el PIN
+    await auth.loginPin(_testPin);
+    expect(auth.state, isA<AuthAuthenticated>());
+    final stateAfter = auth.state as AuthAuthenticated;
+    expect(stateAfter.pinEstablecido, isTrue);
+    expect(stateAfter.desbloqueado, isTrue,
+        reason: 'Tras loginPin, desbloqueado debe ser true');
+
+    // El redirect debe mandar al shell (regla 4)
+    expect(_resolveRedirect(auth.state, '/pin-login'), '/cajero/inicio',
+        reason: 'Desde /pin-login con desbloqueado=true, regla 4 debe mandar '
+            'al shell del rol');
+    expect(_resolveRedirect(auth.state, '/login'), '/cajero/inicio',
+        reason: 'Desde /login con desbloqueado=true, regla 4 debe mandar '
+            'al shell del rol');
+    expect(_resolveRedirect(auth.state, '/pin-setup'), '/cajero/inicio',
+        reason: 'Desde /pin-setup con desbloqueado=true, regla 4 debe mandar '
+            'al shell del rol');
+    expect(_resolveRedirect(auth.state, '/cajero/inicio'), isNull,
+        reason: 'Ya está en el shell, regla 4 devuelve null');
+  });
+
+  test('login sin PIN → setPin → directo al shell (sin pedir PIN de nuevo)', () async {
+    // Tras login con contraseña (desbloqueado=true) + setPin, el usuario
+    // va directo al shell porque ya probó su identidad. No se le pide el
+    // PIN de nuevo en la misma sesión.
+    final server = _MockServer();
+    final storage = _FakeTokenStorage();
+    final dio = _buildMockDio(_buildHandlers(server));
+    final auth = AuthNotifier(dio: dio, storage: storage);
+
+    await auth.login(_testUserPhone, 'tav1234');
+    expect((auth.state as AuthAuthenticated).desbloqueado, isTrue);
+
+    // Antes de setPin: sin PIN → regla 2 → /pin-setup
+    expect(_resolveRedirect(auth.state, '/login'), '/pin-setup');
+
+    await auth.setPin(_testPin);
+    final state = auth.state as AuthAuthenticated;
+    expect(state.pinEstablecido, isTrue);
+    expect(state.desbloqueado, isTrue,
+        reason: 'setPin mantiene desbloqueado (venía de login)');
+
+    // Tras setPin: con PIN + desbloqueado → regla 4 → shell
+    expect(_resolveRedirect(auth.state, '/pin-setup'), '/cajero/inicio',
+        reason: 'Tras setPin con desbloqueado=true, debe ir al shell, '
+            'no a /pin-login');
+  });
+}
+
+// ─────────────────── Helper: simular la lógica del redirect ───────────────────
+
+/// Replica la lógica del redirect del router para poder testearla sin
+/// montar el GoRouter completo. Las 4 reglas en orden:
+/// 1. No autenticado → /login
+/// 2. Autenticado sin PIN → /pin-setup
+/// 3. Autenticado con PIN, no desbloqueado → /pin-login
+/// 4. Autenticado y desbloqueado → shell del rol (si está en ruta de auth)
+String? _resolveRedirect(AuthState authState, String location) {
+  if (authState is AuthLoading || authState is AuthInitial) {
+    return null;
+  }
+
+  final isAuthRoute = location == '/login' ||
+      location == '/pin-setup' ||
+      location == '/pin-login' ||
+      location == '/pin-bloqueado';
+
+  // Regla 1
+  if (authState is AuthUnauthenticated || authState is AuthError) {
+    return isAuthRoute ? null : '/login';
+  }
+
+  if (authState is AuthAuthenticated) {
+    final pinEstablecido = authState.pinEstablecido;
+    final desbloqueado = authState.desbloqueado;
+    final rol = authState.usuario.rol;
+
+    // Regla 2
+    if (!pinEstablecido) {
+      return location == '/pin-setup' ? null : '/pin-setup';
+    }
+
+    // Regla 3
+    if (!desbloqueado) {
+      return location == '/pin-login' ? null : '/pin-login';
+    }
+
+    // Regla 4
+    if (isAuthRoute) {
+      return switch (rol) {
+        'cajero' => '/cajero/inicio',
+        'cobrador' => '/cobrador/mi-dia',
+        _ => '/cajero/inicio',
+      };
+    }
+  }
+
+  return null;
 }

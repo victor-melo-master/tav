@@ -4,7 +4,7 @@
          no está si no lo declaramos aquí. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="tav_mobile"
+        android:label="TAV"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"

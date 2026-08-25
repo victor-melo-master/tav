@@ -166,22 +166,93 @@ node -e "
 
 ## 7. Desplegar una actualización
 
+Hay tres scripts en `scripts/` que automatizan el despliegue desde tu máquina
+local. Usan el alias `tav` configurado en `~/.ssh/config` (ver sección 1.5).
+
+### `scripts/deploy.sh`
+
+Sincroniza `apps/api` y `docker-compose.prod.yml` al servidor con rsync,
+reconstruye los contenedores, y verifica que la API responde — local y público.
+
 ```bash
-cd /opt/tav
-
-# Traer el código nuevo
-git pull origin main
-
-# Reconstruir y reiniciar
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
-
-# Verificar
-curl http://127.0.0.1:3001/health
-docker compose -f docker-compose.prod.yml logs api --tail 20
+./scripts/deploy.sh
 ```
 
-El `prisma migrate deploy` del CMD aplica automáticamente las migraciones
-nuevas al arrancar. No hay que correrlo a mano.
+Qué hace, paso a paso:
+
+1. **rsync** de `apps/api/` a `/opt/tav/apps/api/` y de `docker-compose.prod.yml`
+   a `/opt/tav/`. Excluye `node_modules`, `dist`, `.env`, `.env.*`, `.git`,
+   `coverage` y `*.log`. **Nunca toca `.env.prod` del servidor**: los secretos
+   de producción viven ahí y no se sincronizan desde fuera.
+2. **`docker compose up -d --build`** en el servidor, con `--env-file .env.prod`.
+   El `prisma migrate deploy` del CMD aplica migraciones nuevas al arrancar.
+3. **Espera a que la API responda** en `http://127.0.0.1:3001/health` (hasta 60s).
+   Si no responde, aborta con código 2 y muestra los últimos 30 renglones del
+   log del contenedor `api`.
+4. **Verifica el endpoint público** `https://api.tav.rolapro.com/health`. Si no
+   responde, aborta con código 3 y muestra los logs.
+
+Códigos de salida:
+
+| Código | Qué pasó |
+|--------|----------|
+| 0 | Despliegue OK, `/health` responde local y público. |
+| 1 | Error en rsync o build. |
+| 2 | La API no respondió en 60s tras el build. |
+| 3 | El endpoint público no responde tras el build. |
+
+### `scripts/logs.sh`
+
+Muestra los logs de la API en vivo (`docker compose logs -f api`).
+
+```bash
+./scripts/logs.sh                # logs de la API en vivo
+./scripts/logs.sh --tail 100     # últimas 100 líneas y sigue
+./scripts/logs.sh --db           # logs de Postgres en vivo
+```
+
+### `scripts/ssh.sh`
+
+Abre una sesión SSH en `/opt/tav` del servidor.
+
+```bash
+./scripts/ssh.sh                 # shell en /opt/tav
+./scripts/ssh.sh --db            # psql dentro del contenedor de Postgres
+```
+
+### Configuración del alias SSH
+
+Los scripts asumen que `~/.ssh/config` tiene el alias `tav`:
+
+```sshconfig
+Host tav
+    HostName 46.62.154.26
+    Port 49170
+    User root
+    IdentityFile ~/.ssh/id_ed25519
+```
+
+### Procedimiento manual (alternativa)
+
+Si necesitas desplegar a mano sin los scripts:
+
+```bash
+# Sincronizar código (sin tocar .env.prod)
+rsync -avz --delete \
+  --exclude='node_modules' --exclude='dist' \
+  --exclude='.env' --exclude='.env.*' --exclude='.git' \
+  -e ssh apps/api/ tav:/opt/tav/apps/api/
+rsync -avz --exclude='.env' --exclude='.env.*' \
+  -e ssh docker-compose.prod.yml tav:/opt/tav/
+
+# Reconstruir y levantar
+ssh tav "cd /opt/tav && \
+  docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build"
+
+# Verificar
+ssh tav "curl -f http://127.0.0.1:3001/health"
+curl -f https://api.tav.rolapro.com/health
+```
 
 ## 8. Backup de la base de datos
 

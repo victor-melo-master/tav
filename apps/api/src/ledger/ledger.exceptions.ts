@@ -97,6 +97,17 @@ export class NoEncontradoException extends LedgerException {
   }
 }
 
+/**
+ * Otro cobrador ya tiene una atención activa sobre el cajero.
+ * No se puede marcar "lo estoy atendiendo" hasta que se libere.
+ */
+export class AtencionEnUsoException extends LedgerException {
+  readonly code = 'ATENCION_EN_USO';
+  constructor(readonly cajeroId: string, readonly cobradorId: string) {
+    super(`El cajero ${cajeroId} ya está siendo atendido por el cobrador ${cobradorId}`);
+  }
+}
+
 /** Falta una clave de configuración en la tabla Config. Los umbrales nunca van quemados. */
 export class ConfigFaltanteException extends LedgerException {
   readonly code = 'CONFIG_FALTANTE';

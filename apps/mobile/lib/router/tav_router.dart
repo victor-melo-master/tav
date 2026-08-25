@@ -25,14 +25,19 @@ import 'router_notifier.dart';
 
 /// Proveedor del router.
 ///
-/// El enrutado depende del estado de autenticación:
-/// - No autenticado → /login
-/// - Autenticado sin PIN → /pin-setup
-/// - Autenticado con PIN → /pin-login (reingreso)
-/// - PIN verificado → shell del rol (cajero o cobrador)
+/// El redirect implementa cuatro reglas en orden, evaluadas contra el estado
+/// de autenticación. Cada regla es excluyente: la primera que coincide gana.
 ///
-/// El rol se lee del JWT: cajero va al shell del cajero,
-/// cobrador al del cobrador.
+/// 1. No autenticado → /login
+/// 2. Autenticado y sin PIN establecido → /pin-setup
+/// 3. Autenticado, con PIN, y no desbloqueado → /pin-login
+/// 4. Autenticado y desbloqueado → si está en una ruta de autenticación
+///    (/login, /pin-setup, /pin-login), va al shell de su rol.
+///
+/// `desbloqueado` indica que el usuario probó su identidad en esta ejecución
+/// de la app (login con contraseña o loginPin). Un arranque en frío con
+/// tokens guardados deja desbloqueado=false: hay sesión pero hay que
+/// validar el PIN antes de entrar al shell.
 ///
 /// Usa refreshListenable con RouterNotifier para re-evaluar
 /// redirects cuando cambia authProvider (login, logout, PIN).
@@ -46,38 +51,40 @@ final tavRouterProvider = Provider<GoRouter>((ref) {
       final authState = routerNotifier.authState;
       final location = state.matchedLocation;
 
-      // Rutas públicas
-      final isPublicRoute = location == '/login' || location == '/pin-bloqueado';
-
+      // Mientras carga o está en estado inicial, no redirigir.
       if (authState is AuthLoading || authState is AuthInitial) {
-        return null; // No redirigir mientras carga
+        return null;
       }
 
+      // Rutas de autenticación: login, pin-setup, pin-login, pin-bloqueado.
+      final isAuthRoute = location == '/login' ||
+          location == '/pin-setup' ||
+          location == '/pin-login' ||
+          location == '/pin-bloqueado';
+
+      // Regla 1: No autenticado → /login
       if (authState is AuthUnauthenticated || authState is AuthError) {
-        return isPublicRoute ? null : '/login';
+        return isAuthRoute ? null : '/login';
       }
 
       if (authState is AuthAuthenticated) {
         final pinEstablecido = authState.pinEstablecido;
+        final desbloqueado = authState.desbloqueado;
         final rol = authState.usuario.rol;
 
-        // Si está en login, redirigir según PIN
-        if (location == '/login') {
-          return pinEstablecido ? '/pin-login' : '/pin-setup';
+        // Regla 2: Autenticado y sin PIN establecido → /pin-setup
+        if (!pinEstablecido) {
+          return location == '/pin-setup' ? null : '/pin-setup';
         }
 
-        // Si está en pin-setup pero ya tiene PIN, ir a pin-login
-        if (location == '/pin-setup' && pinEstablecido) {
-          return '/pin-login';
+        // Regla 3: Autenticado, con PIN, y no desbloqueado → /pin-login
+        if (!desbloqueado) {
+          return location == '/pin-login' ? null : '/pin-login';
         }
 
-        // Si está en pin-login pero no tiene PIN, ir a pin-setup
-        if (location == '/pin-login' && !pinEstablecido) {
-          return '/pin-setup';
-        }
-
-        // Si está en una ruta pública, ir al shell del rol
-        if (isPublicRoute) {
+        // Regla 4: Autenticado y desbloqueado → si está en una ruta de
+        // autenticación, va al shell de su rol.
+        if (isAuthRoute) {
           return _shellRoute(rol);
         }
       }

@@ -25,6 +25,10 @@ class PinLoginScreen extends ConsumerStatefulWidget {
 
 class _PinLoginScreenState extends ConsumerState<PinLoginScreen> {
   String _pin = '';
+  // Cache del nombre del último AuthAuthenticated visto. Cuando loginPin()
+  // pone el estado en AuthLoading, el widget no pierde el nombre del usuario
+  // ni cae a "Hola," vacío con iniciales "TAV".
+  String _cachedNombre = '';
 
   void _onDigit(int d) {
     if (_pin.length >= 4) return;
@@ -60,9 +64,14 @@ class _PinLoginScreenState extends ConsumerState<PinLoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final nombre = authState is AuthAuthenticated
-        ? authState.usuario.nombre
-        : '';
+
+    // Actualizar el cache cuando hay un AuthAuthenticated.
+    if (authState is AuthAuthenticated) {
+      _cachedNombre = authState.usuario.nombre;
+    }
+
+    // Usar el cache durante AuthLoading para no perder el nombre.
+    final nombre = _cachedNombre;
 
     return Scaffold(
       backgroundColor: TavColors.bg,
@@ -106,15 +115,22 @@ class _PinLoginScreenState extends ConsumerState<PinLoginScreen> {
                     const SizedBox(height: 26),
                     TavPinDots(filled: _pin.length),
                     const SizedBox(height: TavSpace.sm),
-                    TextButton(
-                      onPressed: () async {
-                        await ref.read(authProvider.notifier).logout();
-                      },
-                      child: Text(
-                        'Entrar con contraseña',
-                        style: TavText.button.copyWith(color: TavColors.blue),
+                    if (authState is AuthLoading)
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      TextButton(
+                        onPressed: () async {
+                          await ref.read(authProvider.notifier).logout();
+                        },
+                        child: Text(
+                          'Entrar con contraseña',
+                          style: TavText.button.copyWith(color: TavColors.blue),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),

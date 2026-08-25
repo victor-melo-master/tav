@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import {
+  AtencionEnUsoException,
   CajeroNoValidoException,
   CierreNoAbiertoException,
   CobradorNoValidoException,
@@ -36,6 +37,7 @@ interface LedgerErrorBody {
   cobradorId?: string;
   entidad?: string;
   clave?: string;
+  atendidoPor?: string;
 }
 
 /**
@@ -120,6 +122,18 @@ export class LedgerExceptionFilter implements ExceptionFilter {
       return {
         status: HttpStatus.NOT_FOUND,
         body: { code: ex.code, message: ex.message, entidad: ex.entidad, id: ex.id },
+      };
+    }
+
+    if (ex instanceof AtencionEnUsoException) {
+      return {
+        status: HttpStatus.CONFLICT,
+        body: {
+          code: ex.code,
+          message: ex.message,
+          cajeroId: ex.cajeroId,
+          atendidoPor: ex.cobradorId,
+        },
       };
     }
 

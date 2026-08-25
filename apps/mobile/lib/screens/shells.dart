@@ -139,71 +139,87 @@ class _TavBottomNav extends StatelessWidget {
         color: TavColors.surface,
         border: Border(top: BorderSide(color: TavColors.line)),
       ),
-      child: Row(
+      // Stack con clipBehavior: Clip.none para que el FAB pueda sobresalir
+      // por encima del borde superior de la barra sin recortarse.
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          // 2 destinos izquierdos
-          Expanded(
-            child: _NavTab(
-              icon: destinations[0].icon,
-              label: destinations[0].label,
-              active: currentIndex == 0,
-              onTap: () => onTap(0),
-            ),
+          Row(
+            children: [
+              // 2 destinos izquierdos
+              Expanded(
+                child: _NavTab(
+                  icon: destinations[0].icon,
+                  label: destinations[0].label,
+                  active: currentIndex == 0,
+                  onTap: () => onTap(0),
+                ),
+              ),
+              Expanded(
+                child: _NavTab(
+                  icon: destinations[1].icon,
+                  label: destinations[1].label,
+                  active: currentIndex == 1,
+                  onTap: () => onTap(1),
+                ),
+              ),
+              // Espacio central reservado para el FAB
+              const SizedBox(width: 66),
+              // 2 destinos derechos
+              Expanded(
+                child: _NavTab(
+                  icon: destinations[2].icon,
+                  label: destinations[2].label,
+                  active: currentIndex == 2,
+                  onTap: () => onTap(2),
+                ),
+              ),
+              Expanded(
+                child: _NavTab(
+                  icon: destinations[3].icon,
+                  label: destinations[3].label,
+                  active: currentIndex == 3,
+                  onTap: () => onTap(3),
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: _NavTab(
-              icon: destinations[1].icon,
-              label: destinations[1].label,
-              active: currentIndex == 1,
-              onTap: () => onTap(1),
-            ),
-          ),
-          // FAB central
-          SizedBox(
-            width: 66,
+          // FAB central posicionado sobre la barra, sobresaliendo 24px arriba.
+          // Transform.translate desplaza el widget visualmente y su área táctil
+          // se mueve con él, así que sigue siendo pulsable en toda su superficie.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
             child: Center(
-              child: GestureDetector(
-                onTap: onFabTap,
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  margin: const EdgeInsets.only(top: -24),
-                  decoration: BoxDecoration(
-                    color: TavColors.blue,
-                    borderRadius: BorderRadius.circular(TavRadius.fab),
-                    border: Border.all(color: TavColors.surface, width: 4),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x661F6FEB),
-                        blurRadius: 20,
-                        offset: Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.add,
-                    color: TavColors.surface,
-                    size: 24,
+              child: Transform.translate(
+                offset: const Offset(0, -24),
+                child: GestureDetector(
+                  onTap: onFabTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: TavColors.blue,
+                      borderRadius: BorderRadius.circular(TavRadius.fab),
+                      border: Border.all(color: TavColors.surface, width: 4),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x661F6FEB),
+                          blurRadius: 20,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.add,
+                      color: TavColors.surface,
+                      size: 24,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          // 2 destinos derechos
-          Expanded(
-            child: _NavTab(
-              icon: destinations[2].icon,
-              label: destinations[2].label,
-              active: currentIndex == 2,
-              onTap: () => onTap(2),
-            ),
-          ),
-          Expanded(
-            child: _NavTab(
-              icon: destinations[3].icon,
-              label: destinations[3].label,
-              active: currentIndex == 3,
-              onTap: () => onTap(3),
             ),
           ),
         ],

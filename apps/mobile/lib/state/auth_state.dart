@@ -34,10 +34,19 @@ class AuthAuthenticated extends AuthState {
   const AuthAuthenticated({
     required this.usuario,
     required this.pinEstablecido,
+    required this.desbloqueado,
   });
 
   final UsuarioDto usuario;
   final bool pinEstablecido;
+
+  /// True cuando el usuario probó su identidad en esta ejecución de la app.
+  /// - Login con contraseña → true (acaba de probar su identidad).
+  /// - checkSession (arranque en frío con tokens guardados) → false:
+  ///   tiene sesión pero debe validar el PIN.
+  /// - loginPin exitoso → true.
+  /// - setPin exitoso → true, porque venía de un login con contraseña.
+  final bool desbloqueado;
 }
 
 class AuthUnauthenticated extends AuthState {
@@ -107,6 +116,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           pinEstablecido: pinEstablecido,
         ),
         pinEstablecido: pinEstablecido,
+        desbloqueado: false, // Arranque en frío: tiene sesión pero debe validar PIN.
       );
     } catch (e) {
       // Si /auth/me falla, limpiar sesión y mandar a login — pero solo si
@@ -150,6 +160,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = AuthAuthenticated(
         usuario: loginResp.usuario,
         pinEstablecido: loginResp.usuario.pinEstablecido,
+        desbloqueado: true, // Login con contraseña: acaba de probar su identidad.
       );
     } on DioException catch (e) {
       final code = e.response?.data?['code'] as String?;
@@ -211,6 +222,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           pinEstablecido: pinEstablecido,
         ),
         pinEstablecido: pinEstablecido,
+        desbloqueado: true, // PIN validado: probó su identidad.
       );
     } on DioException catch (e) {
       // err.message ya viene traducido por ErrorInterceptor.
@@ -229,10 +241,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
         '/auth/pin',
         data: SetPinRequest(pin: pin).toJson(),
       );
-      // Tras setPin exitoso, actualizar estado para reflejar pinEstablecido=true
+      // Tras setPin exitoso, actualizar estado para reflejar pinEstablecido=true.
+      // desbloqueado se mantiene true: venía de un login con contraseña.
+      final prev = state as AuthAuthenticated;
       state = AuthAuthenticated(
-        usuario: (state as AuthAuthenticated).usuario,
+        usuario: prev.usuario,
         pinEstablecido: true,
+        desbloqueado: prev.desbloqueado,
       );
       return true;
     } on DioException catch (e) {

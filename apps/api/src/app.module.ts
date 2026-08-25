@@ -7,6 +7,7 @@ import { LedgerModule } from './ledger/ledger.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { CajeroModule } from './cajero/cajero.module';
+import { CobradorModule } from './cobrador/cobrador.module';
 import { TasaModule } from './tasa/tasa.module';
 import { UploadsModule } from './uploads/uploads.module';
 
@@ -18,6 +19,7 @@ import { UploadsModule } from './uploads/uploads.module';
     AuthModule,
     AdminModule,
     CajeroModule,
+    CobradorModule,
     TasaModule,
     UploadsModule,
   ],

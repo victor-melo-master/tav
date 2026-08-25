@@ -45,6 +45,23 @@ apps/admin    Next.js 15 + shadcn/ui
 
 Despliegue con Docker Compose en VPS propio. Menos de 50 usuarios: no hace falta más.
 
+### Despliegue de la API
+
+Hay tres scripts en `scripts/` que automatizan el despliegue desde tu máquina.
+Usan el alias `tav` en `~/.ssh/config` (ver `docs/04-despliegue.md`).
+
+```bash
+./scripts/deploy.sh        # sincroniza, reconstruye y verifica la API
+./scripts/logs.sh          # logs de la API en vivo (Ctrl-C para salir)
+./scripts/ssh.sh           # sesión SSH en /opt/tav del servidor
+./scripts/ssh.sh --db      # psql dentro del contenedor de Postgres
+```
+
+`deploy.sh` hace rsync de `apps/api` y `docker-compose.prod.yml` al servidor
+(sin tocar `.env.prod`), reconstruye los contenedores, y verifica que
+`/health` responde local y público. Si algo falla, aborta con código != 0
+y muestra los últimos 30 renglones del log.
+
 ---
 
 ## Estructura del repo

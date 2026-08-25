@@ -157,7 +157,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
   String _saludo() {
     final h = DateTime.now().hour;
     if (h < 12) return 'Buenos días';
-    if (h < 18) return 'Buenas tardes';
+    if (h < 19) return 'Buenas tardes';
     return 'Buenas noches';
   }
 
@@ -169,6 +169,12 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
         ? (r.saldoCents / r.limiteCents).clamp(0.0, 1.0)
         : 0.0;
     final bloqueado = sem.bloqueado;
+    // Color único del semáforo, derivado del estado que calcula el servidor.
+    final semColor = _colorSemaforo(sem.estado);
+    // Texto de días: "Día N de 7" dentro del límite, "Vencida hace N días" si supera.
+    final diasTexto = sem.dias > 7
+        ? 'Vencida hace ${sem.dias - 7} días'
+        : 'Día ${sem.dias} de 7';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: TavSpace.xl),
@@ -209,6 +215,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
                   cents: r.disponibleCents,
                   color: TavColors.surface,
                   style: TavText.moneyDisplay.copyWith(fontSize: 33),
+                  fitted: true,
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -218,7 +225,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
                 const SizedBox(height: 16),
                 TavProgressBar(
                   progress: pctUsado,
-                  color: TavColors.gold,
+                  color: semColor,
                   height: 7,
                 ),
                 const SizedBox(height: 7),
@@ -235,7 +242,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
                     ),
                     if (sem.dias > 0)
                       Text(
-                        'Día ${sem.dias} de 7',
+                        diasTexto,
                         style: TavText.caption.copyWith(
                           color: const Color(0xFF9EC0EC),
                           fontSize: 11,
@@ -244,12 +251,6 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                TavButton(
-                  label: 'Abonar a mi deuda',
-                  variant: TavButtonVariant.green,
-                  small: true,
-                  onPressed: () => context.push('/cajero/abono'),
-                ),
               ],
             ),
           ),
@@ -331,6 +332,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
         onTap: () => context.push('/cajero/tasas'),
         child: Row(
           children: [
+            // Icono de moneda genérica (no Bitcoin).
             Container(
               width: 38,
               height: 38,
@@ -338,7 +340,8 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
                 color: TavColors.green50,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.currency_bitcoin, color: TavColors.green600, size: 20),
+              child: const Icon(Icons.monetization_on_outlined,
+                  color: TavColors.green600, size: 20),
             ),
             const SizedBox(width: 11),
             Expanded(
@@ -350,9 +353,27 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
                     style: TavText.caption.copyWith(color: TavColors.ink3),
                   ),
                   if (usdtBs != null)
-                    Text(
-                      _formatTasa(usdtBs.valor),
-                      style: TavText.h2.copyWith(fontSize: 18),
+                    // "Bs" pegado al número, no suelto a la derecha.
+                    RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: _formatTasa(usdtBs.valor),
+                            style: TavText.h2.copyWith(
+                              fontSize: 18,
+                              color: TavColors.ink,
+                            ),
+                          ),
+                          TextSpan(
+                            text: ' Bs',
+                            style: TavText.caption.copyWith(
+                              fontSize: 12,
+                              color: TavColors.ink3,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
                     )
                   else
                     Text(
@@ -362,15 +383,37 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
                 ],
               ),
             ),
+            // Columna derecha: variación y "hace X min".
             if (usdtBs != null)
-              Text(
-                'Bs',
-                style: TavText.caption.copyWith(color: TavColors.ink3),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // PENDIENTE DE DEFINIR: el servidor no expone la variación
+                  // porcentual de la tasa. Cuando /tasas/vigentes incluya el
+                  // cambio respecto a la tasa anterior, mostrar aquí un chip
+                  // verde "↑ 0,8%" o rojo "↓ 0,3%" según el signo.
+                  Text(
+                    _haceTexto(usdtBs.vigenteDesde),
+                    style: TavText.caption.copyWith(
+                      color: TavColors.ink3,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ),
           ],
         ),
       ),
     );
+  }
+
+  /// "hace X min" / "hace X h" / "hace X d" desde la fecha dada.
+  String _haceTexto(DateTime desde) {
+    final diff = DateTime.now().difference(desde);
+    if (diff.inMinutes < 1) return 'ahora';
+    if (diff.inMinutes < 60) return 'hace ${diff.inMinutes} min';
+    if (diff.inHours < 24) return 'hace ${diff.inHours} h';
+    return 'hace ${diff.inDays} d';
   }
 
   Widget _buildAccesos(BuildContext context) {
@@ -487,6 +530,15 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
         _ => TavChipState.gris,
       };
 
+  /// Color único del semáforo derivado del estado que calcula el servidor.
+  /// Se aplica al chip, a la barra de progreso y a cualquier otro indicador.
+  Color _colorSemaforo(String estado) => switch (estado) {
+        'verde' => TavColors.green600,
+        'ambar' => TavColors.gold,
+        'rojo' => TavColors.red,
+        _ => TavColors.ink3,
+      };
+
   ({TavChipState state, String label, Color color, Color bgColor})
       _chipEstadoOperacion(String estado) {
     return switch (estado) {
@@ -583,6 +635,7 @@ class _AccesoRapido extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: TavCard(
+        elevation: TavCardElevation.flat,
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         child: Column(
           children: [

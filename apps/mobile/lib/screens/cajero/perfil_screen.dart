@@ -107,6 +107,13 @@ class PerfilScreen extends ConsumerWidget {
                       showDivider: true,
                     ),
                     TavListRow(
+                      title: 'Abonar a mi deuda',
+                      subtitle: 'Los abonos los registra el cobrador',
+                      avatar: const Icon(Icons.payments_outlined, color: TavColors.blue, size: 20),
+                      onTap: () => context.push('/cajero/abono'),
+                      showDivider: true,
+                    ),
+                    TavListRow(
                       title: 'Seguridad',
                       subtitle: 'PIN y autenticación',
                       avatar: const Icon(Icons.lock_outline, color: TavColors.blue, size: 20),

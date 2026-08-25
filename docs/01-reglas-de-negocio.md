@@ -140,9 +140,32 @@ topa su cupo en dos días. Por eso el orden de la lista de cobro lo encabezan lo
 - Volumen: **más de 20 al día**. El registro tiene que ser rápido.
 - Las cuentas destino de sus clientes **cambian casi siempre**: prioriza pegar y despachar
   por encima de mantener una libreta de beneficiarios guardados.
-- Cada operación guarda la **tasa aplicada** y la comisión de TAV.
+- Cada operación guarda la **tasa aplicada**.
 - La tasa la define el administrador manualmente.
-- Comisiones de referencia: 2–3% en mayoreo, 5–10% en detal o intermediación.
+
+### La comisión va dentro de la tasa
+
+**El cajero no paga un cargo aparte.** Envía un monto, debe exactamente ese monto,
+y su beneficiario recibe lo que resulte de aplicar la tasa. El margen de TAV está
+implícito en la tasa que cotiza.
+
+En las apps de cajero y cobrador **no se muestra ninguna comisión**: ni línea de
+desglose, ni porcentaje, ni "total a pagar" distinto del monto enviado. El desglose
+visible es de tres líneas: lo que envía, la tasa aplicada, y lo que recibe el beneficiario.
+
+> ⚠️ **PENDIENTE — Fase 8.** Con la comisión dentro de la tasa, la ganancia deja de
+> ser un dato del registro y el panel no puede calcularla. La solución es guardar
+> **dos tasas por operación**: la cotizada al cajero (`tasaAplicada`, ya existe) y la
+> de costo a la que TAV consigue los bolívares (`tasaCosto`, por añadir).
+>
+> `margen = montoEnviado − (montoEntregado ÷ tasaCosto)`
+>
+> Requiere una columna en `Tasa` y una foto en `Operacion`, igual que ya se congela
+> `tasaAplicada`. El endpoint del cajero nunca devuelve la tasa de costo.
+>
+> **Antes de implementarlo hay que preguntarle a Iván cómo fija su precio**: si su
+> costo es una tasa única o depende del proveedor, la ciudad o el volumen. Eso cambia
+> el modelo.
 - **Ni el cobrador ni el admin necesitan ver el detalle de las operaciones de un cajero**
   para cobrarle. *"Si debe 10 tiene que pagar 10 y así."*
 
