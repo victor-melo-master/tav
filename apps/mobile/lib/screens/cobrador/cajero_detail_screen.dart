@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../components/tav_button.dart';
 import '../../components/tav_card.dart';
@@ -28,10 +29,6 @@ import '../../utils/cobrador_labels.dart';
 /// No muestra el historial de operaciones del cajero: al cobrador solo le
 /// importa cuánto debe.
 ///
-/// PENDIENTE DE DEFINIR: la API /cobrador/cajeros no devuelve teléfono, cédula
-/// ni dirección del cajero (solo zona). Los botones de Llamar y WhatsApp quedan
-/// pendientes hasta que el backend exponga el contacto. El aviso manual sí
-/// funciona vía POST /cobrador/avisos.
 class CajeroDetailScreen extends ConsumerStatefulWidget {
   const CajeroDetailScreen({super.key, required this.cajeroId});
 
@@ -220,7 +217,7 @@ class _CajeroDetailScreenState extends ConsumerState<CajeroDetailScreen> {
             variant: TavButtonVariant.green,
             icon: const Icon(Icons.payments, size: 20),
             onPressed: () =>
-                context.push('/cobrador/cobro/nuevo?cajeroId=${c.id}'),
+                context.push('/cobrador/cajero/${c.id}/cobro'),
           ),
 
           // Botón atención
@@ -246,8 +243,9 @@ class _CajeroDetailScreenState extends ConsumerState<CajeroDetailScreen> {
                   label: 'Llamar',
                   variant: TavButtonVariant.outline,
                   small: true,
-                  // PENDIENTE DE DEFINIR: teléfono del cajero no viene en la API.
-                  onPressed: () => _noDisponible('El teléfono del cajero no está disponible.'),
+                  onPressed: c.telefono != null && c.telefono!.isNotEmpty
+                      ? () => _llamar(c.telefono!)
+                      : null,
                 ),
               ),
               const SizedBox(width: 10),
@@ -256,8 +254,9 @@ class _CajeroDetailScreenState extends ConsumerState<CajeroDetailScreen> {
                   label: 'WhatsApp',
                   variant: TavButtonVariant.outline,
                   small: true,
-                  // PENDIENTE DE DEFINIR: teléfono del cajero no viene en la API.
-                  onPressed: () => _noDisponible('El teléfono del cajero no está disponible.'),
+                  onPressed: _waNumero(c.telefono) != null
+                      ? () => _abrirWhatsApp(c.telefono!)
+                      : null,
                 ),
               ),
               const SizedBox(width: 10),
@@ -460,15 +459,41 @@ class _CajeroDetailScreenState extends ConsumerState<CajeroDetailScreen> {
     }
   }
 
-  void _noDisponible(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: TavColors.ink2,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  String? _waNumero(String? telefono) {
+    if (telefono == null || telefono.isEmpty) return null;
+    var digits = telefono.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return null;
+    if (digits.startsWith('0')) {
+      digits = '58${digits.substring(1)}';
+    } else if (digits.startsWith('58')) {
+      // ya internacional
+    } else if (!digits.startsWith('1')) {
+      digits = '58$digits';
+    }
+    return digits;
+  }
+
+  Future<void> _llamar(String telefono) async {
+    final uri = Uri.parse('tel:$telefono');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      _toast('No se pudo abrir el marcador.');
+    }
+  }
+
+  Future<void> _abrirWhatsApp(String telefono) async {
+    final numero = _waNumero(telefono);
+    if (numero == null) {
+      _toast('El número de WhatsApp no es válido.');
+      return;
+    }
+    final uri = Uri.parse('https://wa.me/$numero');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      _toast('No se pudo abrir WhatsApp.');
+    }
   }
 
   void _toast(String msg) {

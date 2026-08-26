@@ -61,6 +61,7 @@ export class CobradorService {
         return {
           id: p.usuarioId,
           nombre: p.usuario.nombre,
+          telefono: p.usuario.telefono,
           zona: p.zona,
           saldoCents: p.saldoCents,
           limiteCents: p.limiteCents,

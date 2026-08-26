@@ -191,9 +191,16 @@ class _MiDiaScreenState extends ConsumerState<MiDiaScreen> {
                     style: TavText.caption.copyWith(color: const Color(0xFF9EC0EC)),
                   ),
                 ),
-                TavChip(
-                  label: '● ${cierre.estado.label}',
-                  state: cerrado ? TavChipState.azul : TavChipState.ambar,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 140),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: TavChip(
+                      label: '● ${cierre.estado.label}',
+                      state: cerrado ? TavChipState.azul : TavChipState.ambar,
+                    ),
+                  ),
                 ),
               ],
             ),

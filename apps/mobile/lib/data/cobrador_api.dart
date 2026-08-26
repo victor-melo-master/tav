@@ -39,6 +39,7 @@ class CajeroCobradorDto {
   const CajeroCobradorDto({
     required this.id,
     required this.nombre,
+    required this.telefono,
     required this.zona,
     required this.saldoCents,
     required this.limiteCents,
@@ -54,6 +55,7 @@ class CajeroCobradorDto {
 
   final String id;
   final String nombre;
+  final String? telefono;
   final String? zona;
   final int saldoCents;
   final int limiteCents;
@@ -70,6 +72,7 @@ class CajeroCobradorDto {
     return CajeroCobradorDto(
       id: json['id'] as String,
       nombre: json['nombre'] as String,
+      telefono: json['telefono'] as String?,
       zona: json['zona'] as String?,
       saldoCents: int.parse(json['saldoCents'] as String),
       limiteCents: int.parse(json['limiteCents'] as String),

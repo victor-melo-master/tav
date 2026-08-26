@@ -138,6 +138,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         orElse: () => const CajeroCobradorDto(
           id: '',
           nombre: '',
+          telefono: '',
           zona: '',
           saldoCents: 0,
           limiteCents: 0,

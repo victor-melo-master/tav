@@ -92,28 +92,39 @@ class CajeroCobradorRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: TavSpace.md),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                TavMoneyDisplay(
-                  cents: cajero.saldoCents,
-                  style: TavText.body.copyWith(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 130),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  TavMoneyDisplay(
+                    cents: cajero.saldoCents,
+                    style: TavText.body.copyWith(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    fitted: true,
                   ),
-                  fitted: true,
-                ),
-                const SizedBox(height: 4),
-                TavChip(label: cajero.motivo, state: chip),
-                const SizedBox(height: 4),
-                Text(
-                  '$pct% del límite',
-                  style: TavText.caption.copyWith(
-                    fontSize: 11,
-                    color: TavColors.ink3,
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: TavChip(label: cajero.motivo, state: chip),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '$pct% del límite',
+                      style: TavText.caption.copyWith(
+                        fontSize: 11,
+                        color: TavColors.ink3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -216,31 +227,38 @@ class CobroRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: TavSpace.md),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                TavMoneyDisplay(
-                  cents: cobro.montoUsdCents,
-                  color: cobro.anulado
-                      ? TavColors.ink4
-                      : TavColors.green600,
-                  style: TavText.body.copyWith(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 130),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  TavMoneyDisplay(
+                    cents: cobro.montoUsdCents,
+                    color: cobro.anulado
+                        ? TavColors.ink4
+                        : TavColors.green600,
+                    style: TavText.body.copyWith(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    fitted: true,
                   ),
-                  fitted: true,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  cobro.anulado
-                      ? 'Anulado'
-                      : (esEfectivo ? 'efectivo' : 'digital'),
-                  style: TavText.caption.copyWith(
-                    fontSize: 11,
-                    color: cobro.anulado ? TavColors.red700 : TavColors.ink3,
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      cobro.anulado
+                          ? 'Anulado'
+                          : (esEfectivo ? 'efectivo' : 'digital'),
+                      style: TavText.caption.copyWith(
+                        fontSize: 11,
+                        color: cobro.anulado ? TavColors.red700 : TavColors.ink3,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),

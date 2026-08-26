@@ -25,6 +25,8 @@ dependencies:
   google_fonts: ^6.2.1
   # Renderizado de SVG (logo)
   flutter_svg: ^2.3.0
+  # Abrir marcador y WhatsApp
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
