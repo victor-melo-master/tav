@@ -99,8 +99,7 @@ class CobradorShell extends StatelessWidget {
   }
 
   void _onFabTap(BuildContext context) {
-    // PENDIENTE DE DEFINIR: navegar al flujo de nuevo cobro.
-    // Por ahora no hace nada — las pantallas de contenido son Fase 7.
+    context.push('/cobrador/cajeros');
   }
 }
 

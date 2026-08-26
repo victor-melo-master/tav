@@ -14,11 +14,22 @@ import '../screens/cajero/perfil_screen.dart';
 import '../screens/cajero/seguridad_screen.dart';
 import '../screens/cajero/soporte_screen.dart';
 import '../screens/cajero/tasas_screen.dart';
+import '../screens/cobrador/anular_cobro_screen.dart';
+import '../screens/cobrador/cajero_detail_screen.dart';
+import '../screens/cobrador/cajeros_screen.dart';
+import '../screens/cobrador/cierre_detail_screen.dart';
+import '../screens/cobrador/cierre_enviado_screen.dart';
+import '../screens/cobrador/cierres_screen.dart';
+import '../screens/cobrador/cobro_detail_screen.dart';
+import '../screens/cobrador/cuadre_screen.dart';
+import '../screens/cobrador/declarar_entrega_screen.dart';
+import '../screens/cobrador/mi_dia_screen.dart';
+import '../screens/cobrador/perfil_cobrador_screen.dart';
+import '../screens/cobrador/registrar_cobro_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/pin_bloqueado_screen.dart';
 import '../screens/pin_login_screen.dart';
 import '../screens/pin_setup_screen.dart';
-import '../screens/placeholder_screen.dart';
 import '../screens/shells.dart';
 import '../state/auth_state.dart';
 import 'router_notifier.dart';
@@ -181,25 +192,68 @@ final tavRouterProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: '/cobrador/mi-dia',
-            builder: (context, state) =>
-                const PlaceholderScreen(title: 'Mi día'),
+            builder: (context, state) => const MiDiaScreen(),
           ),
           GoRoute(
             path: '/cobrador/cajeros',
-            builder: (context, state) =>
-                const PlaceholderScreen(title: 'Cajeros'),
+            builder: (context, state) => const CajerosScreen(),
           ),
           GoRoute(
             path: '/cobrador/cuadre',
-            builder: (context, state) =>
-                const PlaceholderScreen(title: 'Cuadre'),
+            builder: (context, state) => const CuadreScreen(),
           ),
           GoRoute(
             path: '/cobrador/perfil',
-            builder: (context, state) =>
-                const PlaceholderScreen(title: 'Perfil'),
+            builder: (context, state) => const PerfilCobradorScreen(),
           ),
         ],
+      ),
+      // Rutas del cobrador fuera del shell
+      GoRoute(
+        path: '/cobrador/cajero/:id',
+        builder: (context, state) => CajeroDetailScreen(
+          cajeroId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/cobrador/cajero/:id/cobro',
+        builder: (context, state) => RegistrarCobroScreen(
+          cajeroId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/cobrador/cobro/:id',
+        builder: (context, state) => CobroDetailScreen(
+          cobroId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/cobrador/cobro/:id/anular',
+        builder: (context, state) => AnularCobroScreen(
+          cobroId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/cobrador/cierre/:id',
+        builder: (context, state) => CierreDetailScreen(
+          cierreId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/cobrador/cierre/:id/enviar',
+        builder: (context, state) => DeclararEntregaScreen(
+          cierreId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/cobrador/cierre/:id/enviado',
+        builder: (context, state) => CierreEnviadoScreen(
+          cierreId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/cobrador/cierres',
+        builder: (context, state) => const CierresScreen(),
       ),
     ],
   );
