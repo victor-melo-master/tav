@@ -70,15 +70,35 @@ async function seedConfig(): Promise<void> {
   });
 }
 
+/**
+ * Siembra las tasas de conversión a GYD (moneda base) que el servicio lee
+ * de la base. USD_GYD = 1 en los tests para que los montos USD pasen tal
+ * cual y los tests del ledger se concentren en la mecánica del libro, no
+ * en el factor de conversión. La conversión real se prueba en Caso 11
+ * con BS_GYD.
+ */
+async function seedTasas(): Promise<void> {
+  await prisma.tasa.createMany({
+    data: [
+      { id: uuid(), par: 'GYD_GYD', valor: 1.0, creadaPorId: ACTOR, vigenteDesde: new Date() },
+      { id: uuid(), par: 'USD_GYD', valor: 1.0, creadaPorId: ACTOR, vigenteDesde: new Date() },
+      { id: uuid(), par: 'USDT_GYD', valor: 1.0, creadaPorId: ACTOR, vigenteDesde: new Date() },
+      { id: uuid(), par: 'BS_GYD', valor: 0.732314, creadaPorId: ACTOR, vigenteDesde: new Date() },
+    ],
+  });
+}
+
 async function crearCajero(
-  opts: { limiteCents?: bigint; deudaDesde?: Date | null; nombre?: string } = {},
+  opts: { email?: string; telefono?: string; limiteCents?: bigint; deudaDesde?: Date | null; nombre?: string } = {},
 ): Promise<{ id: string }> {
   const tel = `t-${uuid()}`;
+  const email = opts.email ?? `cajero-${uuid()}@tav.test`;
   const u = await prisma.usuario.create({
     data: {
       rol: 'cajero',
       nombre: opts.nombre ?? 'Cajero Test',
-      telefono: tel,
+      email,
+      telefono: opts.telefono ?? tel,
       passwordHash: 'x',
       perfilCajero: {
         create: {
@@ -92,13 +112,18 @@ async function crearCajero(
   return { id: u.id };
 }
 
-async function crearCobrador(nombre = 'Cobrador Test'): Promise<{ id: string }> {
+async function crearCobrador(
+  opts: { email?: string; telefono?: string; nombre?: string } = {},
+): Promise<{ id: string }> {
   const tel = `t-${uuid()}`;
+  const email = opts.email ?? `cobrador-${uuid()}@tav.test`;
+  const nombre = opts.nombre ?? 'Cobrador Test';
   const u = await prisma.usuario.create({
     data: {
       rol: 'cobrador',
       nombre,
-      telefono: tel,
+      email,
+      telefono: opts.telefono ?? tel,
       passwordHash: 'x',
       perfilCobrador: { create: {} },
     },
@@ -159,7 +184,7 @@ function opDto(opts: {
 function cobroDto(opts: {
   cajeroId: string;
   montoCents: bigint;
-  moneda?: 'USD' | 'BS' | 'USDT';
+  moneda?: 'GYD' | 'USD' | 'BS' | 'USDT';
   metodo?: MetodoCobro;
   tasaAplicada?: string | null;
   cobradorId?: string | null;
@@ -189,11 +214,11 @@ async function invariante(cajeroId: string): Promise<void> {
     where: { cajeroId },
     orderBy: { seq: 'asc' },
   });
-  const suma = movs.reduce((acc, m) => acc + m.montoUsdCents, 0n);
+  const suma = movs.reduce((acc, m) => acc + m.montoCents, 0n);
   expect(suma).toBe(p.saldoCents);
   let running = 0n;
   for (const m of movs) {
-    running += m.montoUsdCents;
+    running += m.montoCents;
     expect(m.saldoDespues).toBe(running);
   }
 }
@@ -231,6 +256,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await truncateTodo();
   await seedConfig();
+  await seedTasas();
 });
 
 afterEach(async () => {
@@ -251,7 +277,7 @@ describe('Bloque 1 — los siete obligatorios del plan', () => {
     );
 
     expect(yaExistia).toBe(false);
-    expect(operacion.estado).toBe('en_verificacion');
+    expect(operacion.estado).toBe('pendiente');
     expect(operacion.folio).toMatch(/^TAV-\d+$/);
     // la tasa se congela tal como llegó en el DTO ("285.4")
     expect(operacion.tasaAplicada.toString()).toBe('285.4');
@@ -265,7 +291,7 @@ describe('Bloque 1 — los siete obligatorios del plan', () => {
       where: { cajeroId: c.id, tipo: 'cargo' },
     });
     expect(cargos).toHaveLength(1);
-    expect(cargos[0].montoUsdCents).toBe(60_000n);
+    expect(cargos[0].montoCents).toBe(60_000n);
     expect(cargos[0].saldoDespues).toBe(p.saldoCents);
   });
 
@@ -377,7 +403,7 @@ describe('Bloque 1 — los siete obligatorios del plan', () => {
       where: { cajeroId: c.id, tipo: 'reverso_abono' },
     });
     expect(reversos).toHaveLength(1);
-    expect(reversos[0].montoUsdCents).toBe(10_000n);
+    expect(reversos[0].montoCents).toBe(10_000n);
 
     // el cobro sigue existiendo y visible
     expect(await prisma.cobro.count()).toBe(1);
@@ -472,7 +498,7 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
   });
 
   test('Caso 3 — carrera de creación de cierre: dos cobros simultáneos del mismo cobrador sin cierre previo → un cierre, total = suma', async () => {
-    const cob = await crearCobrador();
+    const cob = await crearCobrador({});
     const c1 = await crearCajero({ limiteCents: 100_000n });
     const c2 = await crearCajero({ limiteCents: 100_000n });
     // ambos cajeros con deuda para que el cobro baje saldo
@@ -492,7 +518,7 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
   });
 
   test('Caso 4 — carrera de totales del cierre: dos cobros concurrentes a cajeros distintos no se pisan', async () => {
-    const cob = await crearCobrador();
+    const cob = await crearCobrador({});
     const c1 = await crearCajero({ limiteCents: 100_000n });
     const c2 = await crearCajero({ limiteCents: 100_000n });
     const c3 = await crearCajero({ limiteCents: 100_000n });
@@ -599,7 +625,7 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
     const { cobro } = await ledger.registrarCobro(
       cobroDto({ cajeroId: c.id, montoCents: 100_000n }),
     );
-    expect(cobro.montoUsdCents).toBe(100_000n);
+    expect(cobro.montoBaseCents).toBe(100_000n);
 
     const p = await perfil(c.id);
     expect(p.saldoCents).toBe(-40_000n);
@@ -607,7 +633,7 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
   });
 
   test('Caso 10 — cobro cae en el cierre de la fecha Caracas (no UTC)', async () => {
-    const cob = await crearCobrador();
+    const cob = await crearCobrador({});
     const c = await crearCajero({ limiteCents: 100_000n });
     await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
 
@@ -628,37 +654,156 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
     // cálculos coinciden; el contrato exige comportarse por Caracas siempre.
   });
 
-  test('Caso 11 — redondeo BS→USD half-up: 1 Bs con tasa 285.4 → 0 centavos USD, no se rechaza', async () => {
+  test('Caso 11 — redondeo BS→GYD half-up: 1 Bs cent con tasa 0.732314 → 1 centavo GYD (redondea arriba), no se rechaza', async () => {
     const c = await crearCajero({ limiteCents: 100_000n });
     await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
 
     const saldoAntes = (await perfil(c.id)).saldoCents;
 
+    // 1 Bs cent × 0.732314 = 0.732314 → redondea half-up a 1 GYD cent
     const { cobro } = await ledger.registrarCobro(
       cobroDto({
         cajeroId: c.id,
         montoCents: 1n,
         moneda: 'BS',
         metodo: 'pago_movil',
-        tasaAplicada: '285.4',
       }),
     );
-    expect(cobro.montoUsdCents).toBe(0n);
-    // abono de 0 → saldo no cambia
-    expect((await perfil(c.id)).saldoCents).toBe(saldoAntes);
+    expect(cobro.montoBaseCents).toBe(1n);
+    // abono de 1 → saldo baja en 1
+    expect((await perfil(c.id)).saldoCents).toBe(saldoAntes - 1n);
 
-    // caso redondo: 2.854.000 Bs con tasa 285.4 → 10.000 USD exactos
+    // caso redondo: 1.000.000 Bs cents × 0.732314 = 732.314 GYD cents
     const { cobro: cobro2 } = await ledger.registrarCobro(
       cobroDto({
         cajeroId: c.id,
-        montoCents: 2_854_000n,
+        montoCents: 1_000_000n,
         moneda: 'BS',
         metodo: 'pago_movil',
-        tasaAplicada: '285.4',
         clientUuid: uuid(),
       }),
     );
-    expect(cobro2.montoUsdCents).toBe(10_000n);
+    expect(cobro2.montoBaseCents).toBe(732_314n);
+  });
+
+  test('Caso 11b — conversión USD→GYD con tasa 209: 100 USD cents → 20.900 GYD cents', async () => {
+    // Este test aísla la conversión de dólares. Reescribe la tasa USD_GYD
+    // sembrada en beforeEach (que es 1) a 209, para ejercitar la rama real.
+    await prisma.tasa.updateMany({
+      where: { par: 'USD_GYD' },
+      data: { valor: 209.0 },
+    });
+
+    const c = await crearCajero({ limiteCents: 100_000n });
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+
+    // 100 USD cents × 209 = 20.900 GYD cents
+    const { cobro } = await ledger.registrarCobro(
+      cobroDto({
+        cajeroId: c.id,
+        montoCents: 100n,
+        moneda: 'USD',
+        metodo: 'efectivo_usd',
+      }),
+    );
+    expect(cobro.montoBaseCents).toBe(20_900n);
+    expect(cobro.tasaAplicada?.toString()).toBe('209');
+  });
+
+  test('Caso 11c — conversión USDT→GYD con tasa propia (208): 500 USDT cents → 104.000 GYD cents', async () => {
+    // USDT no cotiza igual que USD. Reescribe USDT_GYD a 208 para
+    // ejercitar la rama con una tasa distinta.
+    await prisma.tasa.updateMany({
+      where: { par: 'USDT_GYD' },
+      data: { valor: 208.0 },
+    });
+
+    const c = await crearCajero({ limiteCents: 200_000n });
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+
+    // 500 USDT cents × 208 = 104.000 GYD cents
+    const { cobro } = await ledger.registrarCobro(
+      cobroDto({
+        cajeroId: c.id,
+        montoCents: 500n,
+        moneda: 'USDT',
+        metodo: 'usdt',
+      }),
+    );
+    expect(cobro.montoBaseCents).toBe(104_000n);
+    expect(cobro.tasaAplicada?.toString()).toBe('208');
+  });
+
+  test('Caso 11d — cobro en efectivo GYD no pide tasa y baja la deuda por el monto exacto', async () => {
+    const c = await crearCajero({ limiteCents: 100_000n });
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+
+    const saldoAntes = (await perfil(c.id)).saldoCents;
+
+    // 10.000 GYD cents → 10.000 GYD cents (tasa 1, sin conversión)
+    const { cobro } = await ledger.registrarCobro(
+      cobroDto({
+        cajeroId: c.id,
+        montoCents: 10_000n,
+        moneda: 'GYD',
+        metodo: 'efectivo_gyd',
+      }),
+    );
+    expect(cobro.montoBaseCents).toBe(10_000n);
+    expect(cobro.tasaAplicada?.toString()).toBe('1');
+    expect(cobro.esEfectivo).toBe(true);
+    expect((await perfil(c.id)).saldoCents).toBe(saldoAntes - 10_000n);
+  });
+
+  test('Caso 11e — cobro BS congela la tasa de la BD y no confía en la del cliente', async () => {
+    // Reescribe la tasa BS_GYD sembrada (0.732314) a 0.5 para aislar la rama.
+    await prisma.tasa.updateMany({
+      where: { par: 'BS_GYD' },
+      data: { valor: 0.5 },
+    });
+
+    const c = await crearCajero({ limiteCents: 100_000n });
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+
+    // El cliente envía tasaAplicada = 999 (un valor falso). El servicio
+    // debe ignorarlo y leer 0.5 de la base. 1.000.000 Bs × 0.5 = 500.000 GYD.
+    const { cobro } = await ledger.registrarCobro(
+      cobroDto({
+        cajeroId: c.id,
+        montoCents: 1_000_000n,
+        moneda: 'BS',
+        metodo: 'pago_movil',
+        tasaAplicada: '999',
+      }),
+    );
+    expect(cobro.montoBaseCents).toBe(500_000n);
+    expect(cobro.tasaAplicada?.toString()).toBe('0.5');
+
+    // Cambiar la tasa en la BD después del cobro no altera el cobro histórico.
+    await prisma.tasa.updateMany({
+      where: { par: 'BS_GYD' },
+      data: { valor: 0.9 },
+    });
+    const cobroRecargado = await prisma.cobro.findUnique({ where: { id: cobro.id } });
+    expect(cobroRecargado?.tasaAplicada?.toString()).toBe('0.5');
+    expect(cobroRecargado?.montoBaseCents).toBe(500_000n);
+  });
+
+  test('Caso 11f — cobro que deja saldo a favor queda con saldo negativo', async () => {
+    const c = await crearCajero({ limiteCents: 100_000n });
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+
+    // Cobra 80.000 GYD contra deuda de 60.000 → queda con 20.000 a favor.
+    const { cobro } = await ledger.registrarCobro(
+      cobroDto({
+        cajeroId: c.id,
+        montoCents: 80_000n,
+        moneda: 'GYD',
+        metodo: 'efectivo_gyd',
+      }),
+    );
+    expect(cobro.montoBaseCents).toBe(80_000n);
+    expect((await perfil(c.id)).saldoCents).toBe(-20_000n);
   });
 
   test('Caso 12 — cobro registrado por admin (cobradorId null) no crea ni toca cierre', async () => {
@@ -757,14 +902,11 @@ describe('Hallazgos adicionales (bugs fuera de los 12 casos del contrato)', () =
 // ───────────────────────────────────────────────────────────────────────
 
 describe('PENDIENTE DE DEFINIR — comportamiento actual, sujeto a decisión del cliente', () => {
-  test('Caso 13 — deudaDesde tras anulaciones es aproximado (no reconstruye FIFO)', async () => {
-    // PREGUNTA ABIERTA: ¿Los abonos saldan primero el cargo más viejo (FIFO)?
-    //   Hoy deudaDesde no se reconstruye al anular: anular un cobro que había
-    //   saldado la deuda pone deudaDesde en el momento del reverso, no en la
-    //   fecha del cargo original. Y anular la operación más vieja no recorre
-    //   el libro buscando el siguiente cargo vivo. FIFO es la respuesta natural
-    //   pero Iván no lo ha confirmado. ES LA MÁS IMPORTANTE: el eje de días
-    //   del semáforo depende de esto.
+  test('Caso 13 — deudaDesde se reconstruye por FIFO al anular un cobro que saldó el cargo más viejo', async () => {
+    // Regla 7 de docs/01-reglas-de-negocio.md: imputación FIFO.
+    // El abono salda primero el cargo más viejo. Si ese abono se anula,
+    // deudaDesde tiene que volver a la fecha del cargo viejo, no quedarse
+    // en la del reciente. Es donde el semáforo se vuelve más benévolo de lo justo.
     const c = await crearCajero({ limiteCents: 100_000n });
 
     await ledger.registrarOperacion(
@@ -777,29 +919,30 @@ describe('PENDIENTE DE DEFINIR — comportamiento actual, sujeto a decisión del
     await ledger.registrarCobro(cobroDto({ cajeroId: c.id, montoCents: 60_000n }));
     expect((await perfil(c.id)).deudaDesde).toBeNull();
 
-    // anular el cobro: deudaDesde va al momento del reverso, NO al cargo original
+    // anular el cobro: deudaDesde vuelve a la fecha del cargo original (FIFO)
     const cobro = await prisma.cobro.findFirstOrThrow({ where: { cajeroId: c.id } });
-    const antesReverso = new Date();
     await ledger.anular('cobro', cobro.id, 'reverso de prueba', ACTOR);
     const p = await perfil(c.id);
     expect(p.saldoCents).toBe(60_000n);
     expect(p.deudaDesde).not.toBeNull();
-    // el reverso pone deudaDesde ≈ ahora, no la fecha del cargo original
-    expect(p.deudaDesde!.getTime()).toBeGreaterThanOrEqual(antesReverso.getTime() - 1000);
-    expect(p.deudaDesde!.getTime()).toBeGreaterThan(fechaCargoOriginal.getTime());
+    // deudaDesde debe ser la fecha del cargo original, no la del reverso
+    expect(p.deudaDesde!.getTime()).toBe(fechaCargoOriginal.getTime());
 
-    // simétrico: anular la operación más vieja NO recorre el libro al siguiente cargo vivo
+    // simétrico: anular la operación más vieja recalcula al siguiente cargo vivo
     const c2 = await crearCajero({ limiteCents: 200_000n });
     const op1 = await ledger.registrarOperacion(opDto({ cajeroId: c2.id, totalCents: 60_000n }));
-    await ledger.registrarOperacion(opDto({ cajeroId: c2.id, totalCents: 40_000n }));
-    const deudaOp1 = (await perfil(c2.id)).deudaDesde!;
-    // esperar un instante para que op2 tenga timestamp distinto
     await new Promise((r) => setTimeout(r, 50));
+    const op2 = await ledger.registrarOperacion(opDto({ cajeroId: c2.id, totalCents: 40_000n }));
+    // deudaDesde apunta al cargo más viejo (op1)
+    const deudaAntes = (await perfil(c2.id)).deudaDesde!;
+    expect(deudaAntes.getTime()).toBeLessThan(op2.operacion.creadaAt.getTime());
     await ledger.anular('operacion', op1.operacion.id, 'anulo la más vieja', ACTOR);
-    // queda deuda (40.000) → conserva deudaDesde previo (no recalcula al cargo vivo)
+    // queda deuda (40.000) → deudaDesde recalcula al cargo vivo (op2)
     const p2 = await perfil(c2.id);
     expect(p2.saldoCents).toBe(40_000n);
-    expect(p2.deudaDesde).toEqual(deudaOp1);
+    expect(p2.deudaDesde).not.toBeNull();
+    // deudaDesde ahora apunta a op2, no se queda con la fecha de op1
+    expect(p2.deudaDesde!.getTime()).toBe(op2.operacion.creadaAt.getTime());
   });
 
   test('Caso 14 — anular una operación que consumió ampliación NO la revive', async () => {
@@ -830,7 +973,7 @@ describe('PENDIENTE DE DEFINIR — comportamiento actual, sujeto a decisión del
   test('Caso 15 — cobro tardío con cierre ya enviado → CierreNoAbiertoException', async () => {
     // PREGUNTA ABIERTA: ¿debe ir el cobro al cierre del día siguiente, o el admin
     //   puede reabrir el cierre? Hoy se rechaza.
-    const cob = await crearCobrador();
+    const cob = await crearCobrador({});
     const c = await crearCajero({ limiteCents: 100_000n });
     await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
 
@@ -906,7 +1049,7 @@ describe('PENDIENTE DE DEFINIR — comportamiento actual, sujeto a decisión del
     const cargo = await prisma.movimiento.findFirstOrThrow({
       where: { cajeroId: c.id, tipo: 'cargo' },
     });
-    expect(cargo.montoUsdCents).toBe(60_000n);
+    expect(cargo.montoCents).toBe(60_000n);
   });
 
   test('Caso 19 — anular una operación puede dejar el saldo negativo (coherente con caso 9)', async () => {
@@ -969,5 +1112,187 @@ describe('PENDIENTE DE DEFINIR — comportamiento actual, sujeto a decisión del
     expect(r.estado).toBe('verde');
     expect(r.bloqueado).toBe(false);
     expect(r.disponibleCents).toBe(0n);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// BLOQUE 4 — FIFO, saldo a favor y reglas de negocio (reglas 7 y 8)
+// ───────────────────────────────────────────────────────────────────────
+
+describe('Bloque 4 — FIFO, saldo a favor y reglas de negocio', () => {
+  test('FIFO 1 — deudaDesde apunta al cargo más antiguo sin saldar cuando hay varios cargos y un abono parcial', async () => {
+    // Dos cargos: 60.000 (día 1) y 40.000 (día 2). Un abono de 30.000 salda
+    // parcialmente el cargo más viejo. deudaDesde debe seguir apuntando al
+    // cargo más antiguo (que sigue debiendo 30.000).
+    const c = await crearCajero({ limiteCents: 200_000n });
+
+    const op1 = await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+    await new Promise((r) => setTimeout(r, 50));
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 40_000n }));
+
+    const fechaOp1 = (await perfil(c.id)).deudaDesde!;
+    expect(fechaOp1).not.toBeNull();
+
+    // Abono parcial de 30.000: salda 30.000 del cargo más viejo (quedan 30.000)
+    await ledger.registrarCobro(cobroDto({ cajeroId: c.id, montoCents: 30_000n }));
+
+    const p = await perfil(c.id);
+    expect(p.saldoCents).toBe(70_000n); // 60 + 40 - 30
+    // deudaDesde sigue apuntando al cargo más viejo (op1), que sigue debiendo 30.000
+    expect(p.deudaDesde).not.toBeNull();
+    expect(p.deudaDesde!.getTime()).toBe(fechaOp1.getTime());
+  });
+
+  test('FIFO 2 — abono que salda el cargo más viejo pero deja el segundo vivo: deudaDesde pasa al segundo', async () => {
+    // Cargo 60.000 (día 1), cargo 40.000 (día 2). Abono de 60.000 salda el
+    // primero completamente. deudaDesde debe pasar al segundo cargo.
+    const c = await crearCajero({ limiteCents: 200_000n });
+
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+    await new Promise((r) => setTimeout(r, 50));
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 40_000n }));
+
+    const fechaOp1 = (await perfil(c.id)).deudaDesde!;
+
+    // Abono de 60.000 salda exactamente el cargo más viejo
+    await ledger.registrarCobro(cobroDto({ cajeroId: c.id, montoCents: 60_000n }));
+
+    const p = await perfil(c.id);
+    expect(p.saldoCents).toBe(40_000n);
+    expect(p.deudaDesde).not.toBeNull();
+    // deudaDesde ahora apunta al segundo cargo, no al primero
+    expect(p.deudaDesde!.getTime()).toBeGreaterThan(fechaOp1.getTime());
+  });
+
+  test('FIFO 3 — anulación de cobro que reabre cargo viejo: deudaDesde vuelve a la fecha del cargo original', async () => {
+    // Este es el caso clave que pidió el usuario: si un abono saldó el cargo
+    // más antiguo y luego ese abono se anula, deudaDesde tiene que volver a
+    // la fecha del cargo viejo, no quedarse en la del reciente.
+    const c = await crearCajero({ limiteCents: 200_000n });
+
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+    await new Promise((r) => setTimeout(r, 50));
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 40_000n }));
+
+    const fechaOp1 = (await perfil(c.id)).deudaDesde!;
+
+    // Abono de 60.000 salda el cargo más viejo → deudaDesde pasa al segundo
+    const { cobro } = await ledger.registrarCobro(cobroDto({ cajeroId: c.id, montoCents: 60_000n }));
+    expect((await perfil(c.id)).deudaDesde!.getTime()).toBeGreaterThan(fechaOp1.getTime());
+
+    // Anular el cobro: el cargo más viejo reaparece como insaldado
+    await ledger.anular('cobro', cobro.id, 'reverso que reabre cargo viejo', ACTOR);
+
+    const p = await perfil(c.id);
+    expect(p.saldoCents).toBe(100_000n); // 60 + 40
+    expect(p.deudaDesde).not.toBeNull();
+    // deudaDesde vuelve a la fecha del cargo más viejo (op1)
+    expect(p.deudaDesde!.getTime()).toBe(fechaOp1.getTime());
+  });
+
+  test('FIFO 4 — sobrepago que salda todo y deja saldo a favor: deudaDesde = null', async () => {
+    // Cargo de 60.000, abono de 100.000 → saldo -40.000, deudaDesde null
+    const c = await crearCajero({ limiteCents: 200_000n });
+
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+    expect((await perfil(c.id)).deudaDesde).not.toBeNull();
+
+    await ledger.registrarCobro(cobroDto({ cajeroId: c.id, montoCents: 100_000n }));
+
+    const p = await perfil(c.id);
+    expect(p.saldoCents).toBe(-40_000n);
+    expect(p.deudaDesde).toBeNull();
+  });
+
+  test('Saldo a favor 1 — disponible = límite + saldo a favor dentro del FOR UPDATE', async () => {
+    // Límite 100.000, saldo a favor 50.000 → disponible = 150.000.
+    // Una operación de 150.000 debe pasar; una de 150.001 debe fallar.
+    const c = await crearCajero({ limiteCents: 100_000n });
+
+    // Crear saldo a favor: cargo 60.000, abono 110.000 → saldo -50.000
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+    await ledger.registrarCobro(cobroDto({ cajeroId: c.id, montoCents: 110_000n }));
+    expect((await perfil(c.id)).saldoCents).toBe(-50_000n);
+
+    // Operación de 150.000 pasa (disponible = 100.000 + 50.000 = 150.000)
+    const { operacion } = await ledger.registrarOperacion(
+      opDto({ cajeroId: c.id, totalCents: 150_000n }),
+    );
+    expect(operacion.estado).toBe('pendiente');
+    expect((await perfil(c.id)).saldoCents).toBe(100_000n); // -50.000 + 150.000
+
+    // Operación de 1 centavo más rebota: disponible = 0
+    await expect(
+      ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 1n })),
+    ).rejects.toMatchObject({ code: 'SIN_CUPO' });
+  });
+
+  test('Saldo a favor 2 — semáforo: pct = 0 y estado verde con saldo a favor', async () => {
+    const c = await crearCajero({ limiteCents: 100_000n });
+
+    // Saldo a favor de 50.000
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+    await ledger.registrarCobro(cobroDto({ cajeroId: c.id, montoCents: 110_000n }));
+
+    const r = await semaforo.calcular(c.id);
+    expect(r.pct).toBe(0);
+    expect(r.estado).toBe('verde');
+    expect(r.bloqueado).toBe(false);
+    expect(r.dias).toBe(0);
+    // disponible = 100.000 + 50.000 = 150.000
+    expect(r.disponibleCents).toBe(150_000n);
+  });
+
+  test('Saldo a favor 3 — contador de días arranca cuando el saldo a favor llega a cero', async () => {
+    // Un cajero con saldo a favor opera y consume ese saldo. El contador
+    // de días no arranca mientras tenga saldo a favor; arranca cuando
+    // el saldo pasa a positivo.
+    const c = await crearCajero({ limiteCents: 200_000n });
+
+    // Saldo a favor de 40.000
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+    await ledger.registrarCobro(cobroDto({ cajeroId: c.id, montoCents: 100_000n }));
+    expect((await perfil(c.id)).saldoCents).toBe(-40_000n);
+    expect((await perfil(c.id)).deudaDesde).toBeNull();
+
+    // Opera 40.000: consume el saldo a favor, queda en 0
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 40_000n }));
+    expect((await perfil(c.id)).saldoCents).toBe(0n);
+    // deudaDesde sigue null: no hay deuda
+    expect((await perfil(c.id)).deudaDesde).toBeNull();
+
+    // Opera 1 centavo más: ahora tiene deuda, el reloj arranca
+    await new Promise((r) => setTimeout(r, 50));
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 1_000n }));
+    const p = await perfil(c.id);
+    expect(p.saldoCents).toBe(1_000n);
+    expect(p.deudaDesde).not.toBeNull();
+
+    // Semáforo: 1 día = 0 (verde por días), pct = 1000/200000 = 0.005 (verde)
+    const r = await semaforo.calcular(c.id);
+    expect(r.dias).toBe(0);
+    expect(r.estado).toBe('verde');
+  });
+
+  test('Saldo a favor 4 — anular operación que dejó saldo a favor: el reverso puede dejar saldo positivo y deudaDesde se reconstruye', async () => {
+    // Cargo 60.000, abono 100.000 → saldo -40.000.
+    // Anular el abono: saldo vuelve a 60.000, deudaDesde reconstruye al cargo.
+    const c = await crearCajero({ limiteCents: 200_000n });
+
+    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
+    const fechaCargo = (await perfil(c.id)).deudaDesde!;
+
+    const { cobro } = await ledger.registrarCobro(cobroDto({ cajeroId: c.id, montoCents: 100_000n }));
+    expect((await perfil(c.id)).saldoCents).toBe(-40_000n);
+    expect((await perfil(c.id)).deudaDesde).toBeNull();
+
+    // Anular el cobro
+    await ledger.anular('cobro', cobro.id, 'anulo abono que dejó saldo a favor', ACTOR);
+
+    const p = await perfil(c.id);
+    expect(p.saldoCents).toBe(60_000n);
+    expect(p.deudaDesde).not.toBeNull();
+    // deudaDesde vuelve al cargo original
+    expect(p.deudaDesde!.getTime()).toBe(fechaCargo.getTime());
   });
 });

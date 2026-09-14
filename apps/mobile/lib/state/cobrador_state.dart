@@ -18,8 +18,9 @@ class CobradorDataError extends CobradorDataState {
 }
 
 class CobradorDataLoaded<T> extends CobradorDataState {
-  const CobradorDataLoaded(this.data);
+  const CobradorDataLoaded(this.data, {this.isRefreshing = false});
   final T data;
+  final bool isRefreshing;
 }
 
 // ─────────────────────────── Cajeros ───────────────────────────
@@ -30,14 +31,29 @@ class CajerosCobradorNotifier extends StateNotifier<CobradorDataState> {
   final CobradorApi api;
 
   Future<void> cargar() async {
-    state = const CobradorDataLoading();
+    final anterior = state is CobradorDataLoaded
+        ? (state as CobradorDataLoaded).data
+        : null;
+    if (anterior != null) {
+      state = CobradorDataLoaded<List<CajeroCobradorDto>>(anterior as List<CajeroCobradorDto>, isRefreshing: true);
+    } else {
+      state = const CobradorDataLoading();
+    }
     try {
       final lista = await api.cajeros();
       state = CobradorDataLoaded<List<CajeroCobradorDto>>(lista);
     } on DioException catch (e) {
-      state = CobradorDataError(e.message ?? 'No pudimos cargar los cajeros.');
+      if (anterior != null) {
+        state = CobradorDataLoaded<List<CajeroCobradorDto>>(anterior as List<CajeroCobradorDto>, isRefreshing: false);
+      } else {
+        state = CobradorDataError(e.message ?? 'No pudimos cargar los cajeros.');
+      }
     } catch (e) {
-      state = const CobradorDataError('No pudimos cargar los cajeros.');
+      if (anterior != null) {
+        state = CobradorDataLoaded<List<CajeroCobradorDto>>(anterior as List<CajeroCobradorDto>, isRefreshing: false);
+      } else {
+        state = const CobradorDataError('No pudimos cargar los cajeros.');
+      }
     }
   }
 }
@@ -56,14 +72,29 @@ class CierreActualNotifier extends StateNotifier<CobradorDataState> {
   final CobradorApi api;
 
   Future<void> cargar() async {
-    state = const CobradorDataLoading();
+    final anterior = state is CobradorDataLoaded
+        ? (state as CobradorDataLoaded).data
+        : null;
+    if (anterior != null) {
+      state = CobradorDataLoaded<CierreDto>(anterior as CierreDto, isRefreshing: true);
+    } else {
+      state = const CobradorDataLoading();
+    }
     try {
       final cierre = await api.cierreActual();
       state = CobradorDataLoaded<CierreDto>(cierre);
     } on DioException catch (e) {
-      state = CobradorDataError(e.message ?? 'No pudimos cargar tu día.');
+      if (anterior != null) {
+        state = CobradorDataLoaded<CierreDto>(anterior as CierreDto, isRefreshing: false);
+      } else {
+        state = CobradorDataError(e.message ?? 'No pudimos cargar tu día.');
+      }
     } catch (e) {
-      state = const CobradorDataError('No pudimos cargar tu día.');
+      if (anterior != null) {
+        state = CobradorDataLoaded<CierreDto>(anterior as CierreDto, isRefreshing: false);
+      } else {
+        state = const CobradorDataError('No pudimos cargar tu día.');
+      }
     }
   }
 }
@@ -88,7 +119,22 @@ class CierresNotifier extends StateNotifier<CobradorDataState> {
   Future<void> cargar() async {
     _currentPage = 1;
     _allItems = [];
-    state = const CobradorDataLoading();
+    final anterior = state is CobradorDataLoaded
+        ? (state as CobradorDataLoaded).data
+        : null;
+    if (anterior != null) {
+      state = CobradorDataLoaded<({
+        List<CierreDto> items,
+        int total,
+        bool hasMore
+      })>(anterior as ({
+        List<CierreDto> items,
+        int total,
+        bool hasMore
+      }), isRefreshing: true);
+    } else {
+      state = const CobradorDataLoading();
+    }
     await _cargarPagina();
   }
 
@@ -99,6 +145,9 @@ class CierresNotifier extends StateNotifier<CobradorDataState> {
   }
 
   Future<void> _cargarPagina() async {
+    final anterior = state is CobradorDataLoaded
+        ? (state as CobradorDataLoaded).data
+        : null;
     try {
       final pagina = await api.cierres(page: _currentPage, limit: _limit);
       _allItems = [..._allItems, ...pagina.items];
@@ -113,9 +162,33 @@ class CierresNotifier extends StateNotifier<CobradorDataState> {
         hasMore: _allItems.length < _total,
       ));
     } on DioException catch (e) {
-      state = CobradorDataError(e.message ?? 'No pudimos cargar los cierres.');
+      if (anterior != null) {
+        state = CobradorDataLoaded<({
+          List<CierreDto> items,
+          int total,
+          bool hasMore
+        })>(anterior as ({
+          List<CierreDto> items,
+          int total,
+          bool hasMore
+        }), isRefreshing: false);
+      } else {
+        state = CobradorDataError(e.message ?? 'No pudimos cargar los cierres.');
+      }
     } catch (e) {
-      state = const CobradorDataError('No pudimos cargar los cierres.');
+      if (anterior != null) {
+        state = CobradorDataLoaded<({
+          List<CierreDto> items,
+          int total,
+          bool hasMore
+        })>(anterior as ({
+          List<CierreDto> items,
+          int total,
+          bool hasMore
+        }), isRefreshing: false);
+      } else {
+        state = const CobradorDataError('No pudimos cargar los cierres.');
+      }
     }
   }
 }

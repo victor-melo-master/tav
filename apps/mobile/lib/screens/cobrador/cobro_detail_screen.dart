@@ -79,6 +79,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             Expanded(
               child: TavLoadState(
                 isLoading: cierreState is CobradorDataLoading,
+                isRefreshing: cierreState is CobradorDataLoaded ? cierreState.isRefreshing : false,
                 error: cierreState is CobradorDataError
                     ? cierreState.message
                     : (cobro == null && cierreState is! CobradorDataLoading
@@ -172,7 +173,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   ),
                   const SizedBox(height: 10),
                   TavMoneyDisplay(
-                    cents: cobro.montoUsdCents,
+                    cents: cobro.montoBaseCents,
                     color: cobro.anulado ? TavColors.ink4 : TavColors.ink,
                     style: TavText.moneyDisplay.copyWith(fontSize: 30),
                     fitted: true,
@@ -295,7 +296,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   int _deudaAntes(CobroDto cobro, List<CajeroCobradorDto> cajeros) {
     final cajero = cajeros.where((c) => c.id == cobro.cajeroId).firstOrNull;
     if (cajero == null) return 0;
-    return cajero.saldoCents + cobro.montoUsdCents;
+    return cajero.saldoCents + cobro.montoBaseCents;
   }
 
   int _deudaDespues(CobroDto cobro, List<CajeroCobradorDto> cajeros) {

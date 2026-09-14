@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Check, X, Loader2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
-import { usd, formatFecha } from '@/lib/format';
+import { gyd, formatFecha } from '@/lib/format';
 import type { AmpliacionCredito, EstadoAmpliacion } from '@/lib/types';
 import { PageHeader, PageContent } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -143,7 +143,7 @@ export default function AmpliacionesPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-semibold">
-                      {usd(a.montoCents)}
+                      {gyd(a.montoCents)}
                     </TableCell>
                     <TableCell className="max-w-[300px] text-tav-ink-2">
                       <span className="line-clamp-2">{a.motivo}</span>
@@ -249,7 +249,7 @@ function ResolverDialog({
             {accion === 'aprobar' ? 'Aprobar ampliación' : 'Rechazar ampliación'}
           </DialogTitle>
           <DialogDescription>
-            {ampliacion?.cajero?.usuario.nombre} · {ampliacion ? usd(ampliacion.montoCents) : ''}
+            {ampliacion?.cajero?.usuario.nombre} · {ampliacion ? gyd(ampliacion.montoCents) : ''}
           </DialogDescription>
         </DialogHeader>
 

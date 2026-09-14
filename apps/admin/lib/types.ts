@@ -15,14 +15,15 @@ export type EstadoOperacion =
   | 'observada'
   | 'rechazada'
   | 'anulada';
-export type MetodoCobro = 'efectivo_usd' | 'bolivares' | 'pago_movil' | 'usdt';
+export type MetodoCobro = 'efectivo_gyd' | 'efectivo_usd' | 'bolivares' | 'pago_movil' | 'usdt';
 export type TipoMovimiento = 'cargo' | 'abono' | 'reverso_cargo' | 'reverso_abono' | 'ajuste';
 
 export interface UsuarioPublico {
   id: string;
   rol: Rol;
   nombre: string;
-  telefono: string;
+  email: string;
+  telefono?: string | null;
   documento?: string | null;
   activo: boolean;
   ultimaVezAt?: string | null;
@@ -58,7 +59,8 @@ export interface RefreshResponse {
 export interface CajeroLista {
   id: string;
   nombre: string;
-  telefono: string;
+  email: string;
+  telefono?: string | null;
   zona?: string | null;
   saldoCents: string;
   limiteCents: string;
@@ -87,7 +89,7 @@ export interface Movimiento {
   seq: string;
   cajeroId: string;
   tipo: TipoMovimiento;
-  montoUsdCents: string;
+  montoCents: string;
   saldoDespues: string;
   origenTipo: string;
   origenId: string;
@@ -123,7 +125,7 @@ export interface Operacion {
 export interface AmpliacionCredito {
   id: string;
   cajeroId: string;
-  cajero?: { usuarioId: string; usuario: { nombre: string; telefono: string } } | null;
+  cajero?: { usuarioId: string; usuario: { nombre: string; email: string; telefono?: string | null } } | null;
   montoCents: string;
   motivo: string;
   estado: EstadoAmpliacion;
@@ -137,7 +139,8 @@ export interface AmpliacionCredito {
 export interface FichaCajero {
   id: string;
   nombre: string;
-  telefono: string;
+  email: string;
+  telefono?: string | null;
   documento?: string | null;
   zona?: string | null;
   direccion?: string | null;
@@ -160,13 +163,13 @@ export interface Cobro {
   folio: string;
   clientUuid: string;
   cajeroId: string;
-  cajero?: { usuarioId: string; usuario: { nombre: string; telefono: string } } | null;
+  cajero?: { usuarioId: string; usuario: { nombre: string; email: string; telefono?: string | null } } | null;
   cobradorId?: string | null;
   metodo: MetodoCobro;
   montoCents: string;
   moneda: string;
   tasaAplicada?: string | null;
-  montoUsdCents: string;
+  montoBaseCents: string;
   esEfectivo: boolean;
   cierreId?: string | null;
   comprobanteUrl?: string | null;
@@ -181,10 +184,11 @@ export interface Cobro {
 export interface Cierre {
   id: string;
   cobradorId: string;
-  cobrador?: { usuarioId: string; usuario: { nombre: string; telefono: string } } | null;
+  cobrador?: { usuarioId: string; usuario: { nombre: string; email: string; telefono?: string | null } } | null;
   fecha: string;
   totalRegistradoCents: string;
-  efectivoDeclaradoCents: string;
+  efectivoGydDeclaradoCents: string;
+  efectivoUsdDeclaradoCents: string;
   digitalCents: string;
   estado: EstadoCierre;
   entregadoA?: string | null;
@@ -192,8 +196,10 @@ export interface Cierre {
   enviadoAt?: string | null;
   verificadoAt?: string | null;
   verificadoPorId?: string | null;
-  efectivoRecibidoCents?: string | null;
-  diferenciaCents?: string | null;
+  efectivoGydRecibidoCents?: string | null;
+  efectivoUsdRecibidoCents?: string | null;
+  diferenciaGydCents?: string | null;
+  diferenciaUsdCents?: string | null;
   notaAdmin?: string | null;
   cobros?: Cobro[];
   cobrosCount?: number;
@@ -216,6 +222,45 @@ export interface Tasa {
   creadaPorId: string;
 }
 
+// ──────────────────── TASAS POR CORREDOR (Fase 9) ────────────────────
+
+export interface PublicacionTasaItem {
+  id: string;
+  publicacionId: string;
+  corredorId: string;
+  corredor?: { id: string; paisNombre: string; moneda: string; monedaNombre: string; formaEntregaNombre: string };
+  pataDestino: string;
+  margen: string;
+  tasaCotizada: string;
+}
+
+export interface PublicacionTasas {
+  id: string;
+  pataBase: string;
+  publicadaPorId: string;
+  publicadaAt: string;
+  items: PublicacionTasaItem[];
+}
+
+export interface PublicarTasaItemPayload {
+  corredorId: string;
+  pataDestino: string;
+  margen: string;
+}
+
+export interface PublicarTasasPayload {
+  pataBase: string;
+  items: PublicarTasaItemPayload[];
+}
+
+export interface AvisoPublicacion {
+  tipo: 'corredor_omitido' | 'desviacion_pata_base' | 'desviacion_pata_destino' | 'desviacion_margen';
+  corredorId: string | null;
+  antes: string | null;
+  ahora: string | null;
+  pct: string | null;
+}
+
 // ─────────────────────────── TABLERO ───────────────────────────
 
 export interface Resumen {
@@ -235,7 +280,7 @@ export interface RegistrarCobroAdminPayload {
   cajeroId: string;
   metodo: MetodoCobro;
   montoCents: string;
-  moneda: 'USD' | 'BS' | 'USDT';
+  moneda: 'GYD' | 'USD' | 'BS' | 'USDT';
   tasaAplicada?: string;
   comprobanteUrl?: string;
   nota?: string;
@@ -244,4 +289,102 @@ export interface RegistrarCobroAdminPayload {
 export interface CobroAdminRespuesta {
   cobro: Cobro;
   yaExistia: boolean;
+}
+
+// ─────────────────────────── CAJAS (Tesorería) ───────────────────────────
+
+export type TipoMovimientoCaja =
+  | 'apertura'
+  | 'recarga'
+  | 'ingreso'
+  | 'transferencia'
+  | 'pago'
+  | 'reverso_apertura'
+  | 'reverso_pago'
+  | 'ajuste';
+
+export type TipoAlertaCaja = 'saldo_bajo' | 'saldo_negativo';
+
+export interface Caja {
+  id: string;
+  corredorId: string | null;
+  esMadre: boolean;
+  moneda: string;
+  saldoCents: string;
+  umbralAlertaCents: string | null;
+  creadaAt: string;
+}
+
+export interface MovimientoCaja {
+  id: string;
+  seq: string;
+  cajaId: string;
+  tipo: TipoMovimientoCaja;
+  montoCents: string;
+  saldoDespues: string;
+  cajaMadreId?: string | null;
+  montoMadreCents?: string | null;
+  tasaConversion?: string | null;
+  origenTipo: string;
+  origenId: string;
+  clientUuid: string;
+  motivo?: string | null;
+  registradoPorId: string;
+  creadoAt: string;
+}
+
+export interface PaginaMovimientosCaja {
+  items: MovimientoCaja[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface AlertaCaja {
+  cajaId: string;
+  tipo: TipoAlertaCaja;
+  saldoCents: string;
+  umbralAlertaCents: string | null;
+  moneda: string;
+  corredorDescripcion: string;
+}
+
+export interface IngresarCajaMadrePayload {
+  clientUuid: string;
+  cajaMadreId: string;
+  montoCents: string;
+  motivo: string;
+}
+
+export interface AbrirCajaPayload {
+  clientUuid: string;
+  cajaId: string;
+  cajaMadreId: string;
+  montoMadreCents: string;
+  montoDestinoCents: string;
+  tasaConversion: string;
+}
+
+export interface AnularAperturaPayload {
+  movimientoCajaId: string;
+  motivo: string;
+}
+
+export interface IngresoCajaMadreRespuesta {
+  caja: Caja;
+  movimiento: MovimientoCaja;
+  yaExistia: boolean;
+}
+
+export interface AperturaCajaRespuesta {
+  cajaDestino: Caja;
+  cajaMadre: Caja;
+  movimientoDestino: MovimientoCaja;
+  movimientoMadre: MovimientoCaja;
+  yaExistia: boolean;
+}
+
+export interface AnulacionAperturaRespuesta {
+  movimientoDestino: MovimientoCaja;
+  movimientoMadre: MovimientoCaja;
 }

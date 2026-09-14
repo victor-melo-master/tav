@@ -10,6 +10,9 @@ import { CajeroModule } from './cajero/cajero.module';
 import { CobradorModule } from './cobrador/cobrador.module';
 import { TasaModule } from './tasa/tasa.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { CajasModule } from './cajas/cajas.module';
+import { CorredoresModule } from './corredores/corredores.module';
+import { PagadorModule } from './pagador/pagador.module';
 
 @Module({
   imports: [
@@ -22,6 +25,9 @@ import { UploadsModule } from './uploads/uploads.module';
     CobradorModule,
     TasaModule,
     UploadsModule,
+    CajasModule,
+    CorredoresModule,
+    PagadorModule,
   ],
   controllers: [AppController],
   providers: [AppService],

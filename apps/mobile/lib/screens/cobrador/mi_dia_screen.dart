@@ -65,6 +65,7 @@ class _MiDiaScreenState extends ConsumerState<MiDiaScreen> {
               SliverToBoxAdapter(
                 child: TavLoadState(
                   isLoading: cierreState is CobradorDataLoading,
+                  isRefreshing: cierreState is CobradorDataLoaded ? cierreState.isRefreshing : false,
                   error: cierreState is CobradorDataError
                       ? cierreState.message
                       : null,
@@ -156,7 +157,7 @@ class _MiDiaScreenState extends ConsumerState<MiDiaScreen> {
     final cierre = cierreState.data;
     final activos = cierre.cobrosActivos;
     final total = cierre.totalRegistradoCents;
-    final efectivo = cierre.efectivoCents;
+    final efectivo = cierre.efectivoTotalGydCents;
     final digital = cierre.digitalCalculadoCents;
 
     // Cajeros visitados = cajeros distintos con cobro hoy.
@@ -369,6 +370,7 @@ class _MiDiaScreenState extends ConsumerState<MiDiaScreen> {
           padding: const EdgeInsets.symmetric(horizontal: TavSpace.xl),
           child: TavLoadState(
             isLoading: cajerosState is CobradorDataLoading,
+            isRefreshing: cajerosState is CobradorDataLoaded ? cajerosState.isRefreshing : false,
             error: cajerosState is CobradorDataError
                 ? cajerosState.message
                 : null,

@@ -11,9 +11,9 @@ import '../theme/tav_radius.dart';
 import '../theme/tav_space.dart';
 import '../theme/tav_text.dart';
 
-/// Pantalla de login con teléfono y contraseña.
+/// Pantalla de login con correo y contraseña.
 ///
-/// Es el primer ingreso. La API valida teléfono + contraseña con argon2.
+/// Es el primer ingreso. La API valida correo + contraseña con argon2.
 /// Después del login, si no hay PIN establecido, va a /pin-setup.
 /// Si hay PIN, va al shell del rol correspondiente.
 ///
@@ -30,40 +30,33 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _telefonoController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _loading = false;
   String? _error;
 
-  /// Prefijo de país fijo. En el prototipo es un selector, pero por ahora
-  /// solo operamos en Venezuela.
-  static const _prefijoPais = '+58';
-
   @override
   void dispose() {
-    _telefonoController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
-    final numero = _telefonoController.text.trim();
+    final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    if (numero.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Ingresa tu teléfono y contraseña.');
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Ingresa tu correo y contraseña.');
       return;
     }
-
-    // El teléfono que se envía a la API es prefijo + número, sin espacios.
-    final telefono = '$_prefijoPais$numero';
 
     setState(() {
       _loading = true;
       _error = null;
     });
 
-    await ref.read(authProvider.notifier).login(telefono, password);
+    await ref.read(authProvider.notifier).login(email, password);
 
     if (!mounted) return;
     setState(() => _loading = false);
@@ -94,7 +87,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 28),
-                    _buildCampoTelefono(),
+                    _buildCampoEmail(),
                     const SizedBox(height: TavSpace.md),
                     TavField(
                       label: 'Contraseña',
@@ -177,7 +170,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Cambia USDT y dólares a bolívares con la tasa del día.',
+                'Cambia USDT, dólares y bolívares a guyaneses con la tasa del día.',
                 style: TavText.body.copyWith(
                   color: const Color(0xFFA9C6EB),
                   height: 1.6,
@@ -190,69 +183,47 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  /// Campo de teléfono con selector de país separado.
-  /// Replica s-reg-phone: selector de 110px fijo + campo del número, gap 9px.
-  Widget _buildCampoTelefono() {
+  /// Campo de correo para el login.
+  Widget _buildCampoEmail() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Número de teléfono',
+          'Correo electrónico',
           style: TavText.label.copyWith(color: TavColors.ink2),
         ),
         const SizedBox(height: 6),
-        Row(
-          children: [
-            // Selector de país — 110px fijo.
-            Container(
-              width: 110,
-              height: 50,
-              decoration: BoxDecoration(
-                color: TavColors.surface,
+        SizedBox(
+          height: 50,
+          child: TextField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            textCapitalization: TextCapitalization.none,
+            style: TavText.body,
+            decoration: InputDecoration(
+              hintText: 'tu@correo.com',
+              hintStyle: TavText.body.copyWith(color: TavColors.ink3),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: TavSpace.md,
+              ),
+              filled: true,
+              fillColor: TavColors.surface,
+              border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(TavRadius.field),
-                border: Border.all(color: TavColors.line),
+                borderSide: const BorderSide(color: TavColors.line),
               ),
-              alignment: Alignment.center,
-              child: const Text(
-                '🇻🇪 +58',
-                style: TextStyle(fontSize: 15, color: TavColors.ink),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(TavRadius.field),
+                borderSide: const BorderSide(color: TavColors.line),
               ),
-            ),
-            const SizedBox(width: 9),
-            // Campo del número — ocupa el resto.
-            Expanded(
-              child: SizedBox(
-                height: 50,
-                child: TextField(
-                  controller: _telefonoController,
-                  keyboardType: TextInputType.phone,
-                  style: TavText.body,
-                  decoration: InputDecoration(
-                    hintText: '414 855 2210',
-                    hintStyle: TavText.body.copyWith(color: TavColors.ink3),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: TavSpace.md,
-                    ),
-                    filled: true,
-                    fillColor: TavColors.surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(TavRadius.field),
-                      borderSide: const BorderSide(color: TavColors.line),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(TavRadius.field),
-                      borderSide: const BorderSide(color: TavColors.line),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(TavRadius.field),
-                      borderSide: const BorderSide(color: TavColors.blue),
-                    ),
-                  ),
-                  onSubmitted: (_) => _login(),
-                ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(TavRadius.field),
+                borderSide: const BorderSide(color: TavColors.blue),
               ),
             ),
-          ],
+            onSubmitted: (_) => _login(),
+          ),
         ),
       ],
     );

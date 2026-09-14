@@ -233,7 +233,7 @@ class CobroRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   TavMoneyDisplay(
-                    cents: cobro.montoUsdCents,
+                    cents: cobro.montoBaseCents,
                     color: cobro.anulado
                         ? TavColors.ink4
                         : TavColors.green600,

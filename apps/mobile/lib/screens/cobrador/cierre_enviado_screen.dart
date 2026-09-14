@@ -176,8 +176,12 @@ class _CierreEnviadoScreenState extends ConsumerState<CierreEnviadoScreen> {
           child: Column(
             children: [
               TavKvRow(
-                  label: 'Declarado en efectivo',
-                  value: formatCents(c.efectivoDeclaradoCents)),
+                  label: 'Efectivo GYD declarado',
+                  value: formatCents(c.efectivoGydDeclaradoCents)),
+              TavKvRow(
+                  label: 'Efectivo USD declarado',
+                  value: formatCents(c.efectivoUsdDeclaradoCents,
+                      currency: TavMoneyCurrency.usd)),
               TavKvRow(
                   label: 'Digital', value: formatCents(c.digitalCents)),
               const TavKvRow(label: 'Entregado a', value: 'Caja Central · Valencia'),
@@ -185,13 +189,6 @@ class _CierreEnviadoScreenState extends ConsumerState<CierreEnviadoScreen> {
           ),
         ),
         const SizedBox(height: TavSpace.lg),
-        TavButton(
-          label: 'Descargar lista en PDF',
-          variant: TavButtonVariant.outline,
-          icon: const Icon(Icons.description_outlined, size: 20),
-          onPressed: () {},
-        ),
-        const SizedBox(height: 4),
         TavButton(
           label: 'Volver a mi día',
           variant: TavButtonVariant.text,

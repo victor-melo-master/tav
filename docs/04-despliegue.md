@@ -64,7 +64,7 @@ Valores a rellenar:
 | `JWT_EXPIRES_IN` | Duración del access token | `15m` |
 | `JWT_REFRESH_EXPIRES_IN` | Duración del refresh token | `30d` |
 | `NODE_ENV` | Entorno | `production` |
-| `CORS_ORIGIN` | Dominio del panel admin (sin slash final) | `https://admin.tudominio.com` |
+| `CORS_ORIGIN` | Orígenes permitidos para CORS: panel admin y localhost de desarrollo (sin slash final) | `https://panel.tav.rolapro.com,http://localhost:3000` |
 
 > **Nunca commitea .env.prod.** Está en `.gitignore`.
 
@@ -254,7 +254,57 @@ ssh tav "curl -f http://127.0.0.1:3001/health"
 curl -f https://api.tav.rolapro.com/health
 ```
 
-## 8. Backup de la base de datos
+## 8. Migraciones que requieren reset de la base
+
+Algunas migraciones cambian la semántica de los datos, no solo la estructura.
+Cuando eso pasa, no se puede migrar in-place: los valores viejos mienten bajo
+el esquema nuevo. La base de producción se resetea y se vuelve a sembrar.
+
+### Fase 9 Bloque 1 — moneda base del libro pasa a GYD
+
+**Migración:** `20260908000000_fase9_bloque1_moneda_base_gyd`
+
+**Por qué hay que resetear:** la migración renombra `montoUsdCents` →
+`montoCents` (Movimiento) y `montoUsdCents` → `montoBaseCents` (Cobro), pero
+**no convierte los valores**. Los valores que ya están en la base son
+centavos de dólar. Si se dejan, un cajero que debía 500 USD aparece debiendo
+500 GYD (≈ 2,5 USD) bajo una columna que dice GYD. El libro deja de cuadrar
+y no hay forma de reconstruirlo sin saber qué fila era USD y cuál GYD.
+
+**Procedimiento (obligatorio antes de desplegar esta migración):**
+
+```bash
+# 1. Hacer backup por si acaso
+docker compose -f docker-compose.prod.yml exec -T db \
+  pg_dump -U tav tav > backup_pre_fase9_gyd_$(date +%Y%m%d).sql
+
+# 2. Entrar al contenedor de la API
+docker compose -f docker-compose.prod.yml exec api sh
+
+# 3. Resetear la base y aplicar migraciones. El seed aborta en producción
+#    por el guarda anti-production (NODE_ENV=production), así que hay que
+#    sobreescribir la variable de entorno para que corra:
+NODE_ENV=development npx prisma migrate reset --force
+
+# 4. Verificar que los saldos cuadran
+npx ts-node prisma/verify.ts
+
+# 5. Salir del contenedor
+exit
+```
+
+> **Advertencia:** `prisma migrate reset` borra todos los datos de la base.
+> Solo se hace cuando la migración cambia la semántica de los valores, no
+> la estructura. Si hay datos de producción que no están en el seed (usuarios
+> reales, operaciones reales), hay que migrarlos a mano después del reset.
+> En el momento de Fase 9, la base de producción todavía no tiene datos
+> reales: el sistema no está en uso. Cuando entre en uso, este procedimiento
+> ya no aplica y la migración de moneda tendría que ser una conversión
+> in-place, no un reset.
+
+---
+
+## 9. Backup de la base de datos
 
 ```bash
 # Backup completo

@@ -13,22 +13,24 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-type Rol = 'cajero' | 'cobrador';
+type Rol = 'cajero' | 'cobrador' | 'pagador';
 
 export default function UsuariosPage() {
   const [rol, setRol] = React.useState<Rol>('cajero');
   const [form, setForm] = React.useState({
     nombre: '',
+    email: '',
     telefono: '',
     password: '',
     documento: '',
     limite: '',
     zona: '',
     direccion: '',
+    pais: '',
     notas: '',
   });
   const [creando, setCreando] = React.useState(false);
-  const [ultimo, setUltimo] = React.useState<{ nombre: string; telefono: string } | null>(null);
+  const [ultimo, setUltimo] = React.useState<{ nombre: string; email: string } | null>(null);
 
   function set(campo: keyof typeof form, valor: string) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -37,9 +39,10 @@ export default function UsuariosPage() {
   const limiteCents = rol === 'cajero' ? parseUserAmountToCents(form.limite) : '0';
   const valido =
     form.nombre.trim() &&
-    form.telefono.trim() &&
+    form.email.trim() &&
     form.password.trim().length >= 4 &&
-    (rol === 'cobrador' || (limiteCents !== null && BigInt(limiteCents) > 0n));
+    (rol !== 'cajero' || (limiteCents !== null && BigInt(limiteCents) > 0n)) &&
+    (rol !== 'pagador' || form.pais.trim().length > 0);
 
   async function crear(e: React.FormEvent) {
     e.preventDefault();
@@ -48,20 +51,23 @@ export default function UsuariosPage() {
     try {
       await api.crearUsuario({
         nombre: form.nombre.trim(),
-        telefono: form.telefono.trim(),
+        email: form.email.trim(),
+        telefono: form.telefono.trim() || undefined,
         rol,
         password: form.password,
         documento: form.documento.trim() || undefined,
         limiteCents: rol === 'cajero' ? limiteCents! : undefined,
         zona: form.zona.trim() || undefined,
         direccion: form.direccion.trim() || undefined,
+        pais: rol === 'pagador' ? form.pais.trim().toUpperCase() : undefined,
         notas: form.notas.trim() || undefined,
       });
-      toast.success(`${rol === 'cajero' ? 'Cajero' : 'Cobrador'} creado`, {
-        description: `${form.nombre.trim()} · ${form.telefono.trim()}`,
+      const rolLabel = rol === 'cajero' ? 'Cajero' : rol === 'cobrador' ? 'Cobrador' : 'Pagador';
+      toast.success(`${rolLabel} creado`, {
+        description: `${form.nombre.trim()} · ${form.email.trim()}`,
       });
-      setUltimo({ nombre: form.nombre.trim(), telefono: form.telefono.trim() });
-      setForm({ nombre: '', telefono: '', password: '', documento: '', limite: '', zona: '', direccion: '', notas: '' });
+      setUltimo({ nombre: form.nombre.trim(), email: form.email.trim() });
+      setForm({ nombre: '', email: '', telefono: '', password: '', documento: '', limite: '', zona: '', direccion: '', pais: '', notas: '' });
     } catch (e2) {
       toast.error(e2 instanceof ApiError ? e2.message : 'No se pudo crear el usuario');
     } finally {
@@ -73,14 +79,14 @@ export default function UsuariosPage() {
     <>
       <PageHeader
         titulo="Usuarios"
-        descripcion="Alta de cajeros y cobradores. Las cuentas las crea el administrador; no hay registro público."
+        descripcion="Alta de cajeros, cobradores y pagadores. Las cuentas las crea el administrador; no hay registro público."
       />
 
       <PageContent className="max-w-2xl">
         {ultimo && (
           <div className="mb-4 flex items-center gap-2 rounded-md bg-tav-green-50 px-4 py-3 text-[13px] text-tav-green-600">
             <Check className="h-4 w-4" />
-            Creado: <b>{ultimo.nombre}</b> · {ultimo.telefono}
+            Creado: <b>{ultimo.nombre}</b> · {ultimo.email}
           </div>
         )}
 
@@ -96,7 +102,7 @@ export default function UsuariosPage() {
               <div className="flex flex-col gap-1.5">
                 <Label>Rol</Label>
                 <div className="flex gap-2">
-                  {(['cajero', 'cobrador'] as Rol[]).map((r) => (
+                  {(['cajero', 'cobrador', 'pagador'] as Rol[]).map((r) => (
                     <button
                       key={r}
                       type="button"
@@ -116,7 +122,8 @@ export default function UsuariosPage() {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Campo label="Nombre" id="nombre" value={form.nombre} onChange={(v) => set('nombre', v)} required />
-                <Campo label="Teléfono" id="telefono" value={form.telefono} onChange={(v) => set('telefono', v)} placeholder="+58 412-0000000" required />
+                <Campo label="Correo" id="email" type="email" value={form.email} onChange={(v) => set('email', v)} placeholder="usuario@tav.rolapro.com" required />
+                <Campo label="Teléfono" id="telefono" value={form.telefono} onChange={(v) => set('telefono', v)} placeholder="+58 412-0000000" />
                 <Campo label="Contraseña" id="password" type="password" value={form.password} onChange={(v) => set('password', v)} required />
                 <Campo label="Documento" id="documento" value={form.documento} onChange={(v) => set('documento', v)} />
               </div>
@@ -143,6 +150,24 @@ export default function UsuariosPage() {
 
               {rol === 'cobrador' && (
                 <Campo label="Zona" id="zona-cob" value={form.zona} onChange={(v) => set('zona', v)} />
+              )}
+
+              {rol === 'pagador' && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="pais">
+                    País (código ISO-3) <span className="text-tav-red-700">*</span>
+                  </Label>
+                  <Input
+                    id="pais"
+                    placeholder="VEN, BRA, COL, DOM, MEX, ECU..."
+                    value={form.pais}
+                    onChange={(e) => set('pais', e.target.value.toUpperCase())}
+                    className="font-mono uppercase"
+                  />
+                  <span className="text-[12px] text-tav-ink-3">
+                    Define qué cola ve el pagador. Debe coincidir con el país de un corredor.
+                  </span>
+                </div>
               )}
 
               <div className="flex flex-col gap-1.5">

@@ -154,7 +154,7 @@ class _AnularCobroScreenState extends ConsumerState<AnularCobroScreen> {
               const SizedBox(width: 11),
               Expanded(
                 child: Text(
-                  'Vas a anular #${cobro.folio} · ${formatCents(cobro.montoUsdCents)}. '
+                  'Vas a anular #${cobro.folio} · ${formatCents(cobro.montoBaseCents)}. '
                   'La deuda del cajero vuelve a subir y tu efectivo en mano baja. '
                   'Esta acción queda registrada con tu nombre y la hora.',
                   style: TavText.caption
@@ -170,7 +170,7 @@ class _AnularCobroScreenState extends ConsumerState<AnularCobroScreen> {
             children: [
               TavKvRow(label: 'Cobro', value: '#${cobro.folio}'),
               TavKvRow(label: 'Cajero', value: nombreCajero),
-              TavKvRow(label: 'Monto', value: formatCents(cobro.montoUsdCents)),
+              TavKvRow(label: 'Monto', value: formatCents(cobro.montoBaseCents)),
               TavKvRow(label: 'Método', value: cobro.metodo.label),
             ],
           ),

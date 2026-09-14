@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,7 +41,7 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
   String? _error;
 
   int _montoCents = 0;
-  MetodoCobro _metodo = MetodoCobro.efectivoUsd;
+  MetodoCobro _metodo = MetodoCobro.efectivoGyd;
   String _quick = 'other';
 
   CajeroCobradorDto? _cajero;
@@ -80,30 +78,32 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
     }
   }
 
-  double? get _tasaUsdBs {
-    final t = _tasas.where((t) => t.par == 'USD_BS').firstOrNull;
+  /// Tasa vigente de la moneda de cobro a GYD. Lee la par `{moneda}_GYD`
+  /// de la lista de tasas que trae la API. Para GYD es 1 (identidad).
+  double? get _tasaMonedaGyd {
+    final par = '${_metodo.moneda}_GYD';
+    final t = _tasas.where((t) => t.par == par).firstOrNull;
     if (t == null) return null;
     return double.tryParse(t.valor);
   }
 
-  int get _montoUsdCents {
+  /// Monto equivalente en la moneda base (GYD). Multiplica por la tasa.
+  int get _montoBaseCents {
     if (_cajero == null || _montoCents == 0) return 0;
-    if (_metodo == MetodoCobro.efectivoUsd || _metodo == MetodoCobro.usdt) {
-      return _montoCents;
-    }
-    final t = _tasaUsdBs;
+    final t = _tasaMonedaGyd;
     if (t == null || t <= 0) return 0;
-    return (_montoCents / t).round();
+    return (_montoCents * t).round();
   }
 
   int get _deudaDespues =>
-      _cajero == null ? 0 : max(0, _cajero!.saldoCents - _montoUsdCents);
+      _cajero == null ? 0 : _cajero!.saldoCents - _montoBaseCents;
 
   bool get _puedeContinuar =>
       _montoCents > 0 &&
-      (_metodo == MetodoCobro.efectivoUsd ||
+      (_metodo == MetodoCobro.efectivoGyd ||
+          _metodo == MetodoCobro.efectivoUsd ||
           _metodo == MetodoCobro.usdt ||
-          _tasaUsdBs != null);
+          _tasaMonedaGyd != null);
 
   @override
   Widget build(BuildContext context) {
@@ -151,11 +151,12 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
   Widget _buildPasoMonto() {
     final c = _cajero!;
     final chip = semaforoChipState(c.semaforo);
-    final esBs = _metodo == MetodoCobro.bolivares || _metodo == MetodoCobro.pagoMovil;
-    final symbol = esBs ? 'Bs' : '\$';
-    final currency = _metodo == MetodoCobro.bolivares || _metodo == MetodoCobro.pagoMovil
-        ? TavMoneyCurrency.bsd
-        : TavMoneyCurrency.usd;
+    final currency = switch (_metodo) {
+      MetodoCobro.efectivoGyd => TavMoneyCurrency.gyd,
+      MetodoCobro.efectivoUsd => TavMoneyCurrency.usd,
+      MetodoCobro.usdt => TavMoneyCurrency.usdt,
+      MetodoCobro.bolivares || MetodoCobro.pagoMovil => TavMoneyCurrency.bsd,
+    };
 
     return Column(
       children: [
@@ -211,22 +212,11 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
                           style:
                               TavText.caption.copyWith(color: TavColors.ink3)),
                       const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(symbol,
-                              style: TavText.moneyDisplay.copyWith(
-                                  fontSize: 24, color: TavColors.blue)),
-                          const SizedBox(width: 4),
-                          TavMoneyDisplay(
-                            cents: _montoCents,
-                            currency: currency,
-                            style: TavText.moneyDisplay
-                                .copyWith(fontSize: 34, color: TavColors.blue),
-                          ),
-                        ],
+                      TavMoneyDisplay(
+                        cents: _montoCents,
+                        currency: currency,
+                        style: TavText.moneyDisplay
+                            .copyWith(fontSize: 34, color: TavColors.blue),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -303,8 +293,10 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
   }
 
   String _hintMetodo() => switch (_metodo) {
+        MetodoCobro.efectivoGyd =>
+            'Efectivo en guyanés. Suma a lo que debes entregar al cierre del día.',
         MetodoCobro.efectivoUsd =>
-            'El efectivo suma a lo que debes entregar al cierre del día.',
+            'Efectivo en dólares. Suma a lo que debes entregar al cierre del día.',
         MetodoCobro.bolivares =>
             'Transferencia en bolívares. No suma a tu efectivo, se verifica en cuenta.',
         MetodoCobro.pagoMovil =>
@@ -316,22 +308,21 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
   String _textoDeuda() {
     if (_cajero == null || _montoCents == 0) return 'Selecciona un monto';
     final saldo = _cajero!.saldoCents;
-    final usd = _montoUsdCents;
+    final base = _montoBaseCents;
     final esBs = _metodo == MetodoCobro.bolivares || _metodo == MetodoCobro.pagoMovil;
-    final equiv = esBs ? '\nEquivale a ${formatCents(usd)}' : '';
-    if (usd > saldo) {
-      return 'Excede la deuda en ${formatCents(usd - saldo)}$equiv';
+    final equiv = esBs ? '\nEquivale a ${formatCents(base)}' : '';
+    if (base > saldo) {
+      return 'Quedará con ${formatCents(base - saldo)} a favor$equiv';
     }
-    if (usd == saldo) {
+    if (base == saldo) {
       return 'Salda la deuda completa ✓$equiv';
     }
-    return 'Le quedarían ${formatCents(saldo - usd)}$equiv';
+    return 'Le quedarían ${formatCents(saldo - base)}$equiv';
   }
 
   Color _colorDeuda() {
     if (_montoCents == 0) return TavColors.ink3;
-    if (_montoUsdCents > _cajero!.saldoCents) return TavColors.red;
-    if (_montoUsdCents == _cajero!.saldoCents) return TavColors.green600;
+    if (_montoBaseCents == _cajero!.saldoCents) return TavColors.green600;
     return TavColors.ink3;
   }
 
@@ -397,17 +388,19 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
     if (_cajero == null) return;
     final saldo = _cajero!.saldoCents;
     final esBs = _metodo == MetodoCobro.bolivares || _metodo == MetodoCobro.pagoMovil;
-    final t = _tasaUsdBs;
+    final t = _tasaMonedaGyd;
     setState(() {
       _quick = tipo;
       switch (tipo) {
         case 'all':
+          // Para saldar toda la deuda, el monto en la moneda recibida
+          // es deuda / tasa (inverso de la conversión).
           _montoCents = esBs
-              ? (t == null ? 0 : (saldo * t).round())
+              ? (t == null ? 0 : (saldo / t).round())
               : saldo;
         case 'half':
           _montoCents = esBs
-              ? (t == null ? 0 : (saldo * t / 2).round())
+              ? (t == null ? 0 : (saldo / t / 2).round())
               : saldo ~/ 2;
         default:
           _montoCents = 0;
@@ -418,12 +411,12 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
   // Paso 1: confirmación
   Widget _buildPasoConfirmar() {
     final c = _cajero!;
-    final montoUsd = _montoUsdCents;
+    final montoBase = _montoBaseCents;
     final deudaDespues = _deudaDespues;
     final cierre = _cierreActual();
     final efectivoPasaA = _metodo.esEfectivo
-        ? (cierre?.efectivoCents ?? 0) + montoUsd
-        : (cierre?.efectivoCents ?? 0);
+        ? (cierre?.efectivoTotalGydCents ?? 0) + montoBase
+        : (cierre?.efectivoTotalGydCents ?? 0);
 
     return Column(
       children: [
@@ -452,7 +445,7 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
                               .copyWith(color: const Color(0xFF9EC0EC))),
                       const SizedBox(height: 5),
                       TavMoneyDisplay(
-                        cents: montoUsd,
+                        cents: montoBase,
                         style: TavText.moneyDisplay
                             .copyWith(fontSize: 32, color: TavColors.surface),
                         color: TavColors.surface,
@@ -472,8 +465,10 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
                     TavKvRow(label: 'Cajero', value: c.nombre),
                     TavKvRow(label: 'Deuda antes', value: formatCents(c.saldoCents)),
                     TavKvRow(
-                      label: 'Deuda después',
-                      value: formatCents(deudaDespues),
+                      label: deudaDespues < 0 ? 'Saldo a favor después' : 'Deuda después',
+                      value: deudaDespues < 0
+                          ? formatCents(deudaDespues.abs())
+                          : formatCents(deudaDespues),
                       valueColor: TavColors.green600,
                       divider: true,
                     ),
@@ -543,10 +538,11 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
 
   Future<void> _confirmar() async {
     if (_cajero == null || _montoCents == 0) return;
-    final esBs = _metodo == MetodoCobro.bolivares || _metodo == MetodoCobro.pagoMovil;
-    final t = _tasaUsdBs;
-    if (esBs && (t == null || t <= 0)) {
-      _toast('No hay tasa vigente para bolívares.');
+    final requiereTasa = _metodo != MetodoCobro.efectivoGyd &&
+        _metodo != MetodoCobro.efectivoUsd;
+    final t = _tasaMonedaGyd;
+    if (requiereTasa && (t == null || t <= 0)) {
+      _toast('No hay tasa vigente para ${_metodo.moneda}.');
       return;
     }
     setState(() => _guardando = true);
@@ -558,7 +554,7 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
         metodo: _metodo.valor,
         montoCents: _montoCents.toString(),
         moneda: _metodo.moneda,
-        tasaAplicada: esBs ? t!.toStringAsFixed(6) : null,
+        // La tasa la lee el servicio de la base; no la enviamos.
         nota: _notaCtrl.text.isEmpty ? null : _notaCtrl.text,
       );
       final result = await api.registrarCobro(req);
@@ -583,8 +579,8 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
     final c = _cajero!;
     final cobro = _cobroCreado!;
     final cierre = _cierreActual();
-    final efectivo = cierre?.efectivoCents ?? 0;
-    final deudaCajero = c.saldoCents - cobro.montoUsdCents;
+    final efectivo = cierre?.efectivoTotalGydCents ?? 0;
+    final deudaCajero = c.saldoCents - cobro.montoBaseCents;
 
     return Column(
       children: [
@@ -635,10 +631,13 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
                   children: [
                     TavKvRow(label: 'N° de registro', value: '#${cobro.folio}'),
                     TavKvRow(label: 'Cajero', value: c.nombre),
-                    TavKvRow(label: 'Monto', value: formatCents(cobro.montoUsdCents)),
+                    TavKvRow(label: 'Monto', value: formatCents(cobro.montoBaseCents)),
                     TavKvRow(label: 'Método', value: cobro.metodo.label),
                     TavKvRow(label: 'Hora', value: horaAmPm(cobro.creadoAt)),
-                    TavKvRow(label: 'Deuda del cajero', value: formatCents(max(0, deudaCajero))),
+                    TavKvRow(
+                      label: deudaCajero < 0 ? 'Saldo a favor del cajero' : 'Deuda del cajero',
+                      value: formatCents(deudaCajero.abs()),
+                    ),
                     TavKvRow(
                       label: 'Efectivo en mano',
                       value: formatCents(efectivo),
@@ -674,19 +673,10 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(
               TavSpace.xl, 0, TavSpace.xl, TavSpace.xl),
-          child: Column(
-            children: [
-              TavButton(
-                label: 'Siguiente cajero',
-                onPressed: () => context.push('/cobrador/cajeros'),
-              ),
-              const SizedBox(height: 4),
-              TavButton(
-                label: 'Volver a mi día',
-                variant: TavButtonVariant.text,
-                onPressed: () => context.go('/cobrador/mi-dia'),
-              ),
-            ],
+          child: TavButton(
+            label: 'Volver a mi día',
+            variant: TavButtonVariant.text,
+            onPressed: () => context.go('/cobrador/mi-dia'),
           ),
         ),
       ],
@@ -816,17 +806,20 @@ class _MethodSelector extends StatelessWidget {
                       : null,
                 ),
                 child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(_icono(m),
-                          color: on ? TavColors.ink : TavColors.ink3, size: 16),
-                      const SizedBox(width: 5),
-                      Text(m.label,
-                          style: TavText.label.copyWith(
-                              fontSize: 11.5,
-                              color: on ? TavColors.ink : TavColors.ink3)),
-                    ],
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_icono(m),
+                            color: on ? TavColors.ink : TavColors.ink3, size: 16),
+                        const SizedBox(width: 5),
+                        Text(m.label,
+                            style: TavText.label.copyWith(
+                                fontSize: 11.5,
+                                color: on ? TavColors.ink : TavColors.ink3)),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -838,6 +831,7 @@ class _MethodSelector extends StatelessWidget {
   }
 
   IconData _icono(MetodoCobro m) => switch (m) {
+        MetodoCobro.efectivoGyd => Icons.payments_outlined,
         MetodoCobro.efectivoUsd => Icons.payments_outlined,
         MetodoCobro.bolivares => Icons.account_balance_wallet_outlined,
         MetodoCobro.pagoMovil => Icons.phone_iphone_outlined,

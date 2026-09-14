@@ -76,6 +76,7 @@ class _CajeroDetailScreenState extends ConsumerState<CajeroDetailScreen> {
             Expanded(
               child: TavLoadState(
                 isLoading: cajerosState is CobradorDataLoading,
+                isRefreshing: cajerosState is CobradorDataLoaded ? cajerosState.isRefreshing : false,
                 error: cajerosState is CobradorDataError
                     ? cajerosState.message
                     : (cajero == null && cajerosState is! CobradorDataLoading

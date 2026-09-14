@@ -18,8 +18,9 @@ class CajeroDataError extends CajeroDataState {
 }
 
 class CajeroDataLoaded<T> extends CajeroDataState {
-  const CajeroDataLoaded(this.data);
+  const CajeroDataLoaded(this.data, {this.isRefreshing = false});
   final T data;
+  final bool isRefreshing;
 }
 
 // ─────────────────────────── Resumen ───────────────────────────
@@ -30,14 +31,29 @@ class ResumenNotifier extends StateNotifier<CajeroDataState> {
   final CajeroApi api;
 
   Future<void> cargar() async {
-    state = const CajeroDataLoading();
+    final anterior = state is CajeroDataLoaded
+        ? (state as CajeroDataLoaded).data
+        : null;
+    if (anterior != null) {
+      state = CajeroDataLoaded<ResumenDto>(anterior as ResumenDto, isRefreshing: true);
+    } else {
+      state = const CajeroDataLoading();
+    }
     try {
       final resumen = await api.resumen();
       state = CajeroDataLoaded<ResumenDto>(resumen);
     } on DioException catch (e) {
-      state = CajeroDataError(e.message ?? 'No pudimos cargar tu resumen.');
+      if (anterior != null) {
+        state = CajeroDataLoaded<ResumenDto>(anterior as ResumenDto, isRefreshing: false);
+      } else {
+        state = CajeroDataError(e.message ?? 'No pudimos cargar tu resumen.');
+      }
     } catch (e) {
-      state = const CajeroDataError('No pudimos cargar tu resumen.');
+      if (anterior != null) {
+        state = CajeroDataLoaded<ResumenDto>(anterior as ResumenDto, isRefreshing: false);
+      } else {
+        state = const CajeroDataError('No pudimos cargar tu resumen.');
+      }
     }
   }
 }
@@ -56,14 +72,29 @@ class TasasNotifier extends StateNotifier<CajeroDataState> {
   final CajeroApi api;
 
   Future<void> cargar() async {
-    state = const CajeroDataLoading();
+    final anterior = state is CajeroDataLoaded
+        ? (state as CajeroDataLoaded).data
+        : null;
+    if (anterior != null) {
+      state = CajeroDataLoaded<List<TasaDto>>(anterior as List<TasaDto>, isRefreshing: true);
+    } else {
+      state = const CajeroDataLoading();
+    }
     try {
       final tasas = await api.tasasVigentes();
       state = CajeroDataLoaded<List<TasaDto>>(tasas);
     } on DioException catch (e) {
-      state = CajeroDataError(e.message ?? 'No pudimos cargar las tasas.');
+      if (anterior != null) {
+        state = CajeroDataLoaded<List<TasaDto>>(anterior as List<TasaDto>, isRefreshing: false);
+      } else {
+        state = CajeroDataError(e.message ?? 'No pudimos cargar las tasas.');
+      }
     } catch (e) {
-      state = const CajeroDataError('No pudimos cargar las tasas.');
+      if (anterior != null) {
+        state = CajeroDataLoaded<List<TasaDto>>(anterior as List<TasaDto>, isRefreshing: false);
+      } else {
+        state = const CajeroDataError('No pudimos cargar las tasas.');
+      }
     }
   }
 }
@@ -72,6 +103,47 @@ final tasasProvider =
     StateNotifierProvider<TasasNotifier, CajeroDataState>((ref) {
   final api = ref.read(cajeroApiProvider);
   return TasasNotifier(api);
+});
+
+// ─────────────────────────── Corredores (Fase 9) ───────────────────────────
+
+class CorredoresNotifier extends StateNotifier<CajeroDataState> {
+  CorredoresNotifier(this.api) : super(const CajeroDataLoading());
+
+  final CajeroApi api;
+
+  Future<void> cargar() async {
+    final anterior = state is CajeroDataLoaded
+        ? (state as CajeroDataLoaded).data
+        : null;
+    if (anterior != null) {
+      state = CajeroDataLoaded<List<CorredorDto>>(anterior as List<CorredorDto>, isRefreshing: true);
+    } else {
+      state = const CajeroDataLoading();
+    }
+    try {
+      final corredores = await api.corredores();
+      state = CajeroDataLoaded<List<CorredorDto>>(corredores);
+    } on DioException catch (e) {
+      if (anterior != null) {
+        state = CajeroDataLoaded<List<CorredorDto>>(anterior as List<CorredorDto>, isRefreshing: false);
+      } else {
+        state = CajeroDataError(e.message ?? 'No pudimos cargar los corredores.');
+      }
+    } catch (e) {
+      if (anterior != null) {
+        state = CajeroDataLoaded<List<CorredorDto>>(anterior as List<CorredorDto>, isRefreshing: false);
+      } else {
+        state = const CajeroDataError('No pudimos cargar los corredores.');
+      }
+    }
+  }
+}
+
+final corredoresProvider =
+    StateNotifierProvider<CorredoresNotifier, CajeroDataState>((ref) {
+  final api = ref.read(cajeroApiProvider);
+  return CorredoresNotifier(api);
 });
 
 // ─────────────────────────── Operaciones ───────────────────────────
@@ -90,7 +162,22 @@ class OperacionesNotifier extends StateNotifier<CajeroDataState> {
     _estadoFiltro = estado;
     _currentPage = 1;
     _allItems = [];
-    state = const CajeroDataLoading();
+    final anterior = state is CajeroDataLoaded
+        ? (state as CajeroDataLoaded).data
+        : null;
+    if (anterior != null) {
+      state = CajeroDataLoaded<({
+        List<OperacionDto> items,
+        int total,
+        bool hasMore
+      })>(anterior as ({
+        List<OperacionDto> items,
+        int total,
+        bool hasMore
+      }), isRefreshing: true);
+    } else {
+      state = const CajeroDataLoading();
+    }
     await _cargarPagina();
   }
 
@@ -101,6 +188,9 @@ class OperacionesNotifier extends StateNotifier<CajeroDataState> {
   }
 
   Future<void> _cargarPagina() async {
+    final anterior = state is CajeroDataLoaded
+        ? (state as CajeroDataLoaded).data
+        : null;
     try {
       final pagina = await api.operaciones(
         page: _currentPage,
@@ -119,9 +209,33 @@ class OperacionesNotifier extends StateNotifier<CajeroDataState> {
         hasMore: _allItems.length < _total,
       ));
     } on DioException catch (e) {
-      state = CajeroDataError(e.message ?? 'No pudimos cargar las operaciones.');
+      if (anterior != null) {
+        state = CajeroDataLoaded<({
+          List<OperacionDto> items,
+          int total,
+          bool hasMore
+        })>(anterior as ({
+          List<OperacionDto> items,
+          int total,
+          bool hasMore
+        }), isRefreshing: false);
+      } else {
+        state = CajeroDataError(e.message ?? 'No pudimos cargar las operaciones.');
+      }
     } catch (e) {
-      state = const CajeroDataError('No pudimos cargar las operaciones.');
+      if (anterior != null) {
+        state = CajeroDataLoaded<({
+          List<OperacionDto> items,
+          int total,
+          bool hasMore
+        })>(anterior as ({
+          List<OperacionDto> items,
+          int total,
+          bool hasMore
+        }), isRefreshing: false);
+      } else {
+        state = const CajeroDataError('No pudimos cargar las operaciones.');
+      }
     }
   }
 }
@@ -146,7 +260,22 @@ class MovimientosNotifier extends StateNotifier<CajeroDataState> {
   Future<void> cargar() async {
     _currentPage = 1;
     _allItems = [];
-    state = const CajeroDataLoading();
+    final anterior = state is CajeroDataLoaded
+        ? (state as CajeroDataLoaded).data
+        : null;
+    if (anterior != null) {
+      state = CajeroDataLoaded<({
+        List<MovimientoDto> items,
+        int total,
+        bool hasMore
+      })>(anterior as ({
+        List<MovimientoDto> items,
+        int total,
+        bool hasMore
+      }), isRefreshing: true);
+    } else {
+      state = const CajeroDataLoading();
+    }
     await _cargarPagina();
   }
 
@@ -157,6 +286,9 @@ class MovimientosNotifier extends StateNotifier<CajeroDataState> {
   }
 
   Future<void> _cargarPagina() async {
+    final anterior = state is CajeroDataLoaded
+        ? (state as CajeroDataLoaded).data
+        : null;
     try {
       final pagina = await api.movimientos(page: _currentPage, limit: _limit);
       _allItems = [..._allItems, ...pagina.items];
@@ -171,9 +303,33 @@ class MovimientosNotifier extends StateNotifier<CajeroDataState> {
         hasMore: _allItems.length < _total,
       ));
     } on DioException catch (e) {
-      state = CajeroDataError(e.message ?? 'No pudimos cargar los movimientos.');
+      if (anterior != null) {
+        state = CajeroDataLoaded<({
+          List<MovimientoDto> items,
+          int total,
+          bool hasMore
+        })>(anterior as ({
+          List<MovimientoDto> items,
+          int total,
+          bool hasMore
+        }), isRefreshing: false);
+      } else {
+        state = CajeroDataError(e.message ?? 'No pudimos cargar los movimientos.');
+      }
     } catch (e) {
-      state = const CajeroDataError('No pudimos cargar los movimientos.');
+      if (anterior != null) {
+        state = CajeroDataLoaded<({
+          List<MovimientoDto> items,
+          int total,
+          bool hasMore
+        })>(anterior as ({
+          List<MovimientoDto> items,
+          int total,
+          bool hasMore
+        }), isRefreshing: false);
+      } else {
+        state = const CajeroDataError('No pudimos cargar los movimientos.');
+      }
     }
   }
 }
@@ -192,14 +348,29 @@ class AmpliacionesNotifier extends StateNotifier<CajeroDataState> {
   final CajeroApi api;
 
   Future<void> cargar() async {
-    state = const CajeroDataLoading();
+    final anterior = state is CajeroDataLoaded
+        ? (state as CajeroDataLoaded).data
+        : null;
+    if (anterior != null) {
+      state = CajeroDataLoaded<List<AmpliacionDto>>(anterior as List<AmpliacionDto>, isRefreshing: true);
+    } else {
+      state = const CajeroDataLoading();
+    }
     try {
       final lista = await api.ampliaciones();
       state = CajeroDataLoaded<List<AmpliacionDto>>(lista);
     } on DioException catch (e) {
-      state = CajeroDataError(e.message ?? 'No pudimos cargar las ampliaciones.');
+      if (anterior != null) {
+        state = CajeroDataLoaded<List<AmpliacionDto>>(anterior as List<AmpliacionDto>, isRefreshing: false);
+      } else {
+        state = CajeroDataError(e.message ?? 'No pudimos cargar las ampliaciones.');
+      }
     } catch (e) {
-      state = const CajeroDataError('No pudimos cargar las ampliaciones.');
+      if (anterior != null) {
+        state = CajeroDataLoaded<List<AmpliacionDto>>(anterior as List<AmpliacionDto>, isRefreshing: false);
+      } else {
+        state = const CajeroDataError('No pudimos cargar las ampliaciones.');
+      }
     }
   }
 }

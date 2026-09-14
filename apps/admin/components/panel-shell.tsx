@@ -37,6 +37,8 @@ const NAV: { grupo: string; items: NavItem[] }[] = [
     grupo: 'Gestión',
     items: [
       { href: '/tasas', label: 'Tasas', icon: TrendingUp },
+      { href: '/tasas-corredor', label: 'Tasas por corredor', icon: TrendingUp },
+      { href: '/cajas', label: 'Cajas', icon: Wallet },
       { href: '/usuarios', label: 'Usuarios', icon: UserPlus },
       { href: '/cobros', label: 'Registrar pago', icon: Wallet },
     ],
@@ -110,7 +112,7 @@ export function PanelShell({ children }: { children: React.ReactNode }) {
         <div className="mt-auto border-t border-white/10 pt-3">
           <div className="mb-2 px-1">
             <div className="truncate text-[13px] font-semibold">{usuario.nombre}</div>
-            <div className="truncate font-mono text-[11px] text-[#6B84A3]">{usuario.telefono}</div>
+            <div className="truncate font-mono text-[11px] text-[#6B84A3]">{usuario.email}</div>
           </div>
           <button
             onClick={() => logout()}

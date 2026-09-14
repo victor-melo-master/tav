@@ -40,15 +40,17 @@ async function truncateTodo() {
 
 async function crearUsuario(opts: {
   rol: 'admin' | 'cajero' | 'cobrador';
-  telefono: string;
+  email: string;
+  telefono?: string;
   password: string;
   nombre?: string;
   limiteCents?: bigint;
-}): Promise<{ id: string; telefono: string; password: string }> {
+}): Promise<{ id: string; email: string; password: string }> {
   const passwordHash = await argon2.hash(opts.password);
   const data: Prisma.UsuarioCreateInput = {
     rol: opts.rol,
     nombre: opts.nombre ?? opts.rol,
+    email: opts.email,
     telefono: opts.telefono,
     passwordHash,
   };
@@ -58,7 +60,7 @@ async function crearUsuario(opts: {
     data.perfilCobrador = { create: {} };
   }
   const u = await prisma.usuario.create({ data });
-  return { id: u.id, telefono: opts.telefono, password: opts.password };
+  return { id: u.id, email: opts.email, password: opts.password };
 }
 
 beforeAll(async () => {
@@ -86,14 +88,14 @@ describe('Auth — login', () => {
   test('login correcto devuelve access + refresh y datos del usuario', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-1111111',
+      email: '0414-1111111@tav.test',
       password: 'clave123',
       limiteCents: 100_000n,
     });
 
     const res = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     expect(res.status).toBe(201);
     expect(res.body.accessToken).toBeTruthy();
@@ -112,13 +114,13 @@ describe('Auth — login', () => {
   test('contraseña incorrecta devuelve 401', async () => {
     await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-2222222',
+      email: '0414-2222222@tav.test',
       password: 'clave-correcta',
     });
 
     const res = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: '0414-2222222', password: 'clave-incorrecta' });
+      .send({ email: '0414-2222222@tav.test', password: 'clave-incorrecta' });
 
     expect(res.status).toBe(401);
   });
@@ -126,7 +128,7 @@ describe('Auth — login', () => {
   test('teléfono inexistente devuelve 401 (no revela si existe)', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: 'no-existe', password: 'x' });
+      .send({ email: 'inexistente@tav.test', password: 'x' });
 
     expect(res.status).toBe(401);
   });
@@ -138,7 +140,7 @@ describe('Auth — token expirado', () => {
   test('access token expirado devuelve 401', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-3333333',
+      email: '0414-3333333@tav.test',
       password: 'clave',
     });
 
@@ -163,13 +165,13 @@ describe('Auth — refresh', () => {
   test('refresh válido devuelve tokens nuevos', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-4444444',
+      email: '0414-4444444@tav.test',
       password: 'clave',
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     const res = await request(app.getHttpServer())
       .post('/auth/refresh')
@@ -214,21 +216,21 @@ describe('Auth — roles', () => {
   test('cajero recibe 403 al llamar POST /admin/usuarios', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-5555555',
+      email: '0414-5555555@tav.test',
       password: 'clave',
       limiteCents: 100_000n,
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     const res = await request(app.getHttpServer())
       .post('/admin/usuarios')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
       .send({
         nombre: 'Nuevo Cajero',
-        telefono: '0414-9999999',
+        email: '0414-9999999@tav.test',
         rol: 'cajero',
         password: 'clave123',
         limiteCents: '50000',
@@ -240,20 +242,20 @@ describe('Auth — roles', () => {
   test('admin puede llamar POST /admin/usuarios y crea un cajero', async () => {
     const admin = await crearUsuario({
       rol: 'admin',
-      telefono: '0414-6666666',
+      email: '0414-6666666@tav.test',
       password: 'admin-clave',
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: admin.telefono, password: admin.password });
+      .send({ email: admin.email, password: admin.password });
 
     const res = await request(app.getHttpServer())
       .post('/admin/usuarios')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
       .send({
         nombre: 'Cajero Nuevo',
-        telefono: '0414-7777777',
+        email: '0414-7777777@tav.test',
         rol: 'cajero',
         password: 'clave123',
         limiteCents: '50000',
@@ -273,7 +275,7 @@ describe('Auth — roles', () => {
       .post('/admin/usuarios')
       .send({
         nombre: 'x',
-        telefono: 'x',
+        email: 'x@tav.test',
         rol: 'cajero',
         password: 'x',
         limiteCents: '100',
@@ -289,14 +291,14 @@ describe('Auth — me y pin', () => {
   test('GET /auth/me devuelve el usuario sin datos sensibles', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-8888888',
+      email: '0414-8888888@tav.test',
       password: 'clave',
       limiteCents: 100_000n,
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     const res = await request(app.getHttpServer())
       .get('/auth/me')
@@ -311,13 +313,13 @@ describe('Auth — me y pin', () => {
   test('POST /auth/pin fija el PIN y login-pin funciona', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-0000000',
+      email: '0414-0000000@tav.test',
       password: 'clave',
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     // fijar PIN
     const pinRes = await request(app.getHttpServer())
@@ -340,13 +342,13 @@ describe('Auth — me y pin', () => {
   test('login-pin con PIN incorrecto devuelve 401', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-1234567',
+      email: '0414-1234567@tav.test',
       password: 'clave',
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     await request(app.getHttpServer())
       .post('/auth/pin')
@@ -367,13 +369,13 @@ describe('Auth — logout real (tokenVersion)', () => {
   test('logout invalida el refresh token anterior', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-logout1',
+      email: '0414-logout1@tav.test',
       password: 'clave',
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     // logout incrementa tokenVersion
     const out = await request(app.getHttpServer())
@@ -392,13 +394,13 @@ describe('Auth — logout real (tokenVersion)', () => {
   test('logout-all invalida todas las sesiones', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-logout2',
+      email: '0414-logout2@tav.test',
       password: 'clave',
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     const out = await request(app.getHttpServer())
       .post('/auth/logout-all')
@@ -415,13 +417,13 @@ describe('Auth — logout real (tokenVersion)', () => {
   test('tras logout, un login nuevo emite tokens que sí funcionan', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-logout3',
+      email: '0414-logout3@tav.test',
       password: 'clave',
     });
 
     const login1 = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     await request(app.getHttpServer())
       .post('/auth/logout')
@@ -430,7 +432,7 @@ describe('Auth — logout real (tokenVersion)', () => {
     // login de nuevo → tokenVersion nueva en el payload
     const login2 = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     const refresh = await request(app.getHttpServer())
       .post('/auth/refresh')
@@ -446,13 +448,13 @@ describe('Auth — bloqueo de PIN', () => {
   test('cinco PIN fallidos bloquean el sexto intento con PIN_BLOQUEADO', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-pinblock1',
+      email: '0414-pinblock1@tav.test',
       password: 'clave',
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     await request(app.getHttpServer())
       .post('/auth/pin')
@@ -484,13 +486,13 @@ describe('Auth — bloqueo de PIN', () => {
   test('login con contraseña desbloquea el PIN', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-pinblock2',
+      email: '0414-pinblock2@tav.test',
       password: 'clave',
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     await request(app.getHttpServer())
       .post('/auth/pin')
@@ -507,7 +509,7 @@ describe('Auth — bloqueo de PIN', () => {
     // login con contraseña → desbloquea (reset de pinIntentos y pinBloqueadoAt)
     const relogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
     expect(relogin.status).toBe(201);
 
     // ahora el PIN correcto funciona de nuevo
@@ -521,13 +523,13 @@ describe('Auth — bloqueo de PIN', () => {
   test('PIN correcto resetea el contador de fallos', async () => {
     const u = await crearUsuario({
       rol: 'cajero',
-      telefono: '0414-pinblock3',
+      email: '0414-pinblock3@tav.test',
       password: 'clave',
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ telefono: u.telefono, password: u.password });
+      .send({ email: u.email, password: u.password });
 
     await request(app.getHttpServer())
       .post('/auth/pin')

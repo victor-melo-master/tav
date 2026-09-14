@@ -150,6 +150,7 @@ model Operacion {
 // ─────────────────────────────── COBROS ───────────────────────────────
 
 enum MetodoCobro {
+  efectivo_gyd
   efectivo_usd
   bolivares
   pago_movil
@@ -168,10 +169,10 @@ model Cobro {
 
   metodo          MetodoCobro
   montoCents      BigInt                      // en la moneda en que se recibió
-  moneda          String                      // "USD" | "BS" | "USDT"
+  moneda          String                      // "GYD" | "USD" | "BS" | "USDT"
   tasaAplicada    Decimal? @db.Decimal(18, 6) // null si ya venía en USD
   montoUsdCents   BigInt                      // equivalente — es lo que descuenta la deuda
-  esEfectivo      Boolean                     // true solo para efectivo_usd → suma al cuadre físico
+  esEfectivo      Boolean                     // true para efectivo_gyd y efectivo_usd → suma al cuadre físico
 
   cierreId        String?
   cierre          Cierre?  @relation(fields: [cierreId], references: [id])

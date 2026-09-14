@@ -84,11 +84,13 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
                 const SizedBox(height: TavSpace.lg),
                 _buildMovimientos(movsState),
                 const SizedBox(height: TavSpace.lg),
-                TavButton(
-                  label: 'Abonar a mi deuda',
-                  variant: TavButtonVariant.green,
-                  onPressed: () => context.push('/cajero/abono'),
-                ),
+                if (resumenState is! CajeroDataLoaded<ResumenDto> ||
+                    resumenState.data.saldoCents > 0)
+                  TavButton(
+                    label: 'Abonar a mi deuda',
+                    variant: TavButtonVariant.green,
+                    onPressed: () => context.push('/cajero/abono'),
+                  ),
                 const SizedBox(height: TavSpace.xxl),
               ],
             ),
@@ -99,22 +101,27 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
   }
 
   Widget _buildDeuda(CajeroDataState resumenState, CajeroDataState tasasState) {
-    int deuda = 0;
-    double tasaUsdt = 0;
+    int saldo = 0;
+    double tasaBsGyd = 0;
+    bool tieneFavor = false;
 
     if (resumenState is CajeroDataLoaded<ResumenDto>) {
-      deuda = resumenState.data.saldoCents;
+      saldo = resumenState.data.saldoCents;
+      tieneFavor = saldo < 0;
     }
     if (tasasState is CajeroDataLoaded<List<TasaDto>>) {
       for (final t in tasasState.data) {
-        if (t.par == 'USDT_BS') {
-          tasaUsdt = double.tryParse(t.valor) ?? 0;
+        if (t.par == 'BS_GYD') {
+          tasaBsGyd = double.tryParse(t.valor) ?? 0;
           break;
         }
       }
     }
 
-    final deudaBs = (deuda * tasaUsdt).round();
+    // El saldo está en GYD. Para mostrar la equivalencia en BS, dividimos
+    // por la tasa BS_GYD (que va de BS a GYD). Si BS_GYD = 0.732, entonces
+    // 1 GYD = 1/0.732 BS.
+    final saldoBs = tasaBsGyd > 0 ? (saldo.abs() / tasaBsGyd).round() : 0;
 
     return Container(
       width: double.infinity,
@@ -130,18 +137,23 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Deuda actual', style: TavText.caption.copyWith(color: const Color(0xFF9EC0EC))),
+          Text(
+            tieneFavor ? 'Saldo a favor' : 'Deuda actual',
+            style: TavText.caption.copyWith(color: const Color(0xFF9EC0EC)),
+          ),
           const SizedBox(height: 4),
           TavMoneyDisplay(
-            cents: deuda,
+            cents: saldo.abs(),
             color: TavColors.surface,
             style: TavText.moneyDisplay.copyWith(fontSize: 32),
             fitted: true,
           ),
           const SizedBox(height: 2),
-          if (tasaUsdt > 0)
+          if (tasaBsGyd > 0)
             Text(
-              '≈ Bs ${_formatBs(deudaBs)} a tasa de hoy',
+              tieneFavor
+                  ? '≈ Bs ${_formatBs(saldoBs)} a tasa de hoy'
+                  : '≈ Bs ${_formatBs(saldoBs)} a tasa de hoy',
               style: TavText.caption.copyWith(color: const Color(0xFF9EC0EC)),
             ),
         ],
@@ -153,6 +165,7 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
     if (state is! CajeroDataLoaded<ResumenDto>) {
       return TavLoadState(
         isLoading: state is CajeroDataLoading,
+        isRefreshing: state is CajeroDataLoaded ? state.isRefreshing : false,
         error: state is CajeroDataError ? state.message : null,
         onRetry: _recargar,
         child: const SizedBox.shrink(),
@@ -265,6 +278,7 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
         const SizedBox(height: TavSpace.sm),
         TavLoadState(
           isLoading: state is CajeroDataLoading,
+          isRefreshing: state is CajeroDataLoaded ? state.isRefreshing : false,
           error: state is CajeroDataError ? state.message : null,
           onRetry: () => ref.read(movimientosProvider.notifier).cargar(),
           emptyCheck: () {
@@ -292,13 +306,13 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
           child: Column(
             children: data.items.map((m) {
               final idx = data.items.indexOf(m);
-              final isCargo = m.montoUsdCents > 0;
+              final isCargo = m.montoCents > 0;
               return TavListRow(
                 title: '${tipoMovimientoLabel(m.tipo)} · ${m.origenTipo == 'operacion' ? 'Operación' : m.origenTipo}',
                 subtitle: _fechaHora(m.creadoAt),
                 trailingTitle: isCargo
-                    ? '+${formatCents(m.montoUsdCents)}'
-                    : '−${formatCents(m.montoUsdCents.abs())}',
+                    ? '+${formatCents(m.montoCents)}'
+                    : '−${formatCents(m.montoCents.abs())}',
                 trailingSubtitle: 'Saldo ${formatCents(m.saldoDespues)}',
                 avatar: Icon(
                   isCargo ? Icons.arrow_upward_outlined : Icons.arrow_downward_outlined,

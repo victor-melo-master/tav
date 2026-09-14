@@ -35,6 +35,8 @@ export interface RegistrarOperacionDto {
   comprobanteUrl?: string;
   /** INTERNO — el controlador lo inyecta desde el JWT. Nunca del body. */
   creadaPorId: string;
+  /** Fase 9: corredor elegido por el cajero. La operación nace en `pendiente`. */
+  corredorId?: string;
 }
 
 export interface RegistrarCobroDto {
@@ -43,8 +45,12 @@ export interface RegistrarCobroDto {
   cobradorId?: string | null; // null si lo registró el admin
   metodo: MetodoCobro;
   montoCents: bigint; // en la moneda en que se recibió
-  moneda: 'USD' | 'BS' | 'USDT';
-  tasaAplicada?: string | null; // obligatoria si moneda === 'BS'
+  moneda: 'GYD' | 'USD' | 'BS' | 'USDT';
+  // tasaAplicada ya no viene del cliente: el servicio lee la tasa vigente
+  // de la tabla Tasa (par = "{moneda}_GYD") y la congela en el cobro.
+  // Se mantiene en el DTO HTTP como opcional por compatibilidad, pero el
+  // servicio lo ignora.
+  tasaAplicada?: string | null;
   comprobanteUrl?: string;
   nota?: string;
   /** INTERNO — el controlador lo inyecta desde el JWT. Nunca del body. */

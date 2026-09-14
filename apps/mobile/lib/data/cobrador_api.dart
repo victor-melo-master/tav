@@ -97,8 +97,10 @@ class CajeroCobradorDto {
 // ───────────────────────────── Cobros ─────────────────────────────
 
 /// Método de cobro. Coincide con el enum MetodoCobro de Prisma.
-/// Solo `efectivoUsd` suma al efectivo que el cobrador entrega físicamente.
+/// Solo `efectivoUsd` y `efectivoGyd` suman al efectivo que el cobrador
+/// entrega físicamente.
 enum MetodoCobro {
+  efectivoGyd('efectivo_gyd'),
   efectivoUsd('efectivo_usd'),
   bolivares('bolivares'),
   pagoMovil('pago_movil'),
@@ -113,17 +115,19 @@ enum MetodoCobro {
 
   /// Moneda en la que se recibe el monto.
   String get moneda => switch (this) {
+        MetodoCobro.efectivoGyd => 'GYD',
         MetodoCobro.efectivoUsd => 'USD',
         MetodoCobro.bolivares => 'BS',
         MetodoCobro.pagoMovil => 'BS',
         MetodoCobro.usdt => 'USDT',
       };
 
-  /// true solo para efectivo en dólares: suma al cuadre físico del cobrador.
-  bool get esEfectivo => this == MetodoCobro.efectivoUsd;
+  /// true para efectivo físico (GYD o USD): suma al cuadre del cobrador.
+  bool get esEfectivo => this == MetodoCobro.efectivoGyd || this == MetodoCobro.efectivoUsd;
 
   /// Etiqueta legible en español de Venezuela.
   String get label => switch (this) {
+        MetodoCobro.efectivoGyd => 'Efectivo GYD',
         MetodoCobro.efectivoUsd => 'Efectivo USD',
         MetodoCobro.bolivares => 'Bolívares',
         MetodoCobro.pagoMovil => 'Pago móvil',
@@ -142,7 +146,7 @@ class CobroDto {
     required this.montoCents,
     required this.moneda,
     required this.tasaAplicada,
-    required this.montoUsdCents,
+    required this.montoBaseCents,
     required this.esEfectivo,
     required this.cierreId,
     required this.comprobanteUrl,
@@ -161,9 +165,9 @@ class CobroDto {
   final String? cobradorId;
   final MetodoCobro metodo;
   final int montoCents; // en la moneda recibida
-  final String moneda; // 'USD' | 'BS' | 'USDT'
-  final String? tasaAplicada; // string decimal, solo si moneda === 'BS'
-  final int montoUsdCents; // equivalente en USD — descuenta la deuda
+  final String moneda; // 'GYD' | 'USD' | 'BS' | 'USDT'
+  final String? tasaAplicada; // string decimal, congelada en el registro
+  final int montoBaseCents; // equivalente en la moneda base (GYD) — descuenta la deuda
   final bool esEfectivo;
   final String? cierreId;
   final String? comprobanteUrl;
@@ -187,7 +191,7 @@ class CobroDto {
       montoCents: int.parse(json['montoCents'] as String),
       moneda: json['moneda'] as String,
       tasaAplicada: json['tasaAplicada'] as String?,
-      montoUsdCents: int.parse(json['montoUsdCents'] as String),
+      montoBaseCents: int.parse(json['montoBaseCents'] as String),
       esEfectivo: json['esEfectivo'] as bool,
       cierreId: json['cierreId'] as String?,
       comprobanteUrl: json['comprobanteUrl'] as String?,
@@ -235,7 +239,8 @@ class CierreDto {
     required this.cobradorId,
     required this.fecha,
     required this.totalRegistradoCents,
-    required this.efectivoDeclaradoCents,
+    required this.efectivoGydDeclaradoCents,
+    required this.efectivoUsdDeclaradoCents,
     required this.digitalCents,
     required this.estado,
     required this.entregadoA,
@@ -243,8 +248,10 @@ class CierreDto {
     required this.enviadoAt,
     required this.verificadoAt,
     required this.verificadoPorId,
-    required this.efectivoRecibidoCents,
-    required this.diferenciaCents,
+    required this.efectivoGydRecibidoCents,
+    required this.efectivoUsdRecibidoCents,
+    required this.diferenciaGydCents,
+    required this.diferenciaUsdCents,
     required this.notaAdmin,
     required this.cobros,
   });
@@ -253,7 +260,8 @@ class CierreDto {
   final String cobradorId;
   final DateTime fecha;
   final int totalRegistradoCents;
-  final int efectivoDeclaradoCents;
+  final int efectivoGydDeclaradoCents;
+  final int efectivoUsdDeclaradoCents;
   final int digitalCents;
   final EstadoCierre estado;
   final String? entregadoA;
@@ -261,18 +269,38 @@ class CierreDto {
   final DateTime? enviadoAt;
   final DateTime? verificadoAt;
   final String? verificadoPorId;
-  final int? efectivoRecibidoCents;
-  final int? diferenciaCents;
+  final int? efectivoGydRecibidoCents;
+  final int? efectivoUsdRecibidoCents;
+  final int? diferenciaGydCents;
+  final int? diferenciaUsdCents;
   final String? notaAdmin;
   final List<CobroDto> cobros;
 
-  /// Efectivo en mano = suma de cobros no anulados con esEfectivo.
-  /// Se deriva de los cobros del cierre, no de un campo aparte.
-  int get efectivoCents {
+  /// Efectivo en billetes guyaneses = suma de cobros no anulados con
+  /// esEfectivo y moneda GYD, en centavos de GYD (sin conversión).
+  int get efectivoGydCents {
+    if (cobros.isEmpty) return 0;
+    return cobros
+        .where((c) => !c.anulado && c.esEfectivo && c.moneda == 'GYD')
+        .fold(0, (sum, c) => sum + c.montoCents);
+  }
+
+  /// Efectivo en billetes americanos = suma de cobros no anulados con
+  /// esEfectivo y moneda USD, en centavos de USD (sin conversión).
+  int get efectivoUsdCents {
+    if (cobros.isEmpty) return 0;
+    return cobros
+        .where((c) => !c.anulado && c.esEfectivo && c.moneda == 'USD')
+        .fold(0, (sum, c) => sum + c.montoCents);
+  }
+
+  /// Efectivo total en GYD (para contabilidad) = suma de todos los
+  /// cobros esEfectivo convertidos a la moneda base.
+  int get efectivoTotalGydCents {
     if (cobros.isEmpty) return 0;
     return cobros
         .where((c) => !c.anulado && c.esEfectivo)
-        .fold(0, (sum, c) => sum + c.montoUsdCents);
+        .fold(0, (sum, c) => sum + c.montoBaseCents);
   }
 
   /// Digital = suma de cobros no anulados sin esEfectivo.
@@ -280,7 +308,7 @@ class CierreDto {
     if (cobros.isEmpty) return 0;
     return cobros
         .where((c) => !c.anulado && !c.esEfectivo)
-        .fold(0, (sum, c) => sum + c.montoUsdCents);
+        .fold(0, (sum, c) => sum + c.montoBaseCents);
   }
 
   /// Cobros no anulados del cierre.
@@ -293,8 +321,10 @@ class CierreDto {
       cobradorId: json['cobradorId'] as String,
       fecha: DateTime.parse(json['fecha'] as String),
       totalRegistradoCents: int.parse(json['totalRegistradoCents'] as String),
-      efectivoDeclaradoCents:
-          int.parse(json['efectivoDeclaradoCents'] as String),
+      efectivoGydDeclaradoCents:
+          int.parse(json['efectivoGydDeclaradoCents'] as String),
+      efectivoUsdDeclaradoCents:
+          int.parse(json['efectivoUsdDeclaradoCents'] as String),
       digitalCents: int.parse(json['digitalCents'] as String),
       estado: EstadoCierre.fromValor(json['estado'] as String),
       entregadoA: json['entregadoA'] as String?,
@@ -306,12 +336,18 @@ class CierreDto {
           ? null
           : DateTime.parse(json['verificadoAt'] as String),
       verificadoPorId: json['verificadoPorId'] as String?,
-      efectivoRecibidoCents: json['efectivoRecibidoCents'] == null
+      efectivoGydRecibidoCents: json['efectivoGydRecibidoCents'] == null
           ? null
-          : int.parse(json['efectivoRecibidoCents'] as String),
-      diferenciaCents: json['diferenciaCents'] == null
+          : int.parse(json['efectivoGydRecibidoCents'] as String),
+      efectivoUsdRecibidoCents: json['efectivoUsdRecibidoCents'] == null
           ? null
-          : int.parse(json['diferenciaCents'] as String),
+          : int.parse(json['efectivoUsdRecibidoCents'] as String),
+      diferenciaGydCents: json['diferenciaGydCents'] == null
+          ? null
+          : int.parse(json['diferenciaGydCents'] as String),
+      diferenciaUsdCents: json['diferenciaUsdCents'] == null
+          ? null
+          : int.parse(json['diferenciaUsdCents'] as String),
       notaAdmin: json['notaAdmin'] as String?,
       cobros: (json['cobros'] as List<dynamic>? ?? [])
           .map((e) => CobroDto.fromJson(e as Map<String, dynamic>))
@@ -450,12 +486,14 @@ class RegistrarCobroRequest {
 
 class EnviarCierreRequest {
   const EnviarCierreRequest({
-    required this.efectivoDeclaradoCents,
+    required this.efectivoGydDeclaradoCents,
+    required this.efectivoUsdDeclaradoCents,
     this.entregadoA,
     this.notaCobrador,
   });
 
-  final String efectivoDeclaradoCents;
+  final String efectivoGydDeclaradoCents;
+  final String efectivoUsdDeclaradoCents;
   final String? notaCobrador;
 
   // PENDIENTE DE DEFINIR: el DTO del servidor (EnviarCierreDto) aún no acepta
@@ -465,7 +503,8 @@ class EnviarCierreRequest {
   final String? entregadoA;
 
   Map<String, dynamic> toJson() => {
-        'efectivoDeclaradoCents': efectivoDeclaradoCents,
+        'efectivoGydDeclaradoCents': efectivoGydDeclaradoCents,
+        'efectivoUsdDeclaradoCents': efectivoUsdDeclaradoCents,
         if (notaCobrador != null) 'notaCobrador': notaCobrador,
       };
 }

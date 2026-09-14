@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Search, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
-import { usd, formatFecha } from '@/lib/format';
+import { gyd, usd, formatFecha } from '@/lib/format';
 import type { EstadoCierre } from '@/lib/types';
 import { PageHeader, PageContent } from '@/components/page-header';
 import { Input } from '@/components/ui/input';
@@ -138,10 +138,17 @@ export default function CierresPage() {
               )}
               {!cargando && !error && items.map((c) => {
                 const est = ESTILO_ESTADO[c.estado];
-                const diff =
-                  c.diferenciaCents !== undefined && c.diferenciaCents !== null
-                    ? BigInt(c.diferenciaCents)
+                const diffGyd =
+                  c.diferenciaGydCents !== undefined && c.diferenciaGydCents !== null
+                    ? BigInt(c.diferenciaGydCents)
                     : null;
+                const diffUsd =
+                  c.diferenciaUsdCents !== undefined && c.diferenciaUsdCents !== null
+                    ? BigInt(c.diferenciaUsdCents)
+                    : null;
+                const hayDiff =
+                  (diffGyd !== null && diffGyd !== 0n) ||
+                  (diffUsd !== null && diffUsd !== 0n);
                 return (
                   <TableRow key={c.id} className="cursor-pointer">
                     <TableCell className="font-mono text-[12px] text-tav-ink-2">
@@ -155,22 +162,29 @@ export default function CierresPage() {
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{c.cobrosCount ?? 0}</TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
-                      {usd(c.totalRegistradoCents)}
+                      {gyd(c.totalRegistradoCents)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-tav-ink-2">
-                      {usd(c.efectivoDeclaradoCents)}
+                      {gyd(c.efectivoGydDeclaradoCents)}
+                      <span className="ml-1 text-[11px] text-tav-ink-4">
+                        · {usd(c.efectivoUsdDeclaradoCents)}
+                      </span>
                     </TableCell>
                     <TableCell
                       className={cn(
                         'text-right tabular-nums',
-                        diff === null
+                        diffGyd === null && diffUsd === null
                           ? 'text-tav-ink-4'
-                          : diff === 0n
-                            ? 'text-tav-green-600'
-                            : 'text-tav-red-700',
+                          : hayDiff
+                            ? 'text-tav-red-700'
+                            : 'text-tav-green-600',
                       )}
                     >
-                      {diff === null ? '—' : usd(diff)}
+                      {diffGyd === null && diffUsd === null
+                        ? '—'
+                        : hayDiff
+                          ? 'Con diff'
+                          : 'Cuadró'}
                     </TableCell>
                     <TableCell>
                       <Link

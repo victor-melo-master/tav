@@ -9,17 +9,25 @@ datasource db {
 
 // ─────────────────────────────── USUARIOS ───────────────────────────────
 
+// MONEDA BASE DEL LIBRO DE DEUDA: GYD (dólar guyanés), en centavos (BigInt).
+// El libro tiene una sola moneda por diseño; no se nombran los campos con la
+// moneda porque el día que cambie, el nombre mentiría. La multi-moneda vive
+// en las cajas (Caja.moneda) y en la conversión de cobros (Cobro.moneda +
+// Cobro.tasaAplicada), no en el ledger de deuda.
+
 enum Rol {
   cajero
   cobrador
   admin
+  pagador
 }
 
 model Usuario {
   id           String   @id @default(uuid())
   rol          Rol
   nombre       String
-  telefono     String   @unique
+  email        String   @unique
+  telefono     String?
   documento    String?
   passwordHash String
   pinHash      String?
@@ -40,6 +48,7 @@ model Usuario {
 
   perfilCajero   PerfilCajero?
   perfilCobrador PerfilCobrador?
+  perfilPagador  PerfilPagador?
 
   @@index([rol, activo])
 }
@@ -72,6 +81,17 @@ model PerfilCobrador {
   atenciones Atencion[]
 }
 
+/// Un pagador por país. Atiende varias monedas (varios corredores) de ese país.
+/// Lo crea el admin, igual que cajero y cobrador.
+model PerfilPagador {
+  usuarioId String  @id
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+  pais      String                        // código ISO-3 ("VEN", "BRA", ...) — agrupa los corredores que atiende
+  notas     String?
+
+  @@index([pais])
+}
+
 // ─────────────────────────────── TASAS ───────────────────────────────
 
 model Tasa {
@@ -84,6 +104,49 @@ model Tasa {
   @@index([par, vigenteDesde])
 }
 
+// ──────────────────── TASAS POR CORREDOR (Fase 9) ────────────────────
+//
+// La tasa que ve el cajero no se escribe: se compone de tres números que
+// teclea el admin. Ver docs/07-fase-9-multi-corredor.md §3.
+//
+//   pataBase      1 USDT = X GYD   una sola, mueve todos los corredores
+//   pataDestino   1 USDT = Y mon   una por corredor
+//   margen        %                uno por corredor (legible: 2.5 = 2.5%)
+//   tasaCotizada  (pataDestino ÷ pataBase) × (1 − margen/100)
+//
+// La publicación es ATÓMICA: la pata base y todos los items se insertan en
+// una sola transacción. No existe un estado intermedio con pata base nueva
+// y patas destino viejas. Cada publicación es un snapshot completo.
+//
+// tasaCotizada va en Decimal(18,8): con 6 decimales el corredor de USD en
+// efectivo (1 GYD ≈ 0,00455 USD) queda apretado. Las patas se quedan en 6:
+// son tasas de cambio, no multiplicadores de dinero.
+
+model PublicacionTasas {
+  id            String   @id @default(uuid())
+  pataBase      Decimal  @db.Decimal(18, 6)  // 1 USDT = X GYD (ej 208)
+  publicadaPorId String
+  publicadaAt   DateTime @default(now())
+
+  items         PublicacionTasaItem[]
+
+  @@index([publicadaAt])
+}
+
+model PublicacionTasaItem {
+  id              String   @id @default(uuid())
+  publicacionId   String
+  publicacion     PublicacionTasas @relation(fields: [publicacionId], references: [id], onDelete: Cascade)
+  corredorId      String
+  corredor        Corredor @relation(fields: [corredorId], references: [id])
+  pataDestino     Decimal  @db.Decimal(18, 6)  // 1 USDT = Y moneda destino
+  margen          Decimal  @db.Decimal(6, 4)   // legible: 2.5 = 2.5%. 0 ≤ margen < 100.
+  tasaCotizada    Decimal  @db.Decimal(18, 8)   // (pataDestino ÷ pataBase) × (1 − margen/100)
+
+  @@index([publicacionId])
+  @@index([corredorId])
+}
+
 // ─────────────────────────────── OPERACIONES ───────────────────────────────
 
 enum EstadoOperacion {
@@ -93,6 +156,8 @@ enum EstadoOperacion {
   observada
   rechazada
   anulada
+  pendiente // Fase 9: en la cola del pagador del país destino
+  pagada    // Fase 9: el pagador la ejecutó y descontó la caja
 }
 
 model Operacion {
@@ -103,13 +168,13 @@ model Operacion {
   cajero            PerfilCajero @relation(fields: [cajeroId], references: [usuarioId])
 
   tipo              String                    // "usdt_bs" | "usd_efectivo_bs"
-  montoOrigenCents  BigInt
-  monedaOrigen      String                    // "USDT" | "USD"
-  tasaAplicada      Decimal  @db.Decimal(18, 6)
-  comisionCents     BigInt
-  totalCents        BigInt                    // lo que suma a la deuda
-  montoDestinoCents BigInt
-  monedaDestino     String                    // "BS"
+  montoOrigenCents  BigInt                    // en la moneda de origen (USDT, USD, ...)
+  monedaOrigen      String                    // "USDT" | "USD" — moneda que envía el cajero
+  tasaAplicada      Decimal  @db.Decimal(18, 6) // tasa congelada en el registro
+  comisionCents     BigInt                    // en la moneda base (GYD)
+  totalCents        BigInt                    // lo que suma a la deuda, en la moneda base (GYD)
+  montoDestinoCents BigInt                    // en la moneda de destino (BS, BRL, ...)
+  monedaDestino     String                    // "BS" — moneda que recibe el beneficiario
 
   beneficiario      Json                      // {nombre, documento, banco, cuenta, metodo}
   estado            EstadoOperacion @default(en_verificacion)
@@ -124,6 +189,19 @@ model Operacion {
   anuladaPorId      String?
   motivoAnulacion   String?
 
+  // Fase 9 (Bloque 2): el destino de la operación. Nullable porque las
+  // operaciones anteriores a Fase 9 no lo tienen; sin él no puede pagarse
+  // por caja (ejecutarPago valida caja.corredorId === operacion.corredorId).
+  corredorId        String?
+
+  // Fase 9 (Bloque 2): datos que registra el pagador al ejecutar el pago.
+  // Van null hasta que la operación pasa a estado `pagada`.
+  pagadaAt          DateTime?
+  tasaEjecucion     Decimal? @db.Decimal(18, 6) // a cómo se ejecutó de verdad el cambio; se congela
+  formaPago         String?                     // "pago_movil" | "transferencia" | "efectivo" | ...
+  nombreCliente     String?                     // el cliente que recibió
+  pagadaPorId       String?                     // el pagador
+
   @@index([cajeroId, creadaAt])
   @@index([estado])
 }
@@ -131,6 +209,7 @@ model Operacion {
 // ─────────────────────────────── COBROS ───────────────────────────────
 
 enum MetodoCobro {
+  efectivo_gyd
   efectivo_usd
   bolivares
   pago_movil
@@ -150,8 +229,8 @@ model Cobro {
   metodo          MetodoCobro
   montoCents      BigInt                      // en la moneda en que se recibió
   moneda          String                      // "USD" | "BS" | "USDT"
-  tasaAplicada    Decimal? @db.Decimal(18, 6) // null si ya venía en USD
-  montoUsdCents   BigInt                      // equivalente — es lo que descuenta la deuda
+  tasaAplicada    Decimal? @db.Decimal(18, 6) // tasa moneda → GYD, congelada en el registro
+  montoBaseCents  BigInt                      // equivalente en la moneda base (GYD) — es lo que descuenta la deuda
   esEfectivo      Boolean                     // true solo para efectivo_usd → suma al cuadre físico
 
   cierreId        String?
@@ -190,7 +269,7 @@ model Movimiento {
   cajero          PerfilCajero @relation(fields: [cajeroId], references: [usuarioId])
 
   tipo            TipoMovimiento
-  montoUsdCents   BigInt                      // positivo sube deuda, negativo la baja
+  montoCents      BigInt                      // en la moneda base (GYD). positivo sube deuda, negativo la baja
   saldoDespues    BigInt                      // foto del saldo tras aplicar este movimiento
 
   origenTipo      String                      // "operacion" | "cobro" | "ajuste"
@@ -249,9 +328,14 @@ model Cierre {
   cobrador              PerfilCobrador @relation(fields: [cobradorId], references: [usuarioId])
   fecha                 DateTime @db.Date
 
-  totalRegistradoCents  BigInt   @default(0)
-  efectivoDeclaradoCents BigInt  @default(0)  // lo que el cobrador dice llevar en mano
-  digitalCents          BigInt   @default(0)
+  totalRegistradoCents  BigInt   @default(0)  // en GYD (contabilidad)
+  digitalCents          BigInt   @default(0)  // en GYD
+
+  // Efectivo físico declarado por el cobrador, por moneda.
+  // El cobrador lleva billetes guyaneses Y billetes americanos: son dos
+  // pilas distintas que el admin cuenta por separado. No se mezclan.
+  efectivoGydDeclaradoCents BigInt  @default(0)  // en GYD cents
+  efectivoUsdDeclaradoCents BigInt  @default(0)  // en USD cents
 
   estado                EstadoCierre @default(abierto)
   entregadoA            String?
@@ -260,8 +344,15 @@ model Cierre {
   enviadoAt             DateTime?
   verificadoAt          DateTime?
   verificadoPorId       String?
-  efectivoRecibidoCents BigInt?                // lo que el admin contó de verdad
-  diferenciaCents       BigInt?                // recibido − declarado
+
+  // Efectivo físico contado por el admin, por moneda.
+  efectivoGydRecibidoCents BigInt?                // en GYD cents
+  efectivoUsdRecibidoCents BigInt?                // en USD cents
+
+  // Diferencia por moneda: recibido − declarado.
+  diferenciaGydCents       BigInt?                // en GYD cents
+  diferenciaUsdCents       BigInt?                // en USD cents
+
   notaAdmin             String?
 
   cobros                Cobro[]
@@ -331,4 +422,110 @@ model AuditLog {
 model Config {
   clave String @id       // "semaforo.dias_ambar" = "4", "semaforo.pct_ambar" = "0.75", ...
   valor String
+}
+
+// ─────────────────────────── CORREDORES (Fase 9) ───────────────────────────
+
+/// Un corredor es destino + forma de entrega, NO un par de monedas.
+/// Venezuela tiene dos (Bs por transferencia y USD en efectivo) con tasas
+/// distintas; modelarlo como par de monedas no cabe y tocaría migrar.
+///
+/// La lista NO se quema en el código: el admin puede añadir corredores desde
+/// el panel. Uno desactivado desaparece de la app del cajero pero conserva
+/// su historia (las operaciones y cajas lo siguen referenciando).
+model Corredor {
+  id              String   @id @default(uuid())
+  pais            String                        // código ISO-3: "VEN", "BRA", "COL", ...
+  paisNombre      String                        // "Venezuela", "Brasil" — para mostrar en UI
+  moneda          String                        // código ISO-4217: "BS", "USD", "BRL", "COP", "DOP", "MXN"
+  monedaNombre    String                        // "Bolívares", "Dólares" — para mostrar
+  formaEntrega    String                        // "transferencia" | "efectivo" | "pago_movil" | ...
+  formaEntregaNombre String                     // etiqueta legible para la UI
+  activo          Boolean  @default(true)
+  creadoAt        DateTime @default(now())
+  creadoPorId     String
+  desactivadoAt   DateTime?                     // auditable: cuándo se desactivó
+  desactivadoPorId String?                      // auditable: quién lo desactivó
+
+  caja            Caja?
+  publicaciones   PublicacionTasaItem[]
+
+  @@index([pais, activo])
+  @@index([activo])
+}
+
+// ─────────────────────────── TESORERÍA: CAJAS (Fase 9) ───────────────────────────
+
+/// Una caja responde: ¿dónde está la plata y cuánta queda?
+///
+/// Hay una caja por corredor. Además existen cajas MADRE (la primera es USDT):
+/// no tienen corredor y se llenan cuando entra USDT al negocio. Las cajas de
+/// corredor se llenan convirtiendo desde una caja madre (doble entrada: débito
+/// de la madre + crédito de la destino, en la misma transacción).
+///
+/// Restricción (CHECK en migración): una caja es de corredor O madre, nunca
+/// ambas ni ninguna. esMadre=true ⟺ corredorId=null.
+///
+/// saldoCents es un CACHE, igual que PerfilCajero.saldoCents: solo se escribe
+/// dentro de la transacción que inserta el movimiento. El saldo real es la
+/// suma de MovimientoCaja. db:verify lo comprueba.
+///
+/// Montos en centavos de la MONEDA DE LA CAJA (no siempre GYD): Bs, BRL, USDT...
+model Caja {
+  id                String   @id @default(uuid())
+  corredorId        String?  @unique             // null si es caja madre
+  corredor          Corredor? @relation(fields: [corredorId], references: [id])
+  esMadre           Boolean  @default(false)
+  moneda            String                        // "USDT", "BS", "BRL", ... — denota la unidad de saldoCents
+  saldoCents        BigInt   @default(0)          // CACHE. Centavos de `moneda`.
+  umbralAlertaCents BigInt?                       // saldo <= umbral → alerta "saldo bajo" (distinta de negativo)
+  creadaAt          DateTime @default(now())
+
+  movimientos       MovimientoCaja[]
+
+  @@index([esMadre])
+  @@index([moneda])
+}
+
+/// Libro de cajas. Append-only, igual que Movimiento.
+/// NUNCA UPDATE ni DELETE. Corregir = insertar un reverso.
+enum TipoMovimientoCaja {
+  apertura           // admin convierte USDT → moneda del corredor; sube saldo (crédito destino)
+  recarga            // otra conversión desde USDT; sube saldo
+  ingreso            // entra USDT (o efectivo) al negocio; sube saldo de la caja MADRE
+  transferencia      // débito de la caja MADRE hacia una caja de corredor (contrapartida de apertura/recarga)
+  pago               // el pagador ejecuta una operación; baja saldo de la caja del corredor
+  reverso_apertura   // anulación de apertura/recarga (reversa crédito destino + débito madre)
+  reverso_pago       // anulación de un pago ya ejecutado
+  ajuste             // corrección manual del admin, siempre con motivo
+}
+
+model MovimientoCaja {
+  id              String   @id @default(uuid())
+  seq             BigInt   @default(autoincrement())
+  cajaId          String
+  caja            Caja     @relation(fields: [cajaId], references: [id])
+
+  tipo            TipoMovimientoCaja
+  montoCents      BigInt                      // + sube, − baja. Centavos de la MONEDA DE LA CAJA.
+  saldoDespues    BigInt                      // foto del saldo tras este movimiento
+
+  // Solo para apertura/recarga: la conversión interna desde la caja madre.
+  // En `ingreso` y `pago` van null (no hay conversión).
+  cajaMadreId       String?                   // caja de la que salió el USDT (para doble entrada)
+  montoMadreCents   BigInt?                    // cuánto salió de la caja madre (en la moneda de la madre)
+  tasaConversion    Decimal? @db.Decimal(18, 6) // tasa madre → moneda del corredor usada. Mismo tipo que tasaAplicada.
+
+  origenTipo      String                      // "apertura" | "recarga" | "ingreso" | "pago" | "ajuste"
+  origenId        String                      // operacionId cuando es un pago
+  clientUuid      String                      // IDEMPOTENCIA — único POR CAJA (ver @@unique abajo):
+                                              // las dos patas de una apertura comparten el mismo uuid.
+  motivo          String?                     // obligatorio en reversos y ajustes
+  registradoPorId String
+  creadoAt        DateTime @default(now())
+
+  @@unique([cajaId, clientUuid])
+  @@index([cajaId, seq])
+  @@index([cajaId, creadoAt])
+  @@index([origenTipo, origenId])
 }

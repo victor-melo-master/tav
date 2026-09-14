@@ -103,6 +103,50 @@ class CobradorShell extends StatelessWidget {
   }
 }
 
+/// Shell del pagador con barra inferior de 3 destinos, sin FAB.
+///
+/// Destinos: Cola, Pagos del día, Perfil.
+/// El pagador no "crea" nada: ejecuta lo que ya está en la cola. Tocar
+/// una operación abre una pantalla a pantalla completo, no un destino.
+class PagadorShell extends StatelessWidget {
+  const PagadorShell({super.key, required this.child, required this.currentIndex});
+
+  final Widget child;
+  final int currentIndex;
+
+  static const _destinations = [
+    _NavDest(icon: Icons.list_alt_outlined, label: 'Cola'),
+    _NavDest(icon: Icons.history_outlined, label: 'Hoy'),
+    _NavDest(icon: Icons.person_outline, label: 'Perfil'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: TavColors.bg,
+      body: child,
+      bottomNavigationBar: _TavBottomNav(
+        destinations: _destinations,
+        currentIndex: currentIndex,
+        onTap: (i) => _onTap(context, i),
+        onFabTap: () {}, // sin FAB: el pagador no crea
+        showFab: false,
+      ),
+    );
+  }
+
+  void _onTap(BuildContext context, int index) {
+    switch (index) {
+      case 0:
+        context.go('/pagador/cola');
+      case 1:
+        context.go('/pagador/hoy');
+      case 2:
+        context.go('/pagador/perfil');
+    }
+  }
+}
+
 /// Modelo interno de destino de navegación.
 class _NavDest {
   const _NavDest({required this.icon, required this.label});
@@ -123,12 +167,14 @@ class _TavBottomNav extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     required this.onFabTap,
+    this.showFab = true,
   });
 
   final List<_NavDest> destinations;
   final int currentIndex;
   final ValueChanged<int> onTap;
   final VoidCallback onFabTap;
+  final bool showFab;
 
   @override
   Widget build(BuildContext context) {
@@ -162,9 +208,9 @@ class _TavBottomNav extends StatelessWidget {
                   onTap: () => onTap(1),
                 ),
               ),
-              // Espacio central reservado para el FAB
-              const SizedBox(width: 66),
-              // 2 destinos derechos
+              // Espacio central reservado para el FAB (0 si no hay FAB)
+              SizedBox(width: showFab ? 66 : 0),
+              // 2 destinos derechos (o 1 si solo hay 3 destinos)
               Expanded(
                 child: _NavTab(
                   icon: destinations[2].icon,
@@ -173,20 +219,19 @@ class _TavBottomNav extends StatelessWidget {
                   onTap: () => onTap(2),
                 ),
               ),
-              Expanded(
-                child: _NavTab(
-                  icon: destinations[3].icon,
-                  label: destinations[3].label,
-                  active: currentIndex == 3,
-                  onTap: () => onTap(3),
+              if (destinations.length > 3)
+                Expanded(
+                  child: _NavTab(
+                    icon: destinations[3].icon,
+                    label: destinations[3].label,
+                    active: currentIndex == 3,
+                    onTap: () => onTap(3),
+                  ),
                 ),
-              ),
             ],
           ),
-          // FAB central posicionado sobre la barra, sobresaliendo 24px arriba.
-          // Transform.translate desplaza el widget visualmente y su área táctil
-          // se mueve con él, así que sigue siendo pulsable en toda su superficie.
-          Positioned(
+          if (showFab)
+            Positioned(
             top: 0,
             left: 0,
             right: 0,

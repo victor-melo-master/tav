@@ -58,7 +58,8 @@ class _DeclararEntregaScreenState extends ConsumerState<DeclararEntregaScreen> {
   @override
   Widget build(BuildContext context) {
     final cierre = _cierreActual();
-    final efectivo = cierre?.efectivoCents ?? 0;
+    final efectivoGyd = cierre?.efectivoGydCents ?? 0;
+    final efectivoUsd = cierre?.efectivoUsdCents ?? 0;
     final total = cierre?.totalRegistradoCents ?? 0;
     final digital = cierre?.digitalCalculadoCents ?? 0;
 
@@ -91,9 +92,17 @@ class _DeclararEntregaScreenState extends ConsumerState<DeclararEntregaScreen> {
                                   .copyWith(color: const Color(0xFF9EC0EC))),
                           const SizedBox(height: 6),
                           TavMoneyDisplay(
-                            cents: efectivo,
+                            cents: efectivoGyd,
                             color: TavColors.surface,
                             style: TavText.moneyDisplay.copyWith(fontSize: 36),
+                            fitted: true,
+                          ),
+                          const SizedBox(height: 4),
+                          TavMoneyDisplay(
+                            cents: efectivoUsd,
+                            currency: TavMoneyCurrency.usd,
+                            color: TavColors.surface,
+                            style: TavText.moneyDisplay.copyWith(fontSize: 22),
                             fitted: true,
                           ),
                           const SizedBox(height: 3),
@@ -116,8 +125,14 @@ class _DeclararEntregaScreenState extends ConsumerState<DeclararEntregaScreen> {
                             label: 'Digital (ya en cuentas)',
                             value: formatCents(digital)),
                         TavKvRow(
-                          label: 'Efectivo a entregar',
-                          value: formatCents(efectivo),
+                          label: 'Efectivo GYD a entregar',
+                          value: formatCents(efectivoGyd),
+                          valueColor: TavColors.blue,
+                        ),
+                        TavKvRow(
+                          label: 'Efectivo USD a entregar',
+                          value: formatCents(efectivoUsd,
+                              currency: TavMoneyCurrency.usd),
                           valueColor: TavColors.blue,
                           divider: true,
                         ),
@@ -226,7 +241,8 @@ class _DeclararEntregaScreenState extends ConsumerState<DeclararEntregaScreen> {
     try {
       final api = ref.read(cobradorApiProvider);
       final req = EnviarCierreRequest(
-        efectivoDeclaradoCents: cierre.efectivoCents.toString(),
+        efectivoGydDeclaradoCents: cierre.efectivoGydCents.toString(),
+        efectivoUsdDeclaradoCents: cierre.efectivoUsdCents.toString(),
         notaCobrador: _notaCtrl.text.isEmpty ? null : _notaCtrl.text,
       );
       await api.enviarCierre(cierre.id!, req);

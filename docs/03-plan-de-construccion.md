@@ -303,3 +303,21 @@ propio, señálale el HTML. Ya está decidido.
 
 **Empieza hoy por las fases 0, 1 y 2.** La 2 es la única que realmente importa;
 si el núcleo contable queda sólido, el resto es velocidad.
+
+---
+
+## Pendientes fuera de fase
+
+- **Gestión de corredores desde el panel** — `CorredorService` está
+  implementado en `apps/api/src/corredores/corredor.service.ts` (crear,
+  desactivar, activar, listar, listarActivos, obtener) pero **no tiene
+  controlador HTTP ni pantalla en el panel**. El admin no puede crear ni
+  desactivar corredores desde la interfaz; los seis del seed son los
+  únicos disponibles. Es trabajo de una tarde cuando haga falta (inyectar
+  el servicio en `AdminModule`, exponer los endpoints, añadir la pantalla
+  al panel), pero no entra en esta entrega.
+
+- **Exportación de lista de cierre en PDF** — el botón "Descargar lista en PDF"
+  se quitó de la pantalla de cierre enviado del cobrador porque no estaba implementado.
+  Se debe implementar en una fase posterior, generando un PDF con los cobros del día
+  y los totales declarados. No dejar el botón visible sin funcionalidad.

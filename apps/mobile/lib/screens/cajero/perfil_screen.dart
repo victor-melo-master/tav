@@ -22,7 +22,9 @@ class PerfilScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
     final nombre = authState is AuthAuthenticated ? authState.usuario.nombre : '';
-    final telefono = authState is AuthAuthenticated ? authState.usuario.telefono : '';
+    final telefono = authState is AuthAuthenticated
+        ? authState.usuario.telefono ?? 'Sin teléfono'
+        : '';
     final iniciales = inicialesNombre(nombre);
 
     return Scaffold(

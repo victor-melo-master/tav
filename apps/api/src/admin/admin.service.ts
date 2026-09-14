@@ -55,15 +55,21 @@ export class AdminService {
     if (dto.rol === 'cajero' && !dto.limiteCents) {
       throw new BadRequestException('Un cajero requiere limiteCents');
     }
+    if (dto.rol === 'pagador' && !dto.pais?.trim()) {
+      throw new BadRequestException('Un pagador requiere pais (código ISO-3)');
+    }
 
     const passwordHash = await argon2.hash(dto.password);
+    const email = dto.email.trim().toLowerCase();
+    const telefono = dto.telefono?.trim() || null;
 
     try {
       const usuario = await this.prisma.$transaction(async (tx) => {
         const data: Prisma.UsuarioCreateInput = {
           rol: dto.rol,
           nombre: dto.nombre,
-          telefono: dto.telefono,
+          email,
+          telefono,
           passwordHash,
           documento: dto.documento,
           creadoPorId,
@@ -78,22 +84,36 @@ export class AdminService {
               notas: dto.notas,
             },
           };
-        } else {
+        } else if (dto.rol === 'cobrador') {
           data.perfilCobrador = {
             create: {
               zona: dto.zona,
             },
           };
+        } else if (dto.rol === 'pagador') {
+          data.perfilPagador = {
+            create: {
+              pais: dto.pais!.trim().toUpperCase(),
+              notas: dto.notas,
+            },
+          };
         }
 
-        return tx.usuario.create({ data, include: { perfilCajero: true, perfilCobrador: true } });
+        return tx.usuario.create({
+          data,
+          include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
+        });
       });
 
       const { passwordHash: _ph, ...sinPassword } = usuario;
       return sinPassword;
     } catch (e: unknown) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException(`Ya existe un usuario con teléfono ${dto.telefono}`);
+        const target = (e.meta as { target?: string[] })?.target ?? [];
+        if (target.includes('email')) {
+          throw new ConflictException(`Ya existe un usuario con el correo ${dto.email}`);
+        }
+        throw new ConflictException('Ya existe un usuario con ese dato');
       }
       throw e;
     }
@@ -123,7 +143,8 @@ export class AdminService {
       base = perfiles.filter(
         (p) =>
           p.usuario.nombre.toLowerCase().includes(q) ||
-          p.usuario.telefono.toLowerCase().includes(q),
+          p.usuario.telefono?.toLowerCase().includes(q) ||
+          p.usuario.email.toLowerCase().includes(q),
       );
     }
 
@@ -137,6 +158,7 @@ export class AdminService {
         return {
           id: p.usuarioId,
           nombre: p.usuario.nombre,
+          email: p.usuario.email,
           telefono: p.usuario.telefono,
           zona: p.zona,
           saldoCents: p.saldoCents,
@@ -214,6 +236,7 @@ export class AdminService {
     return {
       id: perfil.usuarioId,
       nombre: perfil.usuario.nombre,
+      email: perfil.usuario.email,
       telefono: perfil.usuario.telefono,
       documento: perfil.usuario.documento,
       zona: perfil.zona,
@@ -426,7 +449,7 @@ export class AdminService {
 
   /**
    * Verifica un cierre: el admin captura el efectivo que realmente recibió.
-   * El sistema calcula la diferencia contra `efectivoDeclaradoCents` y marca
+   * El sistema calcula la diferencia contra lo declarado, por moneda, y marca
    * el cierre como `verificado` (sin diferencia) o `con_diferencia`.
    *
    * Si hay diferencia (recibido != declarado), la nota es OBLIGATORIA:
@@ -445,9 +468,11 @@ export class AdminService {
       );
     }
 
-    const recibido = BigInt(dto.efectivoRecibidoCents);
-    const diferencia = recibido - cierre.efectivoDeclaradoCents;
-    const hayDiferencia = diferencia !== 0n;
+    const recibidoGyd = BigInt(dto.efectivoGydRecibidoCents);
+    const recibidoUsd = BigInt(dto.efectivoUsdRecibidoCents);
+    const diferenciaGyd = recibidoGyd - cierre.efectivoGydDeclaradoCents;
+    const diferenciaUsd = recibidoUsd - cierre.efectivoUsdDeclaradoCents;
+    const hayDiferencia = diferenciaGyd !== 0n || diferenciaUsd !== 0n;
 
     if (hayDiferencia && (!dto.nota || !dto.nota.trim())) {
       throw new BadRequestException(
@@ -462,8 +487,10 @@ export class AdminService {
           estado: hayDiferencia ? 'con_diferencia' : 'verificado',
           verificadoAt: new Date(),
           verificadoPorId: adminId,
-          efectivoRecibidoCents: recibido,
-          diferenciaCents: diferencia,
+          efectivoGydRecibidoCents: recibidoGyd,
+          efectivoUsdRecibidoCents: recibidoUsd,
+          diferenciaGydCents: diferenciaGyd,
+          diferenciaUsdCents: diferenciaUsd,
           notaAdmin: dto.nota,
         },
         include: {
@@ -479,12 +506,15 @@ export class AdminService {
           entidadId: cierreId,
           antes: {
             estado: cierre.estado,
-            efectivoDeclaradoCents: cierre.efectivoDeclaradoCents.toString(),
+            efectivoGydDeclaradoCents: cierre.efectivoGydDeclaradoCents.toString(),
+            efectivoUsdDeclaradoCents: cierre.efectivoUsdDeclaradoCents.toString(),
           },
           despues: {
             estado: hayDiferencia ? 'con_diferencia' : 'verificado',
-            efectivoRecibidoCents: recibido.toString(),
-            diferenciaCents: diferencia.toString(),
+            efectivoGydRecibidoCents: recibidoGyd.toString(),
+            efectivoUsdRecibidoCents: recibidoUsd.toString(),
+            diferenciaGydCents: diferenciaGyd.toString(),
+            diferenciaUsdCents: diferenciaUsd.toString(),
             notaAdmin: dto.nota ?? null,
           },
         },
@@ -571,7 +601,7 @@ export class AdminService {
 
   /**
    * Totales del día y del mes para el tablero del admin:
-   *   - cobrado (día / mes): suma de montoUsdCents de cobros no anulados
+   *   - cobrado (día / mes): suma de montoBaseCents de cobros no anulados
    *   - operaciones (día / mes): conteo de operaciones no anuladas
    *   - cartera total pendiente: suma de saldoCents de todos los cajeros
    *   - reparto de cajeros por color de semáforo
@@ -597,11 +627,11 @@ export class AdminService {
     ] = await Promise.all([
       this.prisma.cobro.aggregate({
         where: { anuladoAt: null, creadoAt: { gte: inicioHoy, lt: finHoy } },
-        _sum: { montoUsdCents: true },
+        _sum: { montoBaseCents: true },
       }),
       this.prisma.cobro.aggregate({
         where: { anuladoAt: null, creadoAt: { gte: inicioMes, lt: finMes } },
-        _sum: { montoUsdCents: true },
+        _sum: { montoBaseCents: true },
       }),
       this.prisma.operacion.count({
         where: { anuladaAt: null, creadaAt: { gte: inicioHoy, lt: finHoy } },
@@ -630,11 +660,11 @@ export class AdminService {
 
     return {
       hoy: {
-        cobradoCents: cobradoDia._sum.montoUsdCents ?? 0n,
+        cobradoCents: cobradoDia._sum.montoBaseCents ?? 0n,
         operaciones: operacionesDia,
       },
       mes: {
-        cobradoCents: cobradoMes._sum.montoUsdCents ?? 0n,
+        cobradoCents: cobradoMes._sum.montoBaseCents ?? 0n,
         operaciones: operacionesMes,
       },
       carteraPendienteCents: cartera._sum.saldoCents ?? 0n,

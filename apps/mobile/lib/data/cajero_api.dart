@@ -201,7 +201,7 @@ class MovimientoDto {
     required this.id,
     required this.seq,
     required this.tipo,
-    required this.montoUsdCents,
+    required this.montoCents,
     required this.saldoDespues,
     required this.origenTipo,
     required this.origenId,
@@ -212,7 +212,7 @@ class MovimientoDto {
   final String id;
   final int seq;
   final String tipo;
-  final int montoUsdCents;
+  final int montoCents;
   final int saldoDespues;
   final String origenTipo;
   final String origenId;
@@ -224,7 +224,7 @@ class MovimientoDto {
       id: json['id'] as String,
       seq: int.parse(json['seq'] as String),
       tipo: json['tipo'] as String,
-      montoUsdCents: int.parse(json['montoUsdCents'] as String),
+      montoCents: int.parse(json['montoCents'] as String),
       saldoDespues: int.parse(json['saldoDespues'] as String),
       origenTipo: json['origenTipo'] as String,
       origenId: json['origenId'] as String,
@@ -328,39 +328,36 @@ class CrearOperacionRequest {
     required this.tipo,
     required this.montoOrigenCents,
     required this.monedaOrigen,
-    required this.tasaAplicada,
     required this.comisionCents,
     required this.totalCents,
-    required this.montoDestinoCents,
     required this.monedaDestino,
     required this.beneficiario,
     this.comprobanteUrl,
+    this.corredorId,
   });
 
   final String clientUuid;
   final String tipo;
   final String montoOrigenCents;
   final String monedaOrigen;
-  final String tasaAplicada;
   final String comisionCents;
   final String totalCents;
-  final String montoDestinoCents;
   final String monedaDestino;
   final BeneficiarioOperacionDto beneficiario;
   final String? comprobanteUrl;
+  final String? corredorId;
 
   Map<String, dynamic> toJson() => {
         'clientUuid': clientUuid,
         'tipo': tipo,
         'montoOrigenCents': montoOrigenCents,
         'monedaOrigen': monedaOrigen,
-        'tasaAplicada': tasaAplicada,
         'comisionCents': comisionCents,
         'totalCents': totalCents,
-        'montoDestinoCents': montoDestinoCents,
         'monedaDestino': monedaDestino,
         'beneficiario': beneficiario.toJson(),
         if (comprobanteUrl != null) 'comprobanteUrl': comprobanteUrl,
+        if (corredorId != null) 'corredorId': corredorId,
       };
 }
 
@@ -400,6 +397,45 @@ class CupoInsuficienteException implements Exception {
   String toString() => mensaje;
 }
 
+// ─────────────────────────── Corredores (Fase 9) ───────────────────────────
+
+/// Corredor ofrecible al cajero: activo y con tasa publicada.
+/// La API NUNCA devuelve margen ni pataDestino: solo la tasa cotizada.
+class CorredorDto {
+  const CorredorDto({
+    required this.id,
+    required this.pais,
+    required this.paisNombre,
+    required this.moneda,
+    required this.monedaNombre,
+    required this.formaEntrega,
+    required this.formaEntregaNombre,
+    required this.tasaCotizada,
+  });
+
+  final String id;
+  final String pais;
+  final String paisNombre;
+  final String moneda;
+  final String monedaNombre;
+  final String formaEntrega;
+  final String formaEntregaNombre;
+  final String tasaCotizada;
+
+  factory CorredorDto.fromJson(Map<String, dynamic> json) {
+    return CorredorDto(
+      id: json['id'] as String,
+      pais: json['pais'] as String,
+      paisNombre: json['paisNombre'] as String,
+      moneda: json['moneda'] as String,
+      monedaNombre: json['monedaNombre'] as String,
+      formaEntrega: json['formaEntrega'] as String,
+      formaEntregaNombre: json['formaEntregaNombre'] as String,
+      tasaCotizada: json['tasaCotizada'] as String,
+    );
+  }
+}
+
 // ─────────────────────────── Servicio ───────────────────────────
 
 /// Servicio de API del cajero. Capa fina sobre Dio.
@@ -414,6 +450,15 @@ class CajeroApi {
   Future<ResumenDto> resumen() async {
     final r = await dio.get('/cajero/resumen');
     return ResumenDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
+  /// Corredores activos con tasa publicada. La API no devuelve margen ni
+  /// pataDestino: solo id, país, moneda, forma de entrega y tasaCotizada.
+  Future<List<CorredorDto>> corredores() async {
+    final r = await dio.get('/cajero/corredores');
+    return (r.data as List<dynamic>)
+        .map((e) => CorredorDto.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<PaginaOperacionesDto> operaciones({

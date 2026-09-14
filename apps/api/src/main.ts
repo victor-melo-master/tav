@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { LedgerExceptionFilter } from './ledger-exception.filter';
+import { CajaExceptionFilter } from './cajas/caja-exception.filter';
 
 // Serialización global de BigInt: los montos salen como string en el JSON.
 // Se configura una sola vez aquí, en la capa HTTP, antes de arrancar Nest.
@@ -62,8 +63,8 @@ async function bootstrap() {
     }),
   );
 
-  // Mapea las excepciones del ledger (clases planas) a respuestas HTTP.
-  app.useGlobalFilters(new LedgerExceptionFilter());
+  // Mapea las excepciones del ledger y de cajas (clases planas) a respuestas HTTP.
+  app.useGlobalFilters(new LedgerExceptionFilter(), new CajaExceptionFilter());
 
   // Documentación Swagger en /docs
   const swaggerConfig = new DocumentBuilder()

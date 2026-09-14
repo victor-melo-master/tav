@@ -48,6 +48,7 @@ class _TasasScreenState extends ConsumerState<TasasScreen> {
       body: SafeArea(
         child: TavLoadState(
           isLoading: state is CajeroDataLoading,
+          isRefreshing: state is CajeroDataLoaded ? state.isRefreshing : false,
           error: state is CajeroDataError ? state.message : null,
           onRetry: () => ref.read(tasasProvider.notifier).cargar(),
           emptyCheck: () {
@@ -57,7 +58,11 @@ class _TasasScreenState extends ConsumerState<TasasScreen> {
             return false;
           },
           emptyMessage: 'No hay tasas vigentes configuradas.',
-          child: _buildLista(state),
+          child: RefreshIndicator(
+                color: TavColors.blue,
+                onRefresh: () async => ref.read(tasasProvider.notifier).cargar(),
+                child: _buildLista(state),
+              ),
         ),
       ),
     );

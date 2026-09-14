@@ -1,18 +1,25 @@
-import { IsOptional, IsString, IsInt, Min, Max, IsNotEmpty } from 'class-validator';
+import { IsOptional, IsString, IsInt, Min, Max, IsNotEmpty, Matches } from 'class-validator';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 /**
  * DTO para POST /cobrador/cierres/:id/enviar.
  *
- * efectivoDeclaradoCents es lo que el cobrador dice llevar en mano.
+ * El cobrador declara el efectivo que lleva en mano, **por moneda física**:
+ * billetes guyaneses (GYD) y billetes americanos (USD) son dos pilas
+ * distintas que el admin cuenta por separado. No se convierten ni se suman.
  * El resto (digital, total) ya está calculado por el ledger.
  */
 export class EnviarCierreDto {
-  @ApiProperty({ description: 'Efectivo que el cobrador declara llevar (centavos, string)', example: '30000' })
+  @ApiProperty({ description: 'Efectivo en billetes guyaneses que declara llevar (centavos de GYD, string)', example: '30000' })
   @IsString()
-  @IsNotEmpty()
-  efectivoDeclaradoCents!: string;
+  @Matches(/^\d+$/, { message: 'efectivoGydDeclaradoCents debe ser un entero de centavos no negativo' })
+  efectivoGydDeclaradoCents!: string;
+
+  @ApiProperty({ description: 'Efectivo en billetes americanos que declara llevar (centavos de USD, string)', example: '5000' })
+  @IsString()
+  @Matches(/^\d+$/, { message: 'efectivoUsdDeclaradoCents debe ser un entero de centavos no negativo' })
+  efectivoUsdDeclaradoCents!: string;
 
   @ApiPropertyOptional({ description: 'Nota del cobrador para el admin' })
   @IsOptional()

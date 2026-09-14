@@ -22,6 +22,13 @@ Todo monto es `BigInt` de **centavos**. En Prisma `BigInt`, en Postgres `BIGINT`
 Está prohibido `float`, `double`, `Number` y `Decimal` para montos.
 El formateo a "$1.240,00" ocurre solo en la capa de presentación.
 
+**La moneda base del libro de deuda es GYD** (dólar guyanés). Los saldos,
+límites y movimientos del cajero están en centavos de GYD. La multi-moneda
+vive en las cajas (`Caja.moneda`) y en la conversión de cobros (`Cobro.moneda`
++ `Cobro.tasaAplicada`), no en el ledger de deuda. El libro tiene una sola
+moneda por diseño; no se nombran los campos con la moneda porque el día
+que cambie, el nombre mentiría.
+
 ### 2. El libro contable es de solo-inserción
 La tabla `movimientos` **nunca** recibe `UPDATE` ni `DELETE`. Jamás. Bajo ninguna circunstancia.
 Corregir algo significa **insertar un movimiento de reverso**, no modificar el original.
@@ -65,6 +72,13 @@ Existen `TavColors`, `TavSpace`, `TavRadius`, `TavText`.
 Los seeds van en `prisma/seed.ts` y solo corren en desarrollo.
 Ningún endpoint devuelve datos de ejemplo cuando falla. Si falla, devuelve el error.
 
+### 11. Los scripts de prueba corren contra `tav_test`, nunca contra `tav`
+La base de desarrollo (`tav`) es la que refleja lo que ve el cliente.
+Todo script de prueba, smoke, exploración o verificación manual que escriba un agente
+se conecta a `tav_test` usando `DATABASE_URL=postgresql://tav:tav@localhost:5432/tav_test?schema=public`.
+Correr un smoke contra `tav` y luego borrar sus datos del seed es exactamente el error
+que esta regla prohíbe. Si necesitas una base limpia para probar, usa `npm run db:test:setup`.
+
 ---
 
 ## Cómo se ven las cosas
@@ -82,7 +96,7 @@ Si algo no está en el prototipo, pregunta antes de inventarlo.
 
 ## Convenciones
 
-- **Idioma del producto:** español de Venezuela. Formato `$1.240,00` y `Bs 353.896,00`.
+- **Idioma del producto:** español de Venezuela. Formato `G$ 1.240,00` y `Bs 353.896,00`. La moneda base del libro de deuda es GYD (símbolo `G$`).
 - **Idioma del código:** identificadores en español cuando nombran conceptos del negocio
   (`cajero`, `cobro`, `cierre`, `ampliacion`), inglés para lo técnico (`repository`, `guard`, `dto`).
   Elige uno por archivo y sé consistente.

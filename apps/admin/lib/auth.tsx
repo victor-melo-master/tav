@@ -15,7 +15,7 @@ import type { UsuarioPublico } from './types';
 interface AuthContextValue {
   usuario: UsuarioPublico | null;
   cargando: boolean; // true mientras verifica la sesión inicial
-  login: (telefono: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -58,8 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Solo al montar: verifica la sesión guardada contra /auth/me.
   }, []);
 
-  const login = React.useCallback(async (telefono: string, password: string) => {
-    const data = await api.login(telefono, password);
+  const login = React.useCallback(async (email: string, password: string) => {
+    const data = await api.login(email.trim().toLowerCase(), password);
     setUsuario(data.usuario);
   }, []);
 

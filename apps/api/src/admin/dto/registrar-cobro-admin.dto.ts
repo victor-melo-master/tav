@@ -4,13 +4,12 @@ import {
   IsIn,
   IsOptional,
   Matches,
-  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MetodoCobro } from '@prisma/client';
 
 const METODOS = Object.values(MetodoCobro);
-const MONEDAS = ['USD', 'BS', 'USDT'] as const;
+const MONEDAS = ['GYD', 'USD', 'BS', 'USDT'] as const;
 
 /**
  * DTO para POST /admin/cobros.
@@ -51,14 +50,12 @@ export class RegistrarCobroAdminDto {
   moneda!: string;
 
   @ApiPropertyOptional({
-    description: 'Tasa aplicada. Obligatoria si moneda === "BS"',
-    example: '285.400000',
+    description: 'Tasa aplicada. Deprecado: el servicio lee la tasa vigente de la base de datos.',
+    example: '209.000000',
   })
   @IsOptional()
   @IsString()
   @Matches(/^\d+(\.\d+)?$/, { message: 'tasaAplicada debe ser un número decimal positivo' })
-  @ValidateIf((o) => o.moneda === 'BS')
-  @IsNotEmpty({ message: 'tasaAplicada es obligatoria cuando moneda === "BS"' })
   tasaAplicada?: string;
 
   @ApiPropertyOptional({ description: 'Ruta del comprobante subido previamente' })

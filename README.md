@@ -62,6 +62,12 @@ Usan el alias `tav` en `~/.ssh/config` (ver `docs/04-despliegue.md`).
 `/health` responde local y público. Si algo falla, aborta con código != 0
 y muestra los últimos 30 renglones del log.
 
+### Despliegue del panel de admin
+
+- URL de producción: `https://panel.tav.rolapro.com`
+- Script: `./scripts/deploy-admin.sh`
+- Origen CORS: `https://panel.tav.rolapro.com,http://localhost:3000`
+
 ---
 
 ## Estructura del repo
@@ -127,25 +133,27 @@ npm run start:dev                       # http://localhost:3001
 
 #### Usuarios del seed (contraseña `tav1234` para todos)
 
-| Rol | Teléfono | Nombre |
-|---|---|---|
-| Admin | +584120000001 | Iván Rojas |
-| Cobrador | +584120000002 | Carlos Pérez (Centro) |
-| Cobrador | +584120000003 | Luis Gómez (Este) |
-| Cajero | +584120000010 | José Blanco (bloqueado 100%) |
-| Cajero | +584120000011 | Ana Rodríguez (88% cupo) |
-| Cajero | +584120000012 | Pedro Mendoza (8 días deuda) |
-| Cajero | +584120000013 | María Torres (sin conexión 4 días) |
-| Cajero | +584120000014 | Carlos Ruiz (al día) |
-| Cajero | +584120000015 | Sofía Díaz (al día, saldo 0) |
-| Cajero | +584120000016 | Luis Hernández (al día, saldo bajo) |
-| Cajero | +584120000017 | Elena Vargas (deuda moderada) |
+| Rol | Correo | Teléfono | Nombre |
+|---|---|---|---|
+| Admin | admin@tav.test | +584120000001 | Iván Rojas |
+| Cobrador | cobrador1@tav.test | +584120000002 | Carlos Pérez (Centro) |
+| Cobrador | cobrador2@tav.test | +584120000003 | Luis Gómez (Este) |
+| Cajero | cajero.bloqueado@tav.test | +584120000010 | José Blanco (bloqueado 100%) |
+| Cajero | ana.rodriguez@tav.test | +584120000011 | Ana Rodríguez (88% cupo) |
+| Cajero | pedro.mendoza@tav.test | +584120000012 | Pedro Mendoza (8 días deuda) |
+| Cajero | maria.torres@tav.test | +584120000013 | María Torres (sin conexión 4 días) |
+| Cajero | carlos.ruiz@tav.test | +584120000014 | Carlos Ruiz (al día) |
+| Cajero | sofia.diaz@tav.test | +584120000015 | Sofía Díaz (al día) |
+| Cajero | luis.hernandez@tav.test | +584120000016 | Luis Hernández (al día, saldo bajo) |
+| Cajero | elena.vargas@tav.test | +584120000017 | Elena Vargas (deuda moderada) |
+| Pagador | pagador.ven@tav.test | +584120000020 | Ana Pagadora (Venezuela) |
+| Pagador | pagador.bra@tav.test | +551100000020 | Bruno Pagador (Brasil) |
 
 ```bash
 # Verificar login con curl
 curl -X POST http://localhost:3001/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"telefono":"+584120000010","password":"tav1234"}'
+  -d '{"email":"cajero.bloqueado@tav.test","password":"tav1234"}'
 ```
 
 #### Base de tests
@@ -154,6 +162,17 @@ curl -X POST http://localhost:3001/auth/login \
 cd apps/api
 npm run db:test:setup                  # aplica migraciones sobre tav_test
 ```
+
+La base de tests usa este `DATABASE_URL` (ya lo lleva `db:test:setup`, pero
+queda aquí para que no haya que adivinarlo):
+
+```
+DATABASE_URL=postgresql://tav:tav@localhost:5432/tav_test?schema=public
+```
+
+Todo script de prueba, smoke o exploración se conecta a `tav_test`, **nunca**
+a `tav` (ver regla 11 de `AGENTS.md`). La base de desarrollo refleja lo que
+ve el cliente; ensuciarla con datos de prueba y luego borrarla es un bug.
 
 #### Resetear la base de desarrollo
 

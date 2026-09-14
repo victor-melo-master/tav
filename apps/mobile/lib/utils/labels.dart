@@ -53,3 +53,34 @@ String parTasaLabel(String par) => switch (par) {
       'ZELLE_BS' => 'Zelle → Bs',
       _ => par,
     };
+
+/// Símbolo de moneda por código ISO-4217 de tres letras.
+///
+/// Para monedas de corredores que no están en `TavMoneyCurrency` (BRL, COP,
+/// DOP, MXN...). Las que sí están en `TavMoneyCurrency` se formatean con
+/// `formatCents` directamente; este helper es para el texto suelto.
+String simboloMoneda(String codigo) => switch (codigo) {
+      'GYD' => 'G\$ ',
+      'USD' => 'US\$ ',
+      'USDT' => '',
+      'BS' => 'Bs ',
+      'BRL' => 'R\$ ',
+      'COP' => 'COP ',
+      'DOP' => 'RD\$ ',
+      'MXN' => 'MX\$ ',
+      _ => '$codigo ',
+    };
+
+/// Tiempo relativo en español de Venezuela: "hace 5 min", "hace 2 h",
+/// "hace 3 d", o fecha "dd/MM" si pasó más de una semana.
+String tiempoRelativo(DateTime fecha) {
+  final ahora = DateTime.now();
+  final diff = ahora.difference(fecha);
+  if (diff.inMinutes < 1) return 'ahora';
+  if (diff.inMinutes < 60) return 'hace ${diff.inMinutes} min';
+  if (diff.inHours < 24) return 'hace ${diff.inHours} h';
+  if (diff.inDays < 7) return 'hace ${diff.inDays} d';
+  final d = fecha.day.toString().padLeft(2, '0');
+  final m = fecha.month.toString().padLeft(2, '0');
+  return '$d/$m';
+}

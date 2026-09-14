@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
-import { usd } from '@/lib/format';
+import { gyd } from '@/lib/format';
 import type { Resumen } from '@/lib/types';
 import { PageHeader, PageContent } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -127,7 +127,7 @@ export default function TableroPage() {
                 <div>
                   <div className="text-[12px] text-tav-ink-3">Cobrado</div>
                   <div className="mt-0.5 text-[24px] font-bold tabular-nums text-tav-ink">
-                    {usd(data.hoy.cobradoCents)}
+                    {gyd(data.hoy.cobradoCents)}
                   </div>
                 </div>
                 <div>
@@ -148,7 +148,7 @@ export default function TableroPage() {
                 <div>
                   <div className="text-[12px] text-tav-ink-3">Cobrado</div>
                   <div className="mt-0.5 text-[24px] font-bold tabular-nums text-tav-ink">
-                    {usd(data.mes.cobradoCents)}
+                    {gyd(data.mes.cobradoCents)}
                   </div>
                 </div>
                 <div>
@@ -173,7 +173,7 @@ export default function TableroPage() {
               <Wallet className="h-4 w-4" /> Cartera pendiente
             </div>
             <div className="mt-2 text-[30px] font-bold tabular-nums">
-              {usd(data.carteraPendienteCents)}
+              {gyd(data.carteraPendienteCents)}
             </div>
             <div className="mt-1 text-[12px] text-[#9EC0EC]">Total adeudado por cajeros</div>
           </div>

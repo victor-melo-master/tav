@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Loader2, Check, Search } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
-import { usd, parseUserAmountToCents } from '@/lib/format';
+import { gyd, parseUserAmountToCents } from '@/lib/format';
 import type { CajeroLista, MetodoCobro } from '@/lib/types';
 import { PageHeader, PageContent } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,8 @@ import { SemaforoDot } from '@/components/estados';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-const METODOS: { valor: MetodoCobro; label: string; moneda: 'USD' | 'BS' | 'USDT' }[] = [
+const METODOS: { valor: MetodoCobro; label: string; moneda: 'GYD' | 'USD' | 'BS' | 'USDT' }[] = [
+  { valor: 'efectivo_gyd', label: 'Efectivo GYD', moneda: 'GYD' },
   { valor: 'efectivo_usd', label: 'Efectivo USD', moneda: 'USD' },
   { valor: 'bolivares', label: 'Bolívares', moneda: 'BS' },
   { valor: 'pago_movil', label: 'Pago móvil', moneda: 'BS' },
@@ -36,22 +37,24 @@ export default function RegistrarCobroPage() {
 
   const [q, setQ] = React.useState('');
   const [cajeroId, setCajeroId] = React.useState('');
-  const [metodo, setMetodo] = React.useState<MetodoCobro>('efectivo_usd');
+  const [metodo, setMetodo] = React.useState<MetodoCobro>('efectivo_gyd');
   const [monto, setMonto] = React.useState('');
   const [tasa, setTasa] = React.useState('');
   const [nota, setNota] = React.useState('');
   const [enviando, setEnviando] = React.useState(false);
   const [ultimo, setUltimo] = React.useState<string | null>(null);
 
-  const moneda = METODOS.find((m) => m.valor === metodo)?.moneda ?? 'USD';
-  const requiereTasa = moneda === 'BS';
+  const moneda = METODOS.find((m) => m.valor === metodo)?.moneda ?? 'GYD';
+  const requiereTasa = moneda !== 'GYD';
 
   const cajerosFiltrados = React.useMemo(() => {
     if (!cajeros) return [];
     if (!q.trim()) return cajeros;
     const t = q.toLowerCase();
     return cajeros.filter(
-      (c) => c.nombre.toLowerCase().includes(t) || c.telefono.toLowerCase().includes(t),
+      (c) =>
+        c.nombre.toLowerCase().includes(t) ||
+        (c.telefono?.toLowerCase() ?? '').includes(t),
     );
   }, [cajeros, q]);
 
@@ -82,7 +85,7 @@ export default function RegistrarCobroPage() {
         });
       } else {
         toast.success('Pago registrado', {
-          description: `${cajeroSel.nombre} · ${usd(res.cobro.montoUsdCents)} · ${res.cobro.folio}`,
+          description: `${cajeroSel.nombre} · ${gyd(res.cobro.montoBaseCents)} · ${res.cobro.folio}`,
         });
       }
       setUltimo(res.cobro.folio);
@@ -146,11 +149,11 @@ export default function RegistrarCobroPage() {
                     <SemaforoDot estado={c.semaforo} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13.5px] font-medium text-tav-ink">{c.nombre}</div>
-                      <div className="font-mono text-[11.5px] text-tav-ink-3">{c.telefono}</div>
+                      <div className="font-mono text-[11.5px] text-tav-ink-3">{c.telefono ?? '—'}</div>
                     </div>
                     <div className="text-right">
                       <div className="tabular-nums text-[13px] font-semibold text-tav-ink-2">
-                        {usd(c.saldoCents)}
+                        {gyd(c.saldoCents)}
                       </div>
                       <div className="text-[11px] text-tav-ink-4">deuda</div>
                     </div>
@@ -173,7 +176,7 @@ export default function RegistrarCobroPage() {
                       <div className="text-[12px] text-tav-ink-3">Cajero seleccionado</div>
                       <div className="text-[14px] font-semibold text-tav-ink">{cajeroSel.nombre}</div>
                     </div>
-                    <Badge variant="outline">Deuda {usd(cajeroSel.saldoCents)}</Badge>
+                    <Badge variant="outline">Deuda {gyd(cajeroSel.saldoCents)}</Badge>
                   </div>
                 )}
 
@@ -195,12 +198,12 @@ export default function RegistrarCobroPage() {
 
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="monto">
-                    Monto {moneda === 'BS' ? '(Bs)' : moneda === 'USDT' ? '(USDT)' : '(USD)'}
+                    Monto {moneda === 'BS' ? '(Bs)' : moneda === 'USDT' ? '(USDT)' : moneda === 'USD' ? '(US$)' : '(G$)'}
                   </Label>
                   <Input
                     id="monto"
                     inputMode="decimal"
-                    placeholder={moneda === 'BS' ? '353.896,00' : '500,00'}
+                    placeholder={moneda === 'BS' ? '353.896,00' : moneda === 'GYD' ? '313.500,00' : '500,00'}
                     value={monto}
                     onChange={(e) => setMonto(e.target.value)}
                     className="font-mono tabular-nums"
@@ -221,10 +224,10 @@ export default function RegistrarCobroPage() {
                       className="font-mono tabular-nums"
                     />
                     <p className="text-[12px] text-tav-ink-3">
-                      La tasa se congela en el registro. Equivalente en USD:{' '}
+                      La tasa se congela en el registro. Equivalente en GYD:{' '}
                       <b className="font-mono text-tav-ink-2">
                         {montoCents && /^\d+([.,]\d+)?$/.test(tasa.trim())
-                          ? usd(calcularUsd(montoCents, tasa.trim().replace(',', '.'), moneda))
+                          ? gyd(calcularGyd(montoCents, tasa.trim().replace(',', '.'), moneda))
                           : '—'}
                       </b>
                     </p>
@@ -253,11 +256,12 @@ export default function RegistrarCobroPage() {
   );
 }
 
-/** Convierte monto en BS a USD usando la tasa (string decimal). */
-function calcularUsd(montoCents: string, tasa: string, _moneda: string): string {
-  const montoBs = Number(montoCents) / 100;
+/** Convierte monto en la moneda recibida a GYD usando la tasa (string decimal).
+ *  tasa = "GYD por unidad de moneda" → montoGyd = monto × tasa. */
+function calcularGyd(montoCents: string, tasa: string, _moneda: string): string {
+  const monto = Number(montoCents);
   const t = Number(tasa);
   if (!t) return '0';
-  const usdVal = montoBs / t;
-  return BigInt(Math.round(usdVal * 100)).toString();
+  const gydVal = monto * t;
+  return BigInt(Math.round(gydVal)).toString();
 }

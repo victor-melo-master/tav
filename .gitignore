@@ -24,6 +24,9 @@ apps/mobile/.fvm/
 .env.*.local
 .env.prod
 
+# APK
+*.apk
+
 # Paquete de despliegue
 tav-deploy.zip
 

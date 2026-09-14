@@ -25,6 +25,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { PrismaClient, Prisma } from '@prisma/client';
 import argon2 from 'argon2';
+import { randomUUID } from 'crypto';
 import { AppModule } from '../src/app.module';
 import { LedgerExceptionFilter } from '../src/ledger-exception.filter';
 
@@ -56,20 +57,35 @@ async function seedConfig() {
   });
 }
 
+/** Tasas de conversión a GYD. USD_GYD = 1 para que los tests se concentren
+ *  en mecánica, no en conversión. */
+async function seedTasas() {
+  await prisma.tasa.createMany({
+    data: [
+      { id: randomUUID(), par: 'GYD_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
+      { id: randomUUID(), par: 'USD_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
+      { id: randomUUID(), par: 'USDT_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
+      { id: randomUUID(), par: 'BS_GYD', valor: 0.732314, creadaPorId: 'admin-test', vigenteDesde: new Date() },
+    ],
+  });
+}
+
 async function crearCajero(opts: {
-  telefono: string;
+  email: string;
+  telefono?: string;
   password?: string;
   nombre?: string;
   limiteCents?: bigint;
   saldoCents?: bigint;
   deudaDesde?: Date | null;
   zona?: string;
-}): Promise<{ id: string; telefono: string; password: string }> {
+}): Promise<{ id: string; email: string; password: string }> {
   const password = opts.password ?? 'clave123';
   const passwordHash = await argon2.hash(password);
   const data: Prisma.UsuarioCreateInput = {
     rol: 'cajero',
     nombre: opts.nombre ?? 'Cajero Test',
+    email: opts.email,
     telefono: opts.telefono,
     passwordHash,
     perfilCajero: {
@@ -82,20 +98,22 @@ async function crearCajero(opts: {
     },
   };
   const u = await prisma.usuario.create({ data });
-  return { id: u.id, telefono: opts.telefono, password };
+  return { id: u.id, email: opts.email, password };
 }
 
 async function crearCobrador(opts: {
-  telefono: string;
+  email: string;
+  telefono?: string;
   password?: string;
   nombre?: string;
   zona?: string;
-}): Promise<{ id: string; telefono: string; password: string }> {
+}): Promise<{ id: string; email: string; password: string }> {
   const password = opts.password ?? 'clave123';
   const passwordHash = await argon2.hash(password);
   const data: Prisma.UsuarioCreateInput = {
     rol: 'cobrador',
     nombre: opts.nombre ?? 'Cobrador Test',
+    email: opts.email,
     telefono: opts.telefono,
     passwordHash,
     perfilCobrador: {
@@ -103,13 +121,13 @@ async function crearCobrador(opts: {
     },
   };
   const u = await prisma.usuario.create({ data });
-  return { id: u.id, telefono: opts.telefono, password };
+  return { id: u.id, email: opts.email, password };
 }
 
-async function login(app: INestApplication, telefono: string, password: string): Promise<string> {
+async function login(app: INestApplication, email: string, password: string): Promise<string> {
   const res = await request(app.getHttpServer())
     .post('/auth/login')
-    .send({ telefono, password });
+    .send({ email, password });
   return res.body.accessToken;
 }
 
@@ -131,18 +149,19 @@ afterAll(async () => {
 beforeEach(async () => {
   await truncateTodo();
   await seedConfig();
+  await seedTasas();
 });
 
 // ─────────────────────────── CAJEROS ───────────────────────────
 
 describe('Cobrador — GET /cobrador/cajeros', () => {
   test('lista todos los cajeros ordenados por urgencia', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     // Cajero verde: saldo 0, sin deuda
     const c1 = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       nombre: 'Verde',
       limiteCents: 100_000n,
       saldoCents: 0n,
@@ -150,7 +169,7 @@ describe('Cobrador — GET /cobrador/cajeros', () => {
 
     // Cajero rojo por cupo: saldo = límite (pct = 1.0)
     const c2 = await crearCajero({
-      telefono: '0414-1000002',
+      email: '0414-1000002@tav.test',
       nombre: 'Bloqueado',
       limiteCents: 100_000n,
       saldoCents: 100_000n,
@@ -160,7 +179,7 @@ describe('Cobrador — GET /cobrador/cajeros', () => {
     // Cajero ámbar por días: deuda de 5 días
     const hace5dias = new Date(Date.now() - 5 * 86_400_000);
     const c3 = await crearCajero({
-      telefono: '0414-1000003',
+      email: '0414-1000003@tav.test',
       nombre: 'Ambar',
       limiteCents: 100_000n,
       saldoCents: 50_000n,
@@ -183,11 +202,11 @@ describe('Cobrador — GET /cobrador/cajeros', () => {
   });
 
   test('incluye días sin conectarse y atención activa', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const hace3dias = new Date(Date.now() - 3 * 86_400_000);
-    const c = await crearCajero({ telefono: '0414-1000001', nombre: 'Cajero' });
+    const c = await crearCajero({ email: '0414-1000001@tav.test', nombre: 'Cajero' });
 
     // Marcar última vez conectado hace 3 días.
     await prisma.usuario.update({
@@ -216,11 +235,11 @@ describe('Cobrador — GET /cobrador/cajeros', () => {
 
 describe('Cobrador — POST /cobrador/cobros', () => {
   test('registra un cobro en efectivo USD', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
       deudaDesde: new Date(),
@@ -239,7 +258,7 @@ describe('Cobrador — POST /cobrador/cobros', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.cobro.folio).toMatch(/^COB-/);
-    expect(res.body.cobro.montoUsdCents).toBe('30000');
+    expect(res.body.cobro.montoBaseCents).toBe('30000');
     expect(res.body.cobro.esEfectivo).toBe(true);
     expect(res.body.yaExistia).toBe(false);
 
@@ -249,11 +268,11 @@ describe('Cobrador — POST /cobrador/cobros', () => {
   });
 
   test('es idempotente por clientUuid', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
       deudaDesde: new Date(),
@@ -288,17 +307,18 @@ describe('Cobrador — POST /cobrador/cobros', () => {
   });
 
   test('registra un cobro en bolívares con tasa', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
       deudaDesde: new Date(),
     });
 
-    // 2_854_000 centavos de BS con tasa 285.4 → 10_000 centavos USD.
+    // 2.854.000 centavos de BS × tasa BS_GYD 0.732314 = 2.090.024 centavos GYD (half-up).
+    // La tasa la lee el servicio de la base; tasaAplicada en el DTO se ignora.
     const res = await request(app.getHttpServer())
       .post('/cobrador/cobros')
       .set('Authorization', `Bearer ${token}`)
@@ -308,23 +328,25 @@ describe('Cobrador — POST /cobrador/cobros', () => {
         metodo: 'bolivares',
         montoCents: '2854000',
         moneda: 'BS',
-        tasaAplicada: '285.4',
       });
 
     expect(res.status).toBe(201);
-    expect(res.body.cobro.montoUsdCents).toBe('10000');
+    expect(res.body.cobro.montoBaseCents).toBe('2090024');
     expect(res.body.cobro.esEfectivo).toBe(false);
   });
 
-  test('rechaza cobro en BS sin tasa', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+  test('rechaza cobro en BS cuando no hay tasa vigente en la base', async () => {
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
     });
+
+    // Borrar la tasa BS_GYD sembrada en beforeEach para forzar el rechazo.
+    await prisma.tasa.deleteMany({ where: { par: 'BS_GYD' } });
 
     const res = await request(app.getHttpServer())
       .post('/cobrador/cobros')
@@ -346,11 +368,11 @@ describe('Cobrador — POST /cobrador/cobros', () => {
 
 describe('Cobrador — POST /cobrador/cobros/:id/anular', () => {
   test('anula un cobro propio con motivo válido', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
       deudaDesde: new Date(),
@@ -382,13 +404,13 @@ describe('Cobrador — POST /cobrador/cobros/:id/anular', () => {
   });
 
   test('un cobrador no puede anular el cobro de otro', async () => {
-    const cob1 = await crearCobrador({ telefono: '0414-2000001', nombre: 'Cob1' });
-    const cob2 = await crearCobrador({ telefono: '0414-2000002', nombre: 'Cob2' });
-    const token1 = await login(app, cob1.telefono, cob1.password);
-    const token2 = await login(app, cob2.telefono, cob2.password);
+    const cob1 = await crearCobrador({ email: '0414-2000001@tav.test', nombre: 'Cob1' });
+    const cob2 = await crearCobrador({ email: '0414-2000002@tav.test', nombre: 'Cob2' });
+    const token1 = await login(app, cob1.email, cob1.password);
+    const token2 = await login(app, cob2.email, cob2.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
       deudaDesde: new Date(),
@@ -417,11 +439,11 @@ describe('Cobrador — POST /cobrador/cobros/:id/anular', () => {
   });
 
   test('rechaza motivo menor de 10 caracteres', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
     });
@@ -450,8 +472,8 @@ describe('Cobrador — POST /cobrador/cobros/:id/anular', () => {
 
 describe('Cobrador — Cierres', () => {
   test('GET /cobrador/cierre-actual devuelve estructura vacía sin cobros', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const res = await request(app.getHttpServer())
       .get('/cobrador/cierre-actual')
@@ -464,11 +486,11 @@ describe('Cobrador — Cierres', () => {
   });
 
   test('GET /cobrador/cierre-actual devuelve el cierre con cobros', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
       deudaDesde: new Date(),
@@ -496,11 +518,11 @@ describe('Cobrador — Cierres', () => {
   });
 
   test('POST /cobrador/cierres/:id/enviar cierra el día', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
       deudaDesde: new Date(),
@@ -537,22 +559,22 @@ describe('Cobrador — Cierres', () => {
     const res = await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreRes.body.id}/enviar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoDeclaradoCents: '30000' });
+      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
 
     expect(res.status).toBe(200);
     expect(res.body.estado).toBe('enviado');
-    expect(res.body.efectivoDeclaradoCents).toBe('30000');
+    expect(res.body.efectivoGydDeclaradoCents).toBe('30000');
     expect(res.body.digitalCents).toBe('20000');
     expect(res.body.totalRegistradoCents).toBe('50000');
     expect(res.body.enviadoAt).not.toBeNull();
   });
 
   test('enviar un cierre con cobros sin sincronizar falla', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
       deudaDesde: new Date(),
@@ -582,18 +604,18 @@ describe('Cobrador — Cierres', () => {
     const res = await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreRes.body.id}/enviar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoDeclaradoCents: '30000' });
+      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('CIERRE_NO_ABIERTO');
   });
 
   test('GET /cobrador/cierres historial paginado', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
     });
@@ -624,10 +646,10 @@ describe('Cobrador — Cierres', () => {
 
 describe('Cobrador — Atenciones', () => {
   test('marca y libera atención sobre un cajero', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
-    const caj = await crearCajero({ telefono: '0414-1000001' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
 
     const marcar = await request(app.getHttpServer())
       .post('/cobrador/atenciones')
@@ -648,13 +670,13 @@ describe('Cobrador — Atenciones', () => {
   });
 
   test('dos cobradores pueden marcar atención sobre cajeros distintos sin interferirse', async () => {
-    const cob1 = await crearCobrador({ telefono: '0414-2000001', nombre: 'Cob1' });
-    const cob2 = await crearCobrador({ telefono: '0414-2000002', nombre: 'Cob2' });
-    const token1 = await login(app, cob1.telefono, cob1.password);
-    const token2 = await login(app, cob2.telefono, cob2.password);
+    const cob1 = await crearCobrador({ email: '0414-2000001@tav.test', nombre: 'Cob1' });
+    const cob2 = await crearCobrador({ email: '0414-2000002@tav.test', nombre: 'Cob2' });
+    const token1 = await login(app, cob1.email, cob1.password);
+    const token2 = await login(app, cob2.email, cob2.password);
 
-    const caj1 = await crearCajero({ telefono: '0414-1000001', nombre: 'Caj1' });
-    const caj2 = await crearCajero({ telefono: '0414-1000002', nombre: 'Caj2' });
+    const caj1 = await crearCajero({ email: '0414-1000001@tav.test', nombre: 'Caj1' });
+    const caj2 = await crearCajero({ email: '0414-1000002@tav.test', nombre: 'Caj2' });
 
     const r1 = await request(app.getHttpServer())
       .post('/cobrador/atenciones')
@@ -673,12 +695,12 @@ describe('Cobrador — Atenciones', () => {
   });
 
   test('un cobrador no puede marcar atención sobre un cajero ya atendido por otro', async () => {
-    const cob1 = await crearCobrador({ telefono: '0414-2000001', nombre: 'Cob1' });
-    const cob2 = await crearCobrador({ telefono: '0414-2000002', nombre: 'Cob2' });
-    const token1 = await login(app, cob1.telefono, cob1.password);
-    const token2 = await login(app, cob2.telefono, cob2.password);
+    const cob1 = await crearCobrador({ email: '0414-2000001@tav.test', nombre: 'Cob1' });
+    const cob2 = await crearCobrador({ email: '0414-2000002@tav.test', nombre: 'Cob2' });
+    const token1 = await login(app, cob1.email, cob1.password);
+    const token2 = await login(app, cob2.email, cob2.password);
 
-    const caj = await crearCajero({ telefono: '0414-1000001' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
 
     await request(app.getHttpServer())
       .post('/cobrador/atenciones')
@@ -699,10 +721,10 @@ describe('Cobrador — Atenciones', () => {
 
 describe('Cobrador — POST /cobrador/avisos', () => {
   test('envía un aviso manual a un cajero', async () => {
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const token = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const token = await login(app, cob.email, cob.password);
 
-    const caj = await crearCajero({ telefono: '0414-1000001' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
 
     const res = await request(app.getHttpServer())
       .post('/cobrador/avisos')
@@ -725,8 +747,8 @@ describe('Cobrador — POST /cobrador/avisos', () => {
 
 describe('Cobrador — un cajero recibe 403 en todos los endpoints', () => {
   test('403 en GET /cobrador/cajeros', async () => {
-    const caj = await crearCajero({ telefono: '0414-1000001' });
-    const token = await login(app, caj.telefono, caj.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+    const token = await login(app, caj.email, caj.password);
 
     const res = await request(app.getHttpServer())
       .get('/cobrador/cajeros')
@@ -736,8 +758,8 @@ describe('Cobrador — un cajero recibe 403 en todos los endpoints', () => {
   });
 
   test('403 en POST /cobrador/cobros', async () => {
-    const caj = await crearCajero({ telefono: '0414-1000001' });
-    const token = await login(app, caj.telefono, caj.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+    const token = await login(app, caj.email, caj.password);
 
     const res = await request(app.getHttpServer())
       .post('/cobrador/cobros')
@@ -754,8 +776,8 @@ describe('Cobrador — un cajero recibe 403 en todos los endpoints', () => {
   });
 
   test('403 en POST /cobrador/cobros/:id/anular', async () => {
-    const caj = await crearCajero({ telefono: '0414-1000001' });
-    const token = await login(app, caj.telefono, caj.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+    const token = await login(app, caj.email, caj.password);
 
     const res = await request(app.getHttpServer())
       .post('/cobrador/cobros/fake-id/anular')
@@ -766,8 +788,8 @@ describe('Cobrador — un cajero recibe 403 en todos los endpoints', () => {
   });
 
   test('403 en GET /cobrador/cierre-actual', async () => {
-    const caj = await crearCajero({ telefono: '0414-1000001' });
-    const token = await login(app, caj.telefono, caj.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+    const token = await login(app, caj.email, caj.password);
 
     const res = await request(app.getHttpServer())
       .get('/cobrador/cierre-actual')
@@ -777,20 +799,20 @@ describe('Cobrador — un cajero recibe 403 en todos los endpoints', () => {
   });
 
   test('403 en POST /cobrador/cierres/:id/enviar', async () => {
-    const caj = await crearCajero({ telefono: '0414-1000001' });
-    const token = await login(app, caj.telefono, caj.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+    const token = await login(app, caj.email, caj.password);
 
     const res = await request(app.getHttpServer())
       .post('/cobrador/cierres/fake-id/enviar')
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoDeclaradoCents: '1000' });
+      .send({ efectivoGydDeclaradoCents: '1000', efectivoUsdDeclaradoCents: '0' });
 
     expect(res.status).toBe(403);
   });
 
   test('403 en GET /cobrador/cierres', async () => {
-    const caj = await crearCajero({ telefono: '0414-1000001' });
-    const token = await login(app, caj.telefono, caj.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+    const token = await login(app, caj.email, caj.password);
 
     const res = await request(app.getHttpServer())
       .get('/cobrador/cierres')
@@ -800,8 +822,8 @@ describe('Cobrador — un cajero recibe 403 en todos los endpoints', () => {
   });
 
   test('403 en POST /cobrador/atenciones', async () => {
-    const caj = await crearCajero({ telefono: '0414-1000001' });
-    const token = await login(app, caj.telefono, caj.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+    const token = await login(app, caj.email, caj.password);
 
     const res = await request(app.getHttpServer())
       .post('/cobrador/atenciones')
@@ -812,8 +834,8 @@ describe('Cobrador — un cajero recibe 403 en todos los endpoints', () => {
   });
 
   test('403 en DELETE /cobrador/atenciones/:cajeroId', async () => {
-    const caj = await crearCajero({ telefono: '0414-1000001' });
-    const token = await login(app, caj.telefono, caj.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+    const token = await login(app, caj.email, caj.password);
 
     const res = await request(app.getHttpServer())
       .delete('/cobrador/atenciones/fake')
@@ -823,8 +845,8 @@ describe('Cobrador — un cajero recibe 403 en todos los endpoints', () => {
   });
 
   test('403 en POST /cobrador/avisos', async () => {
-    const caj = await crearCajero({ telefono: '0414-1000001' });
-    const token = await login(app, caj.telefono, caj.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+    const token = await login(app, caj.email, caj.password);
 
     const res = await request(app.getHttpServer())
       .post('/cobrador/avisos')

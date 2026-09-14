@@ -3,7 +3,7 @@
  *
  * Los montos viajan como string de centavos (BigInt no existe en JSON).
  * Aquí se parsean a entero y se formatean con símbolo delante:
- *   "$1.240,00"  ·  "Bs 353.896,00"
+ *   "G$ 1.240,00"  ·  "Bs 353.896,00"
  *
  * Regla 1 del proyecto: nada de float/double/Number para montos. El parseo
  * usa BigInt para no perder precisión, y el formateo manual evita Number.
@@ -16,12 +16,13 @@ export function centsToBigInt(cents: string | number | null | undefined): bigint
 }
 
 /**
- * Formatea centavos a "$1.240,00" o "Bs 353.896,00".
+ * Formatea centavos a "G$ 1.240,00" o "Bs 353.896,00".
  * El símbolo va siempre delante, separador de miles ".", decimales ",".
+ * La moneda base del libro de deuda es GYD → símbolo G$.
  */
 export function formatMoney(
   cents: string | number | bigint | null | undefined,
-  simbolo: string = '$',
+  simbolo: string = 'G$ ',
 ): string {
   const total = typeof cents === 'bigint' ? cents : centsToBigInt(cents);
   const negativo = total < 0n;
@@ -36,14 +37,40 @@ export function formatMoney(
   return `${negativo ? '−' : ''}${simbolo}${monto}`;
 }
 
-/** Formatea centavos como USD ($). */
+/** Formatea centavos en la moneda base del libro (GYD). */
+export function gyd(cents: string | number | bigint | null | undefined): string {
+  return formatMoney(cents, 'G$ ');
+}
+
+/** Formatea centavos en dólares estadounidenses. */
 export function usd(cents: string | number | bigint | null | undefined): string {
-  return formatMoney(cents, '$');
+  return formatMoney(cents, 'US$ ');
 }
 
 /** Formatea centavos como bolívares (Bs). */
 export function bs(cents: string | number | bigint | null | undefined): string {
   return formatMoney(cents, 'Bs ');
+}
+
+/**
+ * Formatea centavos según el código de moneda de la caja. Usado en el
+ * tablero de cajas, donde cada caja tiene su propia moneda.
+ */
+export function formatoMoneda(
+  cents: string | number | bigint | null | undefined,
+  moneda: string,
+): string {
+  const simbolos: Record<string, string> = {
+    GYD: 'G$ ',
+    USD: 'US$ ',
+    USDT: 'USDT ',
+    BS: 'Bs ',
+    BRL: 'R$ ',
+    COP: 'COL$ ',
+    DOP: 'RD$ ',
+    MXN: 'MX$ ',
+  };
+  return formatMoney(cents, simbolos[moneda] ?? `${moneda} `);
 }
 
 /**
@@ -59,7 +86,7 @@ export function parseUserAmountToCents(input: string): string | null {
   if (!limpio) return null;
 
   // Quita símbolos de moneda que el usuario pueda haber escrito.
-  const sinSimbolo = limpio.replace(/^[Bs$]+/i, '').replace(/\$/g, '');
+  const sinSimbolo = limpio.replace(/^(G\$|Bs|US\$|\$)/i, '').replace(/\$/g, '');
   if (!sinSimbolo) return null;
 
   // Determina separador decimal: si hay coma, la coma es decimal y los puntos

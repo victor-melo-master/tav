@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Search, Pencil, ChevronRight, Loader2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
-import { usd, parseUserAmountToCents } from '@/lib/format';
+import { gyd, parseUserAmountToCents } from '@/lib/format';
 import type { CajeroLista, EstadoSemaforo } from '@/lib/types';
 import { PageHeader, PageContent } from '@/components/page-header';
 import { Input } from '@/components/ui/input';
@@ -143,6 +143,8 @@ export default function CajerosPage() {
 
 function CajeroFila({ cajero, onEditar }: { cajero: CajeroLista; onEditar: () => void }) {
   const pct = Math.round(cajero.pct * 100);
+  const saldo = BigInt(cajero.saldoCents);
+  const tieneFavor = saldo < 0n;
   return (
     <TableRow className="cursor-pointer">
       <TableCell>
@@ -151,15 +153,19 @@ function CajeroFila({ cajero, onEditar }: { cajero: CajeroLista; onEditar: () =>
       <TableCell>
         <Link href={`/cajeros/${cajero.id}`} className="block">
           <div className="font-medium text-tav-ink">{cajero.nombre}</div>
-          <div className="font-mono text-[11.5px] text-tav-ink-3">{cajero.telefono}</div>
+          <div className="font-mono text-[11.5px] text-tav-ink-3">{cajero.telefono ?? '—'}</div>
         </Link>
       </TableCell>
       <TableCell className="text-tav-ink-2">{cajero.zona || '—'}</TableCell>
       <TableCell className="text-right tabular-nums font-medium">
-        {usd(cajero.saldoCents)}
+        {tieneFavor ? (
+          <span className="text-tav-green-600">{gyd((-saldo).toString())} a favor</span>
+        ) : (
+          gyd(cajero.saldoCents)
+        )}
       </TableCell>
       <TableCell className="text-right tabular-nums text-tav-ink-2">
-        {usd(cajero.limiteCents)}
+        {gyd(cajero.limiteCents)}
       </TableCell>
       <TableCell className="w-32">
         <div className="flex items-center gap-2">
@@ -238,7 +244,7 @@ function EditarLimiteDialog({
     try {
       await api.cambiarLimite(cajero.id, nuevoCents);
       toast.success('Límite actualizado', {
-        description: `${cajero.nombre}: ${usd(nuevoCents)}`,
+        description: `${cajero.nombre}: ${gyd(nuevoCents)}`,
       });
       onGuardado();
       onClose();
@@ -255,7 +261,7 @@ function EditarLimiteDialog({
         <DialogHeader>
           <DialogTitle>Editar límite de crédito</DialogTitle>
           <DialogDescription>
-            {cajero?.nombre} · {cajero?.telefono}
+            {cajero?.nombre} · {cajero?.telefono ?? '—'}
           </DialogDescription>
         </DialogHeader>
 
@@ -263,7 +269,7 @@ function EditarLimiteDialog({
           <div className="flex items-center justify-between rounded-md bg-tav-bg px-3 py-2 text-[13px]">
             <span className="text-tav-ink-3">Límite actual</span>
             <span className="tabular-nums font-semibold text-tav-ink-2">
-              {cajero ? usd(cajero.limiteCents) : ''}
+              {cajero ? gyd(cajero.limiteCents) : ''}
             </span>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -280,7 +286,7 @@ function EditarLimiteDialog({
           {cambio && (
             <div className="flex items-center justify-between rounded-md bg-tav-blue-50 px-3 py-2 text-[13px] text-tav-blue-600">
               <span>Nuevo límite</span>
-              <span className="tabular-nums font-semibold">{usd(nuevoCents)}</span>
+              <span className="tabular-nums font-semibold">{gyd(nuevoCents)}</span>
             </div>
           )}
           <p className="text-[12px] text-tav-ink-3">

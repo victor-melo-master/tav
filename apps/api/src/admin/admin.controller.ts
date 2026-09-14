@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
@@ -7,6 +7,7 @@ import { CambiarLimiteDto } from './dto/cambiar-limite.dto';
 import { ResolverAmpliacionDto } from './dto/resolver-ampliacion.dto';
 import { VerificarCierreDto } from './dto/verificar-cierre.dto';
 import { CrearTasaDto } from './dto/crear-tasa.dto';
+import { PublicarTasasDto } from './dto/publicar-tasas.dto';
 import { RegistrarCobroAdminDto } from './dto/registrar-cobro-admin.dto';
 import {
   ListarAmpliacionesDto,
@@ -15,6 +16,7 @@ import {
 } from './dto/listar.dto';
 import { Roles } from '../auth/roles.decorator';
 import { AuthenticatedRequest } from '../auth/auth.types';
+import { TasaCorredorService } from '../tasa/tasa-corredor.service';
 
 /**
  * Endpoints del rol administrador. Capa fina: adminId sale siempre del JWT
@@ -32,7 +34,10 @@ import { AuthenticatedRequest } from '../auth/auth.types';
 @Roles('admin')
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly tasaCorredor: TasaCorredorService,
+  ) {}
 
   // ─────────────────────────── USUARIOS ───────────────────────────
 
@@ -163,6 +168,34 @@ export class AdminController {
   @ApiResponse({ status: 200, description: 'Tasas ordenadas por vigenteDesde desc' })
   async tasas(@Query('par') par?: string) {
     return this.admin.tasas(par);
+  }
+
+  // ──────────────────── TASAS POR CORREDOR (Fase 9) ────────────────────
+
+  @Post('tasas-corredor/previsualizar')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Previsualiza avisos de una publicación sin escribir' })
+  async previsualizarTasas(@Body() dto: PublicarTasasDto) {
+    return this.tasaCorredor.previsualizar(dto);
+  }
+
+  @Post('tasas-corredor/publicar')
+  @ApiOperation({ summary: 'Publica una tanda atómica de tasas por corredor' })
+  @ApiResponse({ status: 201, description: 'Publicación creada con su pata base e items' })
+  async publicarTasas(@Body() dto: PublicarTasasDto, @Req() req: AuthenticatedRequest) {
+    return this.tasaCorredor.publicar(req.user.sub, dto);
+  }
+
+  @Get('tasas-corredor/actual')
+  @ApiOperation({ summary: 'Última publicación con sus items (para precargar la pantalla)' })
+  async tasasCorredorActual() {
+    return this.tasaCorredor.ultimaPublicacion();
+  }
+
+  @Get('tasas-corredor/historial')
+  @ApiOperation({ summary: 'Historial de publicaciones de tasas por corredor' })
+  async tasasCorredorHistorial() {
+    return this.tasaCorredor.historial();
   }
 
   // ─────────────────────────── COBROS DEL ADMIN ───────────────────────────

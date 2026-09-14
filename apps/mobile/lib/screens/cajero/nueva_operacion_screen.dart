@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../components/tav_button.dart';
 import '../../components/tav_card.dart';
-import '../../components/tav_chip.dart';
 import '../../components/tav_field.dart';
 import '../../components/tav_keypad.dart';
 import '../../components/tav_money_display.dart';
@@ -18,7 +17,13 @@ import '../../theme/tav_space.dart';
 import '../../theme/tav_text.dart';
 import '../../utils/labels.dart';
 
-/// Flujo de nueva operación: tipo → monto → beneficiario → resumen → pago → confirmación.
+/// Flujo de nueva operación: destino → monto → beneficiario → resumen → pago → confirmación.
+///
+/// Fase 9: el cajero escoge un corredor (destino + forma de entrega) y ve
+/// una sola tasa, la cotizada. El desglose es de tres líneas: lo que envía
+/// en GYD, la tasa aplicada, y lo que recibe el beneficiario en la moneda
+/// del destino. Ninguna comisión visible. Si no hay corredores ofrecibles,
+/// un estado vacío que lo explica.
 ///
 /// Al recibir un 409 por falta de cupo, muestra el mensaje real del servidor
 /// con cuánto falta y ofrece solicitar ampliación.
@@ -31,11 +36,16 @@ class NuevaOperacionScreen extends ConsumerStatefulWidget {
 }
 
 class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
-  int _step = 0; // 0: tipo, 1: monto, 2: beneficiario, 3: resumen, 4: pago
-  String _tipo = 'usdt_bs';
+  int _step = 0; // 0: destino, 1: monto, 2: beneficiario, 3: resumen, 4: pago
+  CorredorDto? _corredor;
   String _montoStr = ''; // en centavos como string
-  String _tasaValor = '';
-  String _tasaPar = 'USDT_BS';
+
+  // La tasa cotizada del corredor elegido. Es string decimal.
+  String get _tasaValor => _corredor?.tasaCotizada ?? '';
+  String get _monedaDestino => _corredor?.moneda ?? 'BS';
+  String get _monedaOrigen => 'USDT'; // Fase 9: el cajero envía USDT
+  String get _tipo => 'usdt_${_corredor?.moneda.toLowerCase() ?? 'bs'}';
+
   final _benefNombreController = TextEditingController();
   final _benefDocController = TextEditingController();
   final _benefBancoController = TextEditingController();
@@ -52,40 +62,47 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _cargarTasa();
+      ref.read(corredoresProvider.notifier).cargar();
       ref.read(resumenProvider.notifier).cargar();
     });
   }
 
-  void _cargarTasa() {
-    final tasasState = ref.read(tasasProvider);
-    if (tasasState is CajeroDataLoaded<List<TasaDto>>) {
-      _setTasaFromList(tasasState.data);
-    } else {
-      ref.read(tasasProvider.notifier).cargar();
-    }
-  }
-
-  void _setTasaFromList(List<TasaDto> tasas) {
-    final par = _tipo == 'usdt_bs' ? 'USDT_BS' : 'USD_BS';
-    for (final t in tasas) {
-      if (t.par == par) {
-        setState(() {
-          _tasaValor = t.valor;
-          _tasaPar = par;
-        });
-        return;
-      }
-    }
-  }
-
   int get _montoCents => int.tryParse(_montoStr) ?? 0;
-  double get _tasa => double.tryParse(_tasaValor) ?? 0;
+
+  /// Tasa escalada a 8 decimales como entero, para multiplicar sin double.
+  ///
+  /// "1.3359375" → 133593750 (1.3359375 × 10^8).
+  /// "285.4"     → 28540000000 (285.4 × 10^8).
+  /// Si la tasa tiene más de 8 decimales, se trunca a 8 (la precisión de
+  /// Decimal(18,8) del backend).
+  int get _tasaEscalada {
+    final s = _tasaValor;
+    if (s.isEmpty) return 0;
+    final dot = s.indexOf('.');
+    if (dot < 0) return int.parse(s) * 100000000;
+    final enteros = s.substring(0, dot);
+    var decimales = s.substring(dot + 1);
+    if (decimales.length > 8) decimales = decimales.substring(0, 8);
+    while (decimales.length < 8) {
+      decimales += '0';
+    }
+    return int.parse('$enteros$decimales');
+  }
+
   // La comisión va implícita dentro de la tasa (docs/01-reglas-de-negocio.md).
   // El cajero no paga cargo aparte: debe exactamente lo que envía.
   int get _comisionCents => 0;
   int get _totalCents => _montoCents;
-  int get _montoDestinoCents => (_montoCents * _tasa).round();
+
+  /// montoDestino = round_half_up(montoCents × tasaEscalada / 10^8)
+  ///
+  /// Aritmética entera pura, sin double. Coincide con lo que calcula el
+  /// servidor con Decimal + ROUND_HALF_UP, porque ambos escalan a 8
+  /// decimales y redondean half-up.
+  int get _montoDestinoCents {
+    final producto = _montoCents * _tasaEscalada;
+    return (producto + 50000000) ~/ 100000000;
+  }
 
   @override
   void dispose() {
@@ -117,12 +134,11 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
     });
   }
 
-  void _selectTipo(String tipo) {
+  void _selectCorredor(CorredorDto c) {
     setState(() {
-      _tipo = tipo;
+      _corredor = c;
       _step = 1;
     });
-    _cargarTasa();
   }
 
   void _continuarABenef() {
@@ -149,12 +165,10 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
           clientUuid: uuid,
           tipo: _tipo,
           montoOrigenCents: _montoCents.toString(),
-          monedaOrigen: _tipo == 'usdt_bs' ? 'USDT' : 'USD',
-          tasaAplicada: _tasaValor,
+          monedaOrigen: _monedaOrigen,
           comisionCents: _comisionCents.toString(),
           totalCents: _totalCents.toString(),
-          montoDestinoCents: _montoDestinoCents.toString(),
-          monedaDestino: 'BS',
+          monedaDestino: _monedaDestino,
           beneficiario: BeneficiarioOperacionDto(
             nombre: _benefNombreController.text.trim(),
             documento: _benefDocController.text.trim(),
@@ -162,6 +176,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
             cuenta: _benefCuentaController.text.trim(),
             metodo: _benefMetodo,
           ),
+          corredorId: _corredor!.id,
         ),
       );
 
@@ -242,43 +257,67 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
     };
   }
 
-  // ── Paso 0: Tipo de operación ──
+  // ── Paso 0: Destino (corredor) ──
   Widget _pasoTipo() {
+    final corredoresState = ref.watch(corredoresProvider);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(TavSpace.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '¿Qué tipo de operación quieres registrar?',
+            '¿A dónde va el dinero?',
             style: TavText.body2.copyWith(color: TavColors.ink3),
           ),
           const SizedBox(height: 18),
-          _TipoCard(
-            titulo: 'USDT → Bolívares',
-            descripcion:
-                'Envías USDT (Binance / TRC20) y tu beneficiario recibe bolívares por transferencia o pago móvil.',
-            tasaLabel: _tasaValor.isNotEmpty
-                ? 'Tasa hoy · ${_formatTasa(_tasaValor)} Bs · entrega en 15–45 min'
-                : 'Cargando tasa...',
-            icon: Icons.currency_bitcoin,
-            iconBg: TavColors.blue50,
-            iconColor: TavColors.blue,
-            chip: const TavChip(label: 'Más usada', state: TavChipState.azul),
-            seleccionado: _tipo == 'usdt_bs',
-            onTap: () => _selectTipo('usdt_bs'),
-          ),
+          if (corredoresState is CajeroDataLoading) ...[
+            const Center(child: CircularProgressIndicator()),
+          ] else if (corredoresState is CajeroDataError) ...[
+            Text(
+              corredoresState.message,
+              style: TavText.body2.copyWith(color: TavColors.red),
+            ),
+          ] else if (corredoresState is CajeroDataLoaded<List<CorredorDto>>) ...[
+            if (corredoresState.data.isEmpty) ...[
+              _estadoVacioCorredores(),
+            ] else ...[
+              ...corredoresState.data.map((c) => _CorredorCard(
+                    corredor: c,
+                    seleccionado: _corredor?.id == c.id,
+                    onTap: () => _selectCorredor(c),
+                  )),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _estadoVacioCorredores() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(TavSpace.xxl),
+      decoration: BoxDecoration(
+        color: TavColors.surface,
+        border: Border.all(color: TavColors.line),
+        borderRadius: BorderRadius.circular(TavRadius.card),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.public_off, size: 48, color: TavColors.ink3),
           const SizedBox(height: TavSpace.md),
-          _TipoCard(
-            titulo: 'USD efectivo → Bolívares',
-            descripcion:
-                'Entregas efectivo a nuestro recolector en tu ciudad y acreditamos bolívares al beneficiario.',
-            tasaLabel: 'Coordinamos punto y hora',
-            icon: Icons.payments_outlined,
-            iconBg: TavColors.green50,
-            iconColor: TavColors.green600,
-            seleccionado: _tipo == 'usd_efectivo_bs',
-            onTap: () => _selectTipo('usd_efectivo_bs'),
+          Text(
+            'No hay destinos disponibles',
+            style: TavText.h2,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: TavSpace.sm),
+          Text(
+            'El administrador aún no ha publicado tasas para ningún corredor. '
+            'Vuelve más tarde o avísale.',
+            style: TavText.body2.copyWith(color: TavColors.ink3),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -290,7 +329,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
     final montoDisplay = _montoCents > 0
         ? TavMoneyDisplay(
             cents: _montoCents,
-            currency: _tipo == 'usdt_bs' ? TavMoneyCurrency.usdt : TavMoneyCurrency.usd,
+            currency: TavMoneyCurrency.usdt,
             style: TavText.moneyDisplay.copyWith(fontSize: 38),
             fitted: true,
           )
@@ -299,7 +338,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
             style: TavText.moneyDisplay.copyWith(fontSize: 38, color: TavColors.ink3),
           );
 
-    final monedaLabel = _tipo == 'usdt_bs' ? 'USDT' : 'USD';
+    final monedaLabel = _monedaOrigen;
 
     return Column(
       children: [
@@ -329,7 +368,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
                             style: TavText.caption.copyWith(color: TavColors.ink3)),
                         const SizedBox(height: 3),
                         Text(
-                          'Bs ${_formatBs(_montoDestinoCents)}',
+                          '${simboloMoneda(_monedaDestino)}${_formatMonto(_montoDestinoCents)}',
                           style: TavText.h2.copyWith(
                             fontSize: 22,
                             color: TavColors.green600,
@@ -344,7 +383,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
                 TavCard(
                   child: Column(
                     children: [
-                      _kvRow('Tasa aplicada', '${_formatTasa(_tasaValor)} Bs / $_tasaParLabel'),
+                      _kvRow('Tasa aplicada', '${_formatTasa(_tasaValor)} $_monedaDestino/USDT'),
                       const Divider(height: 16),
                       _kvRowDisponible(),
                     ],
@@ -850,13 +889,13 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      'Bs ${_formatBs(_montoDestinoCents)}',
+                      '${simboloMoneda(_monedaDestino)}${_formatMonto(_montoDestinoCents)}',
                       style: TavText.moneyDisplay.copyWith(fontSize: 30, color: TavColors.surface),
                     ),
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    'Enviando ${formatCents(_montoCents, currency: _tipo == 'usdt_bs' ? TavMoneyCurrency.usdt : TavMoneyCurrency.usd)}',
+                    'Enviando ${formatCents(_montoCents, currency: TavMoneyCurrency.usdt)}',
                     style: TavText.caption.copyWith(color: const Color(0xFF9EC0EC)),
                   ),
                 ],
@@ -869,8 +908,9 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
           TavCard(
             child: Column(
               children: [
-                _kvRow('Tipo', tipoOperacionLabel(_tipo)),
-                _kvRow('Tasa aplicada', '${_formatTasa(_tasaValor)} Bs'),
+                _kvRow('Destino', _corredor?.paisNombre ?? '—'),
+                _kvRow('Entrega', _corredor?.formaEntregaNombre ?? '—'),
+                _kvRow('Tasa aplicada', '${_formatTasa(_tasaValor)} $_monedaDestino'),
               ],
             ),
           ),
@@ -944,7 +984,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    formatCents(_montoCents, currency: _tipo == 'usdt_bs' ? TavMoneyCurrency.usdt : TavMoneyCurrency.usd),
+                    formatCents(_montoCents, currency: TavMoneyCurrency.usdt),
                     style: TavText.moneyDisplay.copyWith(fontSize: 26),
                   ),
                 ),
@@ -1067,8 +1107,6 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
     );
   }
 
-  String get _tasaParLabel => _tasaPar == 'USDT_BS' ? 'USDT' : 'USD';
-
   String _formatTasa(String valor) {
     final d = double.tryParse(valor);
     if (d == null) return valor;
@@ -1081,7 +1119,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
     return '$entero,${parts[1]}';
   }
 
-  String _formatBs(int cents) {
+  String _formatMonto(int cents) {
     final value = cents.abs() / 100.0;
     final s = value.toStringAsFixed(2);
     final parts = s.split('.');
@@ -1093,26 +1131,14 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
   }
 }
 
-class _TipoCard extends StatelessWidget {
-  const _TipoCard({
-    required this.titulo,
-    required this.descripcion,
-    required this.tasaLabel,
-    required this.icon,
-    required this.iconBg,
-    required this.iconColor,
-    this.chip,
-    this.seleccionado = false,
+class _CorredorCard extends StatelessWidget {
+  const _CorredorCard({
+    required this.corredor,
+    required this.seleccionado,
     required this.onTap,
   });
 
-  final String titulo;
-  final String descripcion;
-  final String tasaLabel;
-  final IconData icon;
-  final Color iconBg;
-  final Color iconColor;
-  final Widget? chip;
+  final CorredorDto corredor;
   final bool seleccionado;
   final VoidCallback onTap;
 
@@ -1128,32 +1154,28 @@ class _TipoCard extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: iconBg,
+                color: TavColors.blue50,
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(icon, color: iconColor, size: 24),
+              child: const Icon(Icons.public, color: TavColors.blue, size: 24),
             ),
             const SizedBox(width: 13),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(titulo, style: TavText.h2.copyWith(fontSize: 15)),
-                      ),
-                      if (chip != null) chip!,
-                    ],
+                  Text(
+                    '${corredor.paisNombre} · ${corredor.monedaNombre}',
+                    style: TavText.h2.copyWith(fontSize: 15),
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    descripcion,
+                    corredor.formaEntregaNombre,
                     style: TavText.body2.copyWith(color: TavColors.ink3, height: 1.5),
                   ),
                   const SizedBox(height: 9),
                   Text(
-                    tasaLabel,
+                    'Tasa · ${_formatTasaStatic(corredor.tasaCotizada)} ${corredor.moneda} / USDT',
                     style: TavText.caption.copyWith(color: TavColors.ink3),
                   ),
                 ],
@@ -1163,6 +1185,18 @@ class _TipoCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatTasaStatic(String valor) {
+    final d = double.tryParse(valor);
+    if (d == null) return valor;
+    final s = d.toStringAsFixed(2);
+    final parts = s.split('.');
+    final entero = parts[0].replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]}.',
+    );
+    return '$entero,${parts[1]}';
   }
 }
 

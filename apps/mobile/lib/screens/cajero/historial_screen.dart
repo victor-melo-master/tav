@@ -60,6 +60,7 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
             Expanded(
               child: TavLoadState(
                 isLoading: opsState is CajeroDataLoading,
+                isRefreshing: opsState is CajeroDataLoaded ? opsState.isRefreshing : false,
                 error: opsState is CajeroDataError
                     ? opsState.message
                     : null,
@@ -72,7 +73,11 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
                   return false;
                 },
                 emptyMessage: 'No tienes operaciones registradas.',
+                child: RefreshIndicator(
+                color: TavColors.blue,
+                onRefresh: () async => ref.read(operacionesProvider.notifier).cargar(estado: _filtro),
                 child: _buildLista(opsState),
+              ),
               ),
             ),
           ],

@@ -110,7 +110,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = AuthAuthenticated(
         usuario: UsuarioDto(
           id: usuarioData['id'] as String,
-          telefono: usuarioData['telefono'] as String,
+          email: usuarioData['email'] as String,
+          telefono: usuarioData['telefono'] as String?,
           nombre: usuarioData['nombre'] as String,
           rol: usuarioData['rol'] as String,
           pinEstablecido: pinEstablecido,
@@ -134,13 +135,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Login con teléfono + contraseña.
-  Future<void> login(String telefono, String password) async {
+  /// Login con correo + contraseña.
+  Future<void> login(String email, String password) async {
     state = const AuthLoading();
     try {
       final response = await dio.post(
         '/auth/login',
-        data: LoginRequest(telefono: telefono, password: password).toJson(),
+        data: LoginRequest(email: email.trim().toLowerCase(), password: password).toJson(),
       );
 
       final loginResp = LoginResponse.fromJson(
@@ -216,7 +217,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = AuthAuthenticated(
         usuario: UsuarioDto(
           id: usuarioData['id'] as String,
-          telefono: usuarioData['telefono'] as String,
+          email: usuarioData['email'] as String,
+          telefono: usuarioData['telefono'] as String?,
           nombre: usuarioData['nombre'] as String,
           rol: usuarioData['rol'] as String,
           pinEstablecido: pinEstablecido,

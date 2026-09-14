@@ -50,11 +50,11 @@ export class CierreNoAbiertoException extends LedgerException {
   }
 }
 
-/** Un cobro en bolívares llegó sin tasa. Sin tasa no hay conversión posible. */
+/** No se encontró tasa vigente para la moneda de cobro. Sin tasa no hay conversión a GYD. */
 export class TasaRequeridaException extends LedgerException {
   readonly code = 'TASA_REQUERIDA';
   constructor() {
-    super('Un cobro en BS requiere tasaAplicada');
+    super('No hay tasa vigente para la moneda de cobro — no se puede convertir a la moneda base');
   }
 }
 

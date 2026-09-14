@@ -5,18 +5,20 @@ import '../theme/tav_space.dart';
 import '../theme/tav_text.dart';
 import 'tav_button.dart';
 
-/// Resuelve los tres estados de carga de una pantalla:
-/// - loading: spinner centrado
+/// Resuelve los estados de carga de una pantalla sin parpadeo:
+/// - loading: spinner centrado (solo la primera carga)
 /// - error: mensaje + botón de reintentar
 /// - vacío: mensaje + opcional acción
+/// - refreshing: datos viejos + indicador sutil arriba (sin cubrir la pantalla)
 ///
-/// Nada de pantallas en blanco mientras carga ni errores silenciosos.
+/// Nada de pantallas en blanco mientras recarga.
 class TavLoadState extends StatelessWidget {
   const TavLoadState({
     super.key,
     required this.isLoading,
     required this.error,
     required this.child,
+    this.isRefreshing = false,
     this.onRetry,
     this.emptyCheck,
     this.emptyMessage,
@@ -24,6 +26,7 @@ class TavLoadState extends StatelessWidget {
   });
 
   final bool isLoading;
+  final bool isRefreshing;
   final String? error;
   final Widget child;
   final VoidCallback? onRetry;
@@ -105,6 +108,21 @@ class TavLoadState extends StatelessWidget {
       );
     }
 
-    return child;
+    return Stack(
+      children: [
+        child,
+        if (isRefreshing)
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: LinearProgressIndicator(
+              backgroundColor: Colors.transparent,
+              color: TavColors.blue,
+              minHeight: 2.5,
+            ),
+          ),
+      ],
+    );
   }
 }

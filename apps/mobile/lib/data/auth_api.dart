@@ -5,13 +5,13 @@
 library;
 
 class LoginRequest {
-  const LoginRequest({required this.telefono, required this.password});
+  const LoginRequest({required this.email, required this.password});
 
-  final String telefono;
+  final String email;
   final String password;
 
   Map<String, dynamic> toJson() => {
-        'telefono': telefono,
+        'email': email,
         'password': password,
       };
 }
@@ -39,14 +39,16 @@ class LoginResponse {
 class UsuarioDto {
   const UsuarioDto({
     required this.id,
-    required this.telefono,
+    required this.email,
+    this.telefono,
     required this.nombre,
     required this.rol,
     this.pinEstablecido = false,
   });
 
   final String id;
-  final String telefono;
+  final String email;
+  final String? telefono;
   final String nombre;
   final String rol;
   final bool pinEstablecido;
@@ -54,7 +56,8 @@ class UsuarioDto {
   factory UsuarioDto.fromJson(Map<String, dynamic> json) {
     return UsuarioDto(
       id: json['id'] as String,
-      telefono: json['telefono'] as String,
+      email: json['email'] as String,
+      telefono: json['telefono'] as String?,
       nombre: json['nombre'] as String,
       rol: json['rol'] as String,
       pinEstablecido: (json['pinEstablecido'] as bool?) ?? false,

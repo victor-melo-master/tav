@@ -73,6 +73,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
               SliverToBoxAdapter(
                 child: TavLoadState(
                   isLoading: resumenState is CajeroDataLoading,
+                  isRefreshing: resumenState is CajeroDataLoaded ? resumenState.isRefreshing : false,
                   error: resumenState is CajeroDataError
                       ? resumenState.message
                       : null,
@@ -165,12 +166,15 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
     if (state is! CajeroDataLoaded<ResumenDto>) return const SizedBox.shrink();
     final r = state.data;
     final sem = r.semaforo;
+    final tieneFavor = r.saldoCents < 0;
     final pctUsado = r.limiteCents > 0
-        ? (r.saldoCents / r.limiteCents).clamp(0.0, 1.0)
+        ? (tieneFavor ? 0.0 : (r.saldoCents / r.limiteCents).clamp(0.0, 1.0))
         : 0.0;
     final bloqueado = sem.bloqueado;
-    // Color único del semáforo, derivado del estado que calcula el servidor.
+    // Color del semáforo: se usa solo en el chip y el texto de días.
     final semColor = _colorSemaforo(sem.estado);
+    // Color de la barra de consumo del cupo: verde / ámbar / rojo.
+    final usoColor = _colorConsumo(pctUsado);
     // Texto de días: "Día N de 7" dentro del límite, "Vencida hace N días" si supera.
     final diasTexto = sem.dias > 7
         ? 'Vencida hace ${sem.dias - 7} días'
@@ -225,27 +229,43 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
                 const SizedBox(height: 16),
                 TavProgressBar(
                   progress: pctUsado,
-                  color: semColor,
+                  color: usoColor,
                   height: 7,
                 ),
                 const SizedBox(height: 7),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Expanded(
-                      child: Text(
-                        'Debes ${formatCents(r.saldoCents)} · ${(pctUsado * 100).toInt()}% usado',
-                        style: TavText.caption.copyWith(
-                          color: const Color(0xFF9EC0EC),
-                          fontSize: 11,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tieneFavor
+                                ? 'Tienes ${formatCents(r.saldoCents.abs())} a favor'
+                                : 'Debes ${formatCents(r.saldoCents)}',
+                            style: TavText.body.copyWith(
+                              color: TavColors.surface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            tieneFavor
+                                ? 'Crédito ampliado por adelanto'
+                                : '${(pctUsado * 100).toInt()}% del cupo usado',
+                            style: TavText.caption.copyWith(
+                              color: const Color(0xFF9EC0EC),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     if (sem.dias > 0)
                       Text(
                         diasTexto,
                         style: TavText.caption.copyWith(
-                          color: const Color(0xFF9EC0EC),
-                          fontSize: 11,
+                          color: semColor,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                   ],
@@ -475,6 +495,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
           padding: const EdgeInsets.symmetric(horizontal: TavSpace.xl),
           child: TavLoadState(
             isLoading: state is CajeroDataLoading,
+            isRefreshing: state is CajeroDataLoaded ? state.isRefreshing : false,
             error: state is CajeroDataError
                 ? state.message
                 : null,
@@ -530,14 +551,20 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
         _ => TavChipState.gris,
       };
 
-  /// Color único del semáforo derivado del estado que calcula el servidor.
-  /// Se aplica al chip, a la barra de progreso y a cualquier otro indicador.
+  /// Color del semáforo: solo para el chip y el texto de días.
   Color _colorSemaforo(String estado) => switch (estado) {
         'verde' => TavColors.green600,
         'ambar' => TavColors.gold,
         'rojo' => TavColors.red,
         _ => TavColors.ink3,
       };
+
+  /// Color de la barra de consumo del cupo, según porcentaje usado.
+  Color _colorConsumo(double pct) {
+    if (pct >= 1.0) return TavColors.red;
+    if (pct >= 0.75) return TavColors.gold;
+    return TavColors.green;
+  }
 
   ({TavChipState state, String label, Color color, Color bgColor})
       _chipEstadoOperacion(String estado) {

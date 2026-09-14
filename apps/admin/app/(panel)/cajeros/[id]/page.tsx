@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
-import { usd, bs, formatFecha, formatTasa, haceTexto } from '@/lib/format';
+import { gyd, bs, formatFecha, formatTasa, haceTexto } from '@/lib/format';
 import type { TipoMovimiento, EstadoOperacion } from '@/lib/types';
 import { PageHeader, PageContent } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -68,12 +68,14 @@ export default function FichaCajeroPage() {
   if (!data) return null;
 
   const pct = Math.round(data.semaforo.pct * 100);
+  const saldo = BigInt(data.saldoCents);
+  const tieneFavor = saldo < 0n;
 
   return (
     <>
       <PageHeader
         titulo={data.nombre}
-        descripcion={`${data.telefono}${data.documento ? ` · ${data.documento}` : ''}`}
+        descripcion={`${data.telefono ?? '—'}${data.documento ? ` · ${data.documento}` : ''}`}
         acciones={
           <Link href="/cajeros">
             <Button variant="outline" size="sm">
@@ -88,21 +90,29 @@ export default function FichaCajeroPage() {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
           <Card>
             <CardContent className="p-4">
-              <div className="text-[12px] font-medium text-tav-ink-3">Deuda</div>
-              <div className="mt-1 text-[18px] font-semibold tabular-nums">{usd(data.saldoCents)}</div>
+              <div className="text-[12px] font-medium text-tav-ink-3">
+                {tieneFavor ? 'Saldo a favor' : 'Deuda'}
+              </div>
+              <div className="mt-1 text-[18px] font-semibold tabular-nums">
+                {tieneFavor ? (
+                  <span className="text-tav-green-600">{gyd((-saldo).toString())}</span>
+                ) : (
+                  gyd(data.saldoCents)
+                )}
+              </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
               <div className="text-[12px] font-medium text-tav-ink-3">Límite</div>
-              <div className="mt-1 text-[18px] font-semibold tabular-nums">{usd(data.limiteCents)}</div>
+              <div className="mt-1 text-[18px] font-semibold tabular-nums">{gyd(data.limiteCents)}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
               <div className="text-[12px] font-medium text-tav-ink-3">Disponible</div>
               <div className="mt-1 text-[18px] font-semibold tabular-nums text-tav-green-600">
-                {usd(data.semaforo.disponibleCents)}
+                {gyd(data.semaforo.disponibleCents)}
               </div>
             </CardContent>
           </Card>
@@ -130,7 +140,9 @@ export default function FichaCajeroPage() {
             <div className="flex items-center justify-between text-[13px]">
               <span className="font-medium text-tav-ink-2">Uso del cupo</span>
               <span className="tabular-nums text-tav-ink-3">
-                {usd(data.saldoCents)} / {usd(data.limiteCents)} · {pct}%
+                {tieneFavor
+                  ? `${gyd((-saldo).toString())} a favor · 0%`
+                  : `${gyd(data.saldoCents)} / ${gyd(data.limiteCents)} · ${pct}%`}
               </span>
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-tav-line-2">
@@ -210,10 +222,10 @@ export default function FichaCajeroPage() {
                       <TableCell className="font-mono text-[12px] text-tav-ink-3">{m.seq}</TableCell>
                       <TableCell className={cn('font-medium', t.color)}>{t.label}</TableCell>
                       <TableCell className="text-right tabular-nums font-medium">
-                        {usd(m.montoUsdCents)}
+                        {gyd(m.montoCents)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-tav-ink-2">
-                        {usd(m.saldoDespues)}
+                        {gyd(m.saldoDespues)}
                       </TableCell>
                       <TableCell className="text-tav-ink-2">
                         {m.origenTipo}
@@ -257,10 +269,10 @@ export default function FichaCajeroPage() {
                     </TableCell>
                     <TableCell className="text-tav-ink-2">{o.tipo}</TableCell>
                     <TableCell className="text-right tabular-nums text-tav-ink-2">
-                      {o.monedaOrigen === 'BS' ? bs(o.montoOrigenCents) : usd(o.montoOrigenCents)}
+                      {o.monedaOrigen === 'BS' ? bs(o.montoOrigenCents) : gyd(o.montoOrigenCents)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
-                      {usd(o.totalCents)}
+                      {gyd(o.totalCents)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-tav-ink-2">
                       {bs(o.montoDestinoCents)}
@@ -302,7 +314,7 @@ export default function FichaCajeroPage() {
                 {data.ampliaciones.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell className="text-right tabular-nums font-medium">
-                      {usd(a.montoCents)}
+                      {gyd(a.montoCents)}
                     </TableCell>
                     <TableCell className="max-w-[320px] truncate text-tav-ink-2" title={a.motivo}>
                       {a.motivo}

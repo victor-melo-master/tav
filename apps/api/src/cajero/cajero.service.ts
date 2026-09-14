@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { SemaforoService } from '../ledger/semaforo.service';
+import { TasaCorredorService } from '../tasa/tasa-corredor.service';
 import { NoEncontradoException } from '../ledger/ledger.exceptions';
 import { CrearOperacionDto } from './dto/crear-operacion.dto';
 import { SolicitarAmpliacionDto } from './dto/solicitar-ampliacion.dto';
@@ -21,6 +22,7 @@ export class CajeroService {
     private readonly prisma: PrismaService,
     private readonly ledger: LedgerService,
     private readonly semaforo: SemaforoService,
+    private readonly tasaCorredor: TasaCorredorService,
   ) {}
 
   // ─────────────────────────── RESUMEN ───────────────────────────
@@ -41,6 +43,17 @@ export class CajeroService {
       deudaDesde: perfil.deudaDesde,
       semaforo,
     };
+  }
+
+  // ─────────────────────────── CORREDORES ───────────────────────────
+
+  /**
+   * Corredores ofrecibles al cajero: activos con tasa publicada.
+   * Devuelve solo lo que el cajero necesita ver — id, país, moneda, forma
+   * de entrega y tasaCotizada. NUNCA margen, pataDestino ni pataBase.
+   */
+  async corredores() {
+    return this.tasaCorredor.corredoresOfrecibles();
   }
 
   // ─────────────────────────── OPERACIONES ───────────────────────────
@@ -70,24 +83,48 @@ export class CajeroService {
   /**
    * Crea una operación llamando a LedgerService.registrarOperacion.
    * cajeroId y creadaPorId salen del JWT, no del body.
-   * La validación aritmética (totalCents == montoOrigen + comisión) ya se hizo
-   * en el DTO; aquí solo se convierten los strings a BigInt para el ledger.
+   *
+   * La tasa y el monto destino NO vienen del cliente: el servidor lee la
+   * tasa cotizada vigente del corredor (TasaCorredorService.tasaVigente),
+   * la congela en la operación, y calcula montoDestinoCents con
+   * calcularMontoDestinoCents (Decimal + ROUND_HALF_UP). Igual que
+   * convertirAMonedaBase hace con los cobros. El cliente manda corredorId
+   * y montoOrigenCents; todo lo demás lo pone el servidor.
+   *
+   * Si la tasa cambió entre que el cajero abrió la pantalla y confirmó,
+   * se aplica la vigente al confirmar. La respuesta devuelve la operación
+   * con la tasa y el monto destino reales para que la app los muestre.
    */
   async crearOperacion(cajeroId: string, creadaPorId: string, dto: CrearOperacionDto) {
+    // Leer la tasa cotizada vigente del corredor. NUNCA del cliente.
+    const tasaCotizada = await this.tasaCorredor.tasaVigente(dto.corredorId);
+    if (!tasaCotizada) {
+      throw new NoEncontradoException('corredor', dto.corredorId);
+    }
+
+    // Calcular monto destino en el servidor, en Decimal + ROUND_HALF_UP.
+    const montoOrigenCents = BigInt(dto.montoOrigenCents);
+    const montoDestinoCents = TasaCorredorService.calcularMontoDestinoCents(
+      montoOrigenCents,
+      tasaCotizada,
+    );
+    const tasaAplicada = tasaCotizada.toString();
+
     return this.ledger.registrarOperacion({
       clientUuid: dto.clientUuid,
       cajeroId,
       tipo: dto.tipo,
-      montoOrigenCents: BigInt(dto.montoOrigenCents),
+      montoOrigenCents,
       monedaOrigen: dto.monedaOrigen,
-      tasaAplicada: dto.tasaAplicada,
+      tasaAplicada,
       comisionCents: BigInt(dto.comisionCents),
       totalCents: BigInt(dto.totalCents),
-      montoDestinoCents: BigInt(dto.montoDestinoCents),
+      montoDestinoCents,
       monedaDestino: dto.monedaDestino,
       beneficiario: dto.beneficiario,
       comprobanteUrl: dto.comprobanteUrl,
       creadaPorId,
+      corredorId: dto.corredorId,
     });
   }
 

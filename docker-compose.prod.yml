@@ -50,6 +50,25 @@ services:
     networks:
       - tav_internal
 
+  admin:
+    build:
+      context: ./apps/admin
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    # 127.0.0.1: nunca 0.0.0.0. Solo nginx (aaPanel) puede alcanzar el panel.
+    ports:
+      - '127.0.0.1:3002:3000'
+    networks:
+      - tav_internal
+
 volumes:
   tav_pgdata_prod:
 

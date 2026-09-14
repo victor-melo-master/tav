@@ -38,15 +38,18 @@ export class SemaforoService {
       ? Math.max(0, Math.floor((ahora.getTime() - perfil.deudaDesde.getTime()) / MS_POR_DIA))
       : 0;
 
-    // pct es solo para presentación y comparación de umbrales; la validación
-    // de cupo real ocurre en enteros dentro de registrarOperacion.
-    const pct = limiteEfectivo > 0n ? Number(perfil.saldoCents) / Number(limiteEfectivo) : 0;
+    // pct se calcula solo sobre deuda (max(0, saldo)). Un cajero con saldo
+    // a favor (saldoCents < 0) está en 0% y en verde.
+    const deuda = perfil.saldoCents > 0n ? perfil.saldoCents : 0n;
+    const pct = limiteEfectivo > 0n ? Number(deuda) / Number(limiteEfectivo) : 0;
 
     const porDias = dias >= config.diasRojo ? 2 : dias >= config.diasAmbar ? 1 : 0;
     const porCredito = pct >= 1 ? 2 : pct >= config.pctAmbar ? 1 : 0;
     const nivel = Math.max(porDias, porCredito);
 
     const bloqueado = pct >= 1;
+    // disponible = límite efectivo + saldo a favor. Si el saldo es negativo
+    // (saldo a favor), el disponible sube. Si es positivo, se resta.
     const disponibleBruto = limiteEfectivo - perfil.saldoCents;
     const disponibleCents = disponibleBruto > 0n ? disponibleBruto : 0n;
 

@@ -3,9 +3,10 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { LedgerModule } from '../ledger/ledger.module';
+import { TasaModule } from '../tasa/tasa.module';
 
 @Module({
-  imports: [PrismaModule, LedgerModule],
+  imports: [PrismaModule, LedgerModule, TasaModule],
   controllers: [AdminController],
   providers: [AdminService],
 })

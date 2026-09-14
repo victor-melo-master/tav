@@ -170,7 +170,8 @@ export class CobradorService {
         cobradorId,
         fecha: hoy,
         totalRegistradoCents: 0n,
-        efectivoDeclaradoCents: 0n,
+        efectivoGydDeclaradoCents: 0n,
+        efectivoUsdDeclaradoCents: 0n,
         digitalCents: 0n,
         estado: 'abierto',
         cobros: [],
@@ -201,21 +202,24 @@ export class CobradorService {
     }
 
     // Calcular efectivo y digital de los cobros no anulados.
-    const efectivo = cierre.cobros
+    // El efectivo total (en GYD, para contabilidad) sigue siendo la suma
+    // de todos los cobros esEfectivo convertidos a la moneda base.
+    const efectivoGyd = cierre.cobros
       .filter((c) => c.esEfectivo)
-      .reduce((sum, c) => sum + c.montoUsdCents, 0n);
+      .reduce((sum, c) => sum + c.montoBaseCents, 0n);
     const digital = cierre.cobros
       .filter((c) => !c.esEfectivo)
-      .reduce((sum, c) => sum + c.montoUsdCents, 0n);
+      .reduce((sum, c) => sum + c.montoBaseCents, 0n);
 
     return this.prisma.cierre.update({
       where: { id: cierreId },
       data: {
         estado: 'enviado',
         enviadoAt: new Date(),
-        efectivoDeclaradoCents: BigInt(dto.efectivoDeclaradoCents),
+        efectivoGydDeclaradoCents: BigInt(dto.efectivoGydDeclaradoCents),
+        efectivoUsdDeclaradoCents: BigInt(dto.efectivoUsdDeclaradoCents),
         digitalCents: digital,
-        totalRegistradoCents: efectivo + digital,
+        totalRegistradoCents: efectivoGyd + digital,
         notaCobrador: dto.notaCobrador,
       },
       include: { cobros: { where: { anuladoAt: null }, orderBy: { creadoAt: 'desc' } } },

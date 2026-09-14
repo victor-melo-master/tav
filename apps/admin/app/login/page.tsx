@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 export default function LoginPage() {
   const { usuario, login, cargando } = useAuth();
   const router = useRouter();
-  const [telefono, setTelefono] = React.useState('');
+  const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [enviando, setEnviando] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -28,7 +28,7 @@ export default function LoginPage() {
     setError(null);
     setEnviando(true);
     try {
-      await login(telefono.trim(), password);
+      await login(email, password);
       toast.success('Sesión iniciada');
       router.replace('/tablero');
     } catch (err) {
@@ -59,14 +59,14 @@ export default function LoginPage() {
         >
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="telefono">Teléfono</Label>
+              <Label htmlFor="email">Correo</Label>
               <Input
-                id="telefono"
-                type="tel"
+                id="email"
+                type="email"
                 autoComplete="username"
-                placeholder="+58 412-0000001"
-                value={telefono}
-                onChange={(e) => setTelefono(e.target.value)}
+                placeholder="admin@tav.rolapro.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
                 autoFocus
               />

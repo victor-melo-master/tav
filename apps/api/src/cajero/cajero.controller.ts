@@ -30,6 +30,14 @@ export class CajeroController {
     return this.cajero.resumen(req.user.sub);
   }
 
+  // ─────────────────────────── CORREDORES ───────────────────────────
+
+  @Get('corredores')
+  @ApiOperation({ summary: 'Corredores activos con tasa publicada (para escoger destino al operar)' })
+  async corredores(@Req() _req: AuthenticatedRequest) {
+    return this.cajero.corredores();
+  }
+
   // ─────────────────────────── OPERACIONES ───────────────────────────
 
   @Get('operaciones')

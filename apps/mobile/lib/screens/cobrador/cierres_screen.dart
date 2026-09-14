@@ -53,6 +53,7 @@ class _CierresScreenState extends ConsumerState<CierresScreen> {
                 onRefresh: () async => _cargar(),
                 child: TavLoadState(
                   isLoading: cierresState is CobradorDataLoading,
+                  isRefreshing: cierresState is CobradorDataLoaded ? cierresState.isRefreshing : false,
                   error: cierresState is CobradorDataError
                       ? cierresState.message
                       : null,

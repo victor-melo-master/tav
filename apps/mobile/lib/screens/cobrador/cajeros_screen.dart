@@ -167,6 +167,9 @@ class _CajerosScreenState extends ConsumerState<CajerosScreen> {
       CobradorDataState state, List<CajeroCobradorDto> pendientes) {
     return TavLoadState(
       isLoading: state is CobradorDataLoading,
+      isRefreshing: state is CobradorDataLoaded
+          ? state.isRefreshing
+          : false,
       error: state is CobradorDataError ? state.message : null,
       onRetry: _cargar,
       emptyCheck: () => pendientes.isEmpty,
@@ -214,6 +217,9 @@ class _CajerosScreenState extends ConsumerState<CajerosScreen> {
   ) {
     return TavLoadState(
       isLoading: state is CobradorDataLoading,
+      isRefreshing: state is CobradorDataLoaded
+          ? state.isRefreshing
+          : false,
       error: state is CobradorDataError ? state.message : null,
       onRetry: _cargar,
       emptyCheck: () => cobros.isEmpty,

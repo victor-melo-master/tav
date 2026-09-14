@@ -49,15 +49,16 @@ export class AuthService {
   // ─────────────────────────── LOGIN ───────────────────────────
 
   async login(dto: LoginDto): Promise<{ accessToken: string; refreshToken: string; usuario: UsuarioPublico }> {
+    const email = dto.email.trim().toLowerCase();
     const usuario = await this.prisma.usuario.findUnique({
-      where: { telefono: dto.telefono },
+      where: { email },
       include: { perfilCajero: true, perfilCobrador: true },
     });
-    if (!usuario) throw new UnauthorizedException('Teléfono o contraseña incorrectos');
+    if (!usuario) throw new UnauthorizedException('Correo o contraseña incorrectos');
     if (!usuario.activo) throw new UnauthorizedException('Cuenta inactiva');
 
     const passwordOk = await argon2.verify(usuario.passwordHash, dto.password);
-    if (!passwordOk) throw new UnauthorizedException('Teléfono o contraseña incorrectos');
+    if (!passwordOk) throw new UnauthorizedException('Correo o contraseña incorrectos');
 
     // Login con contraseña exitoso → resetea el bloqueo del PIN.
     if (usuario.pinIntentos !== 0 || usuario.pinBloqueadoAt !== null) {

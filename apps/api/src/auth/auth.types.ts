@@ -10,7 +10,7 @@ import { Request } from 'express';
  */
 export interface JwtPayload {
   sub: string;
-  rol: 'cajero' | 'cobrador' | 'admin';
+  rol: 'cajero' | 'cobrador' | 'admin' | 'pagador';
   nombre: string;
   tokenVersion: number;
 }

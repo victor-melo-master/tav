@@ -27,6 +27,10 @@ import '../screens/cobrador/mi_dia_screen.dart';
 import '../screens/cobrador/perfil_cobrador_screen.dart';
 import '../screens/cobrador/registrar_cobro_screen.dart';
 import '../screens/login_screen.dart';
+import '../screens/pagador/cola_screen.dart';
+import '../screens/pagador/hoy_screen.dart';
+import '../screens/pagador/operacion_screen.dart';
+import '../screens/pagador/perfil_screen.dart';
 import '../screens/pin_bloqueado_screen.dart';
 import '../screens/pin_login_screen.dart';
 import '../screens/pin_setup_screen.dart';
@@ -255,6 +259,34 @@ final tavRouterProvider = Provider<GoRouter>((ref) {
         path: '/cobrador/cierres',
         builder: (context, state) => const CierresScreen(),
       ),
+      // Shell del pagador — 3 destinos, sin FAB
+      ShellRoute(
+        builder: (context, state, child) {
+          final index = _pagadorIndex(state.matchedLocation);
+          return PagadorShell(currentIndex: index, child: child);
+        },
+        routes: [
+          GoRoute(
+            path: '/pagador/cola',
+            builder: (context, state) => const PagadorColaScreen(),
+          ),
+          GoRoute(
+            path: '/pagador/hoy',
+            builder: (context, state) => const PagadorHoyScreen(),
+          ),
+          GoRoute(
+            path: '/pagador/perfil',
+            builder: (context, state) => const PagadorPerfilScreen(),
+          ),
+        ],
+      ),
+      // Rutas del pagador fuera del shell (pantallas a pantalla completo)
+      GoRoute(
+        path: '/pagador/operacion/:id',
+        builder: (context, state) => PagadorOperacionScreen(
+          operacionId: state.pathParameters['id']!,
+        ),
+      ),
     ],
   );
 });
@@ -263,6 +295,7 @@ String _shellRoute(String rol) {
   return switch (rol) {
     'cajero' => '/cajero/inicio',
     'cobrador' => '/cobrador/mi-dia',
+    'pagador' => '/pagador/cola',
     'admin' => '/cajero/inicio', // PENDIENTE DE DEFINIR: shell de admin
     _ => '/cajero/inicio',
   };
@@ -280,4 +313,10 @@ int _cobradorIndex(String location) {
   if (location.startsWith('/cobrador/cuadre')) return 2;
   if (location.startsWith('/cobrador/perfil')) return 3;
   return 0; // mi-dia
+}
+
+int _pagadorIndex(String location) {
+  if (location.startsWith('/pagador/hoy')) return 1;
+  if (location.startsWith('/pagador/perfil')) return 2;
+  return 0; // cola
 }

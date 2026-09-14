@@ -90,7 +90,7 @@ class _PerfilCobradorScreenState extends ConsumerState<PerfilCobradorScreen> {
               _ProfileItem(
                 icon: Icons.badge_outlined,
                 label: 'Teléfono',
-                value: u.telefono,
+                value: u.telefono ?? '—',
               ),
               _ProfileItem(
                 icon: Icons.badge_outlined,

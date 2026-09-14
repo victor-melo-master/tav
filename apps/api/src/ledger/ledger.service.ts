@@ -6,6 +6,7 @@ import {
   EstadoOperacion,
   Operacion,
   Prisma,
+  Tasa,
   TipoMovimiento,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -126,6 +127,9 @@ export class LedgerService {
             comprobanteUrl: dto.comprobanteUrl,
             ampliacionId: usaAmpliacion ? ampliacion!.id : null,
             creadaPorId: dto.creadaPorId,
+            // Fase 9: toda operación entra a la cola del pagador.
+            corredorId: dto.corredorId ?? null,
+            estado: EstadoOperacion.pendiente,
           },
         });
 
@@ -133,7 +137,7 @@ export class LedgerService {
           data: {
             cajeroId: dto.cajeroId,
             tipo: TipoMovimiento.cargo,
-            montoUsdCents: dto.totalCents,
+            montoCents: dto.totalCents,
             saldoDespues,
             origenTipo: 'operacion',
             origenId: operacion.id,
@@ -146,7 +150,7 @@ export class LedgerService {
           where: { usuarioId: dto.cajeroId },
           data: {
             saldoCents: saldoDespues,
-            deudaDesde: perfil.deudaDesde ?? new Date(),
+            deudaDesde: await this.recalcularDeudaDesdeFifo(tx, dto.cajeroId),
           },
         });
 
@@ -200,8 +204,8 @@ export class LedgerService {
     });
     if (previo) return { cobro: previo, yaExistia: true };
 
-    const montoUsdCents = this.convertirAUsd(dto);
-    const esEfectivo = dto.metodo === 'efectivo_usd';
+    const { montoBaseCents, tasa: tasaVigente } = await this.convertirAMonedaBase(dto);
+    const esEfectivo = dto.metodo === 'efectivo_usd' || dto.metodo === 'efectivo_gyd';
 
     try {
       const { cobro, yaExistia } = await this.prisma.$transaction(async (tx) => {
@@ -228,7 +232,7 @@ export class LedgerService {
         }
 
         const folio = await this.nextFolio(tx, 'folio_cobro_seq', 'COB');
-        const saldoDespues = perfil.saldoCents - montoUsdCents;
+        const saldoDespues = perfil.saldoCents - montoBaseCents;
 
         const cobro = await tx.cobro.create({
           data: {
@@ -239,8 +243,8 @@ export class LedgerService {
             metodo: dto.metodo,
             montoCents: dto.montoCents,
             moneda: dto.moneda,
-            tasaAplicada: dto.moneda === 'BS' ? new Prisma.Decimal(dto.tasaAplicada!) : null,
-            montoUsdCents,
+            tasaAplicada: tasaVigente.valor,
+            montoBaseCents,
             esEfectivo,
             cierreId: cierre?.id ?? null,
             comprobanteUrl: dto.comprobanteUrl,
@@ -253,7 +257,7 @@ export class LedgerService {
           data: {
             cajeroId: dto.cajeroId,
             tipo: TipoMovimiento.abono,
-            montoUsdCents: -montoUsdCents,
+            montoCents: -montoBaseCents,
             saldoDespues,
             origenTipo: 'cobro',
             origenId: cobro.id,
@@ -265,8 +269,7 @@ export class LedgerService {
           where: { usuarioId: dto.cajeroId },
           data: {
             saldoCents: saldoDespues,
-            // Si la deuda quedó saldada (o a favor), el reloj de días se apaga.
-            deudaDesde: saldoDespues <= 0n ? null : perfil.deudaDesde,
+            deudaDesde: await this.recalcularDeudaDesdeFifo(tx, dto.cajeroId),
           },
         });
 
@@ -328,7 +331,7 @@ export class LedgerService {
         data: {
           cajeroId: op.cajeroId,
           tipo: TipoMovimiento.reverso_cargo,
-          montoUsdCents: -op.totalCents,
+          montoCents: -op.totalCents,
           saldoDespues,
           origenTipo: 'operacion',
           origenId: op.id,
@@ -351,11 +354,7 @@ export class LedgerService {
         where: { usuarioId: op.cajeroId },
         data: {
           saldoCents: saldoDespues,
-          // Si el reverso saldó la deuda, se apaga el reloj. Si queda deuda,
-          // deudaDesde se conserva aunque el cargo anulado fuera el más viejo.
-          // PENDIENTE DE DEFINIR: si debería recalcularse al cargo vivo más
-          // antiguo; hoy se mantiene el valor existente (criterio conservador).
-          deudaDesde: saldoDespues <= 0n ? null : perfil.deudaDesde,
+          deudaDesde: await this.recalcularDeudaDesdeFifo(tx, op.cajeroId),
         },
       });
 
@@ -376,13 +375,13 @@ export class LedgerService {
       const cobroLocked = await tx.cobro.findUniqueOrThrow({ where: { id } });
       if (cobroLocked.anuladoAt) throw new YaAnuladoException('cobro', id);
 
-      const saldoDespues = perfil.saldoCents + cobro.montoUsdCents;
+      const saldoDespues = perfil.saldoCents + cobro.montoBaseCents;
 
       await tx.movimiento.create({
         data: {
           cajeroId: cobro.cajeroId,
           tipo: TipoMovimiento.reverso_abono,
-          montoUsdCents: cobro.montoUsdCents,
+          montoCents: cobro.montoBaseCents,
           saldoDespues,
           origenTipo: 'cobro',
           origenId: cobro.id,
@@ -400,12 +399,7 @@ export class LedgerService {
         where: { usuarioId: cobro.cajeroId },
         data: {
           saldoCents: saldoDespues,
-          // Si el reverso revive la deuda y el reloj estaba apagado, se
-          // enciende ahora. No se conoce la fecha del cargo original sin
-          // recorrer el libro; se usa el momento del reverso.
-          // PENDIENTE DE DEFINIR: si debería retrotraerse al cargo más viejo.
-          deudaDesde:
-            saldoDespues > 0n ? (perfil.deudaDesde ?? new Date()) : perfil.deudaDesde,
+          deudaDesde: await this.recalcularDeudaDesdeFifo(tx, cobro.cajeroId),
         },
       });
 
@@ -446,6 +440,64 @@ export class LedgerService {
   }
 
   /**
+   * Reconstruye deudaDesde por FIFO: el abono salda primero el cargo más viejo.
+   * Lee los cargos vivos (operaciones no anuladas) y los abonos vivos (cobros
+   * no anulados), aplica FIFO, y devuelve la fecha del cargo más antiguo que
+   * siga sin saldar. Si todos están saldados o no hay cargos, devuelve null.
+   *
+   * Se llama DENTRO de la transacción, después de que el registro original
+   * (operación/cobro) ya fue creado o marcado como anulado. Así ve el estado
+   * final correcto. Con menos de 50 cajeros, recorrer el libro en cada
+   * movimiento es aceptable; priorizamos corrección sobre optimización.
+   */
+  private async recalcularDeudaDesdeFifo(tx: Tx, cajeroId: string): Promise<Date | null> {
+    const cargos = await tx.operacion.findMany({
+      where: { cajeroId, anuladaAt: null },
+      orderBy: { creadaAt: 'asc' },
+      select: { totalCents: true, creadaAt: true },
+    });
+
+    if (cargos.length === 0) return null;
+
+    const abonos = await tx.cobro.findMany({
+      where: { cajeroId, anuladoAt: null },
+      orderBy: { creadoAt: 'asc' },
+      select: { montoBaseCents: true },
+    });
+
+    // FIFO: cada abono salda el cargo más viejo con saldo pendiente.
+    let abonoIdx = 0;
+    let abonoRestante = abonos.length > 0 ? abonos[0].montoBaseCents : 0n;
+
+    for (const cargo of cargos) {
+      let cargoRestante = cargo.totalCents;
+      while (cargoRestante > 0n && abonoIdx < abonos.length) {
+        if (abonoRestante === 0n) {
+          abonoIdx++;
+          if (abonoIdx < abonos.length) {
+            abonoRestante = abonos[abonoIdx].montoBaseCents;
+          }
+          continue;
+        }
+        const aplicado = abonoRestante > cargoRestante ? cargoRestante : abonoRestante;
+        cargoRestante -= aplicado;
+        abonoRestante -= aplicado;
+        if (abonoRestante === 0n) {
+          abonoIdx++;
+          if (abonoIdx < abonos.length) {
+            abonoRestante = abonos[abonoIdx].montoBaseCents;
+          }
+        }
+      }
+      if (cargoRestante > 0n) {
+        return cargo.creadaAt;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Bloquea la fila del cajero. Es el punto de serialización de TODA escritura
    * de dinero de ese cajero: quien la tenga es el único que puede leer un saldo
    * y escribir el siguiente. Prisma no expone FOR UPDATE, de ahí el raw SQL.
@@ -482,8 +534,8 @@ export class LedgerService {
     // para que RETURNING devuelva la fila también en el camino del DO UPDATE
     // (con DO NOTHING, RETURNING no devuelve nada sobre la fila existente).
     const creada = await tx.$queryRaw<{ id: string }[]>`
-      INSERT INTO "Cierre" ("id", "cobradorId", "fecha", "totalRegistradoCents", "efectivoDeclaradoCents", "digitalCents", "estado")
-      VALUES (gen_random_uuid(), ${cobradorId}, ${ymd}::date, 0, 0, 0, 'abierto')
+      INSERT INTO "Cierre" ("id", "cobradorId", "fecha", "totalRegistradoCents", "efectivoGydDeclaradoCents", "efectivoUsdDeclaradoCents", "digitalCents", "estado")
+      VALUES (gen_random_uuid(), ${cobradorId}, ${ymd}::date, 0, 0, 0, 0, 'abierto')
       ON CONFLICT ("cobradorId", "fecha") DO UPDATE
         SET "cobradorId" = EXCLUDED."cobradorId"
       RETURNING "id"
@@ -511,18 +563,18 @@ export class LedgerService {
     const [total, digital] = await Promise.all([
       tx.cobro.aggregate({
         where: { cierreId, anuladoAt: null },
-        _sum: { montoUsdCents: true },
+        _sum: { montoBaseCents: true },
       }),
       tx.cobro.aggregate({
         where: { cierreId, anuladoAt: null, esEfectivo: false },
-        _sum: { montoUsdCents: true },
+        _sum: { montoBaseCents: true },
       }),
     ]);
     await tx.cierre.update({
       where: { id: cierreId },
       data: {
-        totalRegistradoCents: total._sum.montoUsdCents ?? 0n,
-        digitalCents: digital._sum.montoUsdCents ?? 0n,
+        totalRegistradoCents: total._sum.montoBaseCents ?? 0n,
+        digitalCents: digital._sum.montoBaseCents ?? 0n,
       },
     });
   }
@@ -532,17 +584,32 @@ export class LedgerService {
    * (la tasa no es dinero) y el resultado vuelve a centavos enteros con
    * redondeo half-up. El único punto del módulo donde hay aritmética no entera.
    */
-  private convertirAUsd(dto: RegistrarCobroDto): bigint {
-    if (dto.moneda !== 'BS') return dto.montoCents;
-    if (!dto.tasaAplicada) throw new TasaRequeridaException();
-    const tasa = new Prisma.Decimal(dto.tasaAplicada);
-    if (tasa.lte(0)) throw new TasaRequeridaException();
-    return BigInt(
+  /**
+   * Convierte el monto del cobro a la moneda base (GYD) usando la tasa vigente
+   * de la moneda de cobro, leída de la tabla Tasa. El cobrador no escribe
+   * tasas: el sistema aplica la vigente. La tasa se congela en el cobro.
+   *
+   * Cada moneda de cobro tiene su propia tasa (USD_GYD, USDT_GYD, BS_GYD).
+   * USD y USDT no cotizan igual en este mercado.
+   */
+  private async convertirAMonedaBase(dto: RegistrarCobroDto): Promise<{ montoBaseCents: bigint; tasa: Tasa }> {
+    const par = `${dto.moneda}_GYD`;
+    const tasa = await this.prisma.tasa.findFirst({
+      where: { par },
+      orderBy: { vigenteDesde: 'desc' },
+    });
+    if (!tasa) throw new TasaRequeridaException();
+    if (tasa.valor.lte(0)) throw new TasaRequeridaException();
+
+    // montoBaseCents = montoCents × tasa (tasa = "GYD por unidad de moneda")
+    // Todo en Decimal para no usar float; el resultado se redondea half-up.
+    const montoBaseCents = BigInt(
       new Prisma.Decimal(dto.montoCents.toString())
-        .div(tasa)
+        .mul(tasa.valor)
         .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP)
         .toFixed(0),
     );
+    return { montoBaseCents, tasa };
   }
 
   /** Folios desde secuencias de Postgres, nunca contando filas. */

@@ -32,6 +32,19 @@ El admin usa un panel web aparte.
 
 Las cuentas **las crea el administrador**. No hay registro público ni OTP.
 
+### Identidad: correo, no teléfono
+
+El usuario entra con **correo y contraseña**. Decidido en agosto 2026.
+
+El teléfono fue el identificador original, pero como no hay OTP nunca se
+verificó: era una cadena única cualquiera. El correo tiene la ventaja de que
+el propio usuario puede recuperarlo si pierde el acceso.
+
+**El teléfono sigue existiendo, como dato de contacto.** El cobrador lo usa
+para llamar y escribir por WhatsApp al cajero. Es editable, opcional y **sin
+índice único**: dos personas pueden compartir un número. Lo que perdió es su
+papel de llave de acceso.
+
 ---
 
 ## 3. El ciclo del dinero
@@ -120,7 +133,16 @@ topa su cupo en dos días. Por eso el orden de la lista de cobro lo encabezan lo
 - **No hay hora límite** definida.
 - Al cerrar declara: total registrado, cuánto es efectivo (lo que entrega en mano)
   y cuánto es digital (verificable en cuenta).
-- El **admin verifica** el efectivo recibido contra lo declarado. Si hay diferencia, queda registrada.
+- **El efectivo se declara por moneda física, no convertido.** El cobrador lleva
+  billetes guyaneses (GYD) y billetes americanos (USD): son dos pilas distintas
+  que el admin cuenta por separado. Declarar un solo total convertido en GYD
+  vuelve imposible la verificación, porque el admin recibe las dos monedas en
+  mano y no puede comparar contra un número mezclado.
+- El **admin verifica** el efectivo recibido contra lo declarado, **por moneda**.
+  Si hay diferencia en cualquiera de las dos, queda registrada y la nota es
+  obligatoria.
+- Lo digital —bolívares, pago móvil, USDT— no se entrega en mano: se verifica
+  en cuenta y no entra en el cuadre de efectivo.
 - Un cierre no puede enviarse con cobros pendientes de sincronizar.
 
 ---
@@ -197,24 +219,78 @@ Marcar en el código con `// PENDIENTE DE DEFINIR:` y no inventar.
 5. Si el admin puede registrar operaciones en nombre de un cajero, o solo pagos.
 6. Política de retención: cuánto tiempo se guardan comprobantes e imágenes.
 
+### Multi-corredor, pagador y tesorería (Fase 9)
+
+Respuestas del formulario del 1/9/2026. Lo que está aquí está confirmado;
+lo que falta está en "Repreguntas pendientes" más abajo.
+
+- **La moneda del libro de cuentas es GYD.** El cajero debe en dólares guyaneses,
+  que es lo que le pagan allá. Hoy el sistema asume una sola moneda y la app
+  muestra dólares: cambiar la base es invasivo pero se hace una sola vez.
+- **El margen es por corredor**, no uno global.
+- **Solo el admin cambia tasas.** Nadie más.
+- **Venezuela es el único destino con varias formas de entrega** (bolívares por
+  transferencia y dólares en efectivo). En el resto de los países hay una sola,
+  y el precio se arma aplicando un porcentaje al cambio.
+- **Un pagador por país**, y atiende **varias monedas**.
+- **USDT es la caja madre.** Las cajas locales se llenan convirtiendo desde USDT.
+  Repone el admin, y esa conversión es un movimiento que hay que registrar con
+  su tasa.
+- **Una caja sin fondos solo alerta**, no frena las operaciones hacia ese destino.
+  Esto abarata mucho la fase: las cajas son un tablero, no un mecanismo de control.
+- **La conversión de un cobro hecho en moneda distinta a la deuda es manual.**
+
+Confirmado también el 1/9/2026, en la repregunta:
+
+- **El umbral ámbar del 75% se queda.** El cajero recibe un aviso al llegar a las
+  tres cuartas partes de su cupo, antes del bloqueo del 100%.
+- **El pagador no ve la deuda del cajero.** *"Solo necesita ejecutar las órdenes
+  que llegan."* Ve su cola de pagos y sus cajas, nada más.
+- **El tipo de cambio del país destino lo escribe el admin a mano**, por ahora.
+  Nada de tomarlo de una referencia externa. Si más adelante quiere automatizarlo,
+  la pantalla no cambia: cambia de dónde sale el número.
+
+Y el 1/9/2026, cerrando las últimas tres:
+
+- **La conversión de un cobro en otra moneda la fija el admin desde el panel.**
+  El cobrador no escribe tasas. Consecuencia de diseño: la tasa de conversión de
+  cada moneda de cobro vive en la misma pantalla de tasas del admin, y el cobro
+  la toma vigente al registrarse, para que la deuda del cajero baje en el acto.
+  Diferirlo hasta el cierre dejaría al cajero sin ver su pago aplicado, y eso no
+  es aceptable en un negocio de crédito.
+- **Los corredores iniciales son los que dio Saddiel** (ver `docs/07-fase-9-multi-corredor.md`),
+  y el admin puede añadir más desde el panel. La lista no se quema en el código.
+- **No existe diferencia de cierre.** *"Si el cobrador declara que recogió 500,
+  entrega 500."* Cuadrar faltantes es un proceso administrativo de ellos, fuera
+  de la app. El campo se sigue registrando por si acaso, pero no se construye
+  lógica de conciliación encima.
+
 ### Surgidos al implementar el ledger (Fase 2)
 
 Detalle completo en `docs/05-contrato-ledger.md`, casos 13 a 21.
 Mientras no se decidan, el código mantiene el comportamiento actual y los tests lo fijan.
 
-7. **Imputación de pagos y fecha de la deuda.** ¿Los abonos saldan primero el cargo
-   más viejo (FIFO)? Hoy `deudaDesde` no se reconstruye al anular, así que una anulación
-   puede reiniciar el contador de días y dejar el semáforo más benévolo de lo justo.
-   FIFO es la respuesta natural en este negocio, pero hay que confirmarla con Iván.
-   **Es la más importante de esta lista:** el eje de días del semáforo depende de esto.
+7. **Imputación de pagos — RESUELTO 1/9/2026. Es FIFO.** El abono salda primero
+   el cargo más viejo. De aquí sale el contador de días del semáforo: la fecha de
+   la deuda es la del cargo más antiguo que siga sin saldar. `deudaDesde` debe
+   reconstruirse FIFO en cada movimiento, incluidas las anulaciones — hoy no se
+   hace y eso deja el semáforo más benévolo de lo justo.
 
-8. **Saldo negativo.** Un cajero puede pagar de más y quedar con saldo a favor.
-   Hoy se permite. ¿Es correcto? Si lo es, hay que mostrarlo como "tienes $X a favor"
-   en la app, no como una deuda negativa.
+8. **Saldo a favor — RESUELTO 1/9/2026. Se permite y se acumula.** El cajero puede
+   adelantar plata para operar tranquilo. Tres consecuencias:
+   - **El adelanto sube el disponible por encima del límite.** Con límite de $2.000
+     y $500 adelantados, puede operar $2.500. Es plata suya: TAV no arriesga nada.
+     Por tanto `disponible = límite + saldo a favor`, y el porcentaje del semáforo
+     se calcula **solo sobre la deuda**, nunca sobre el disponible.
+   - **El contador de días arranca cuando se agota el saldo a favor**, no cuando
+     opera. Un cajero que adelantó y opera cuatro días sigue en verde con cero días.
+   - **No se devuelve**, queda acumulado. La app debe decir "tienes $500 a favor",
+     nunca "deuda: -$500", y ese cajero no aparece en la lista del cobrador.
 
-9. **Cobro después de cerrar el día.** Como no hay hora límite, un cobrador puede cerrar
-   a las 6 y cobrar a las 7. Hoy se rechaza. ¿Debe ir al cierre del día siguiente,
-   o el admin puede reabrir el cierre?
+9. **Cobro después de cerrar el día — RESUELTO 1/9/2026.** *"Puede cerrar hasta lo
+   último, los cortes se ejecutan al cerrar el día."* No hay hora límite y no se
+   reabre un cierre: el cierre **es** el corte. Un cobro posterior pertenece al día
+   siguiente. Se mantiene el comportamiento actual.
 
 10. **Anular una operación que consumió una ampliación.** Hoy el cupo extra se pierde.
     ¿Debería devolverse?

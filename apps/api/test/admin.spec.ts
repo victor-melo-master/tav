@@ -26,6 +26,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { PrismaClient, Prisma } from '@prisma/client';
 import argon2 from 'argon2';
+import { randomUUID } from 'crypto';
 import { AppModule } from '../src/app.module';
 import { LedgerExceptionFilter } from '../src/ledger-exception.filter';
 
@@ -33,9 +34,10 @@ const TEST_URL = 'postgresql://tav:tav@localhost:5432/tav_test?schema=public';
 const prisma = new PrismaClient({ datasources: { db: { url: TEST_URL } } });
 
 const TABLAS = [
+  'MovimientoCaja', 'Caja', 'PublicacionTasaItem', 'PublicacionTasas',
   'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Tasa', 'Operacion', 'Cobro',
   'Movimiento', 'AmpliacionCredito', 'Cierre', 'Atencion', 'Aviso', 'AuditLog',
-  'Config',
+  'Config', 'Corredor',
 ];
 
 let app: INestApplication;
@@ -57,38 +59,55 @@ async function seedConfig() {
   });
 }
 
+/** Tasas de conversión a GYD. USD_GYD = 1 para que los tests del ledger
+ *  se concentren en mecánica, no en conversión. */
+async function seedTasas() {
+  await prisma.tasa.createMany({
+    data: [
+      { id: randomUUID(), par: 'GYD_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
+      { id: randomUUID(), par: 'USD_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
+      { id: randomUUID(), par: 'USDT_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
+      { id: randomUUID(), par: 'BS_GYD', valor: 0.732314, creadaPorId: 'admin-test', vigenteDesde: new Date() },
+    ],
+  });
+}
+
 async function crearAdmin(opts: {
-  telefono: string;
+  email: string;
+  telefono?: string;
   password?: string;
   nombre?: string;
-}): Promise<{ id: string; telefono: string; password: string }> {
+}): Promise<{ id: string; email: string; password: string }> {
   const password = opts.password ?? 'admin-clave';
   const passwordHash = await argon2.hash(password);
   const u = await prisma.usuario.create({
     data: {
       rol: 'admin',
       nombre: opts.nombre ?? 'Admin Test',
+      email: opts.email,
       telefono: opts.telefono,
       passwordHash,
     },
   });
-  return { id: u.id, telefono: opts.telefono, password };
+  return { id: u.id, email: opts.email, password };
 }
 
 async function crearCajero(opts: {
-  telefono: string;
+  email: string;
+  telefono?: string;
   password?: string;
   nombre?: string;
   limiteCents?: bigint;
   saldoCents?: bigint;
   deudaDesde?: Date | null;
   zona?: string;
-}): Promise<{ id: string; telefono: string; password: string }> {
+}): Promise<{ id: string; email: string; password: string }> {
   const password = opts.password ?? 'clave123';
   const passwordHash = await argon2.hash(password);
   const data: Prisma.UsuarioCreateInput = {
     rol: 'cajero',
     nombre: opts.nombre ?? 'Cajero Test',
+    email: opts.email,
     telefono: opts.telefono,
     passwordHash,
     perfilCajero: {
@@ -101,33 +120,37 @@ async function crearCajero(opts: {
     },
   };
   const u = await prisma.usuario.create({ data });
-  return { id: u.id, telefono: opts.telefono, password };
+  return { id: u.id, email: opts.email, password };
 }
 
 async function crearCobrador(opts: {
-  telefono: string;
+  email: string;
+  telefono?: string;
   password?: string;
   nombre?: string;
-}): Promise<{ id: string; telefono: string; password: string }> {
+}): Promise<{ id: string; email: string; password: string }> {
   const password = opts.password ?? 'clave123';
   const passwordHash = await argon2.hash(password);
   const data: Prisma.UsuarioCreateInput = {
     rol: 'cobrador',
     nombre: opts.nombre ?? 'Cobrador Test',
+    email: opts.email,
     telefono: opts.telefono,
     passwordHash,
     perfilCobrador: { create: {} },
   };
   const u = await prisma.usuario.create({ data });
-  return { id: u.id, telefono: opts.telefono, password };
+  return { id: u.id, email: opts.email, password };
 }
 
-async function login(app: INestApplication, telefono: string, password: string): Promise<string> {
+async function login(app: INestApplication, email: string, password: string): Promise<string> {
   const res = await request(app.getHttpServer())
     .post('/auth/login')
-    .send({ telefono, password });
+    .send({ email, password });
   return res.body.accessToken;
 }
+
+let corredorIdTest: string;
 
 function operacionValida(clientUuid: string, overrides?: Record<string, unknown>) {
   return {
@@ -135,10 +158,8 @@ function operacionValida(clientUuid: string, overrides?: Record<string, unknown>
     tipo: 'usdt_bs',
     montoOrigenCents: '100000',
     monedaOrigen: 'USDT',
-    tasaAplicada: '285.400000',
     comisionCents: '3000',
     totalCents: '103000',
-    montoDestinoCents: '28540000',
     monedaDestino: 'BS',
     beneficiario: {
       nombre: 'María González',
@@ -147,6 +168,7 @@ function operacionValida(clientUuid: string, overrides?: Record<string, unknown>
       cuenta: '0134...4471',
       metodo: 'pago_movil',
     },
+    corredorId: corredorIdTest,
     ...overrides,
   };
 }
@@ -169,17 +191,45 @@ afterAll(async () => {
 beforeEach(async () => {
   await truncateTodo();
   await seedConfig();
+  await seedTasas();
+  // Crear un corredor para que operacionValida tenga un corredorId válido.
+  const c = await prisma.corredor.create({
+    data: {
+      pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
+      formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      creadoPorId: 'admin-test',
+    },
+  });
+  await prisma.caja.create({
+    data: { corredorId: c.id, esMadre: false, moneda: 'BS', saldoCents: 0n },
+  });
+  corredorIdTest = c.id;
+
+  // Publicar una tasa para el corredor: pataBase=1, pataDestino=285.4, margen=0
+  // → tasaCotizada = 285.4. Así montoDestino = 100000 × 285.4 = 28540000.
+  const pub = await prisma.publicacionTasas.create({
+    data: { pataBase: new Prisma.Decimal('1'), publicadaPorId: 'admin-test' },
+  });
+  await prisma.publicacionTasaItem.create({
+    data: {
+      publicacionId: pub.id,
+      corredorId: c.id,
+      pataDestino: new Prisma.Decimal('285.4'),
+      margen: new Prisma.Decimal('0'),
+      tasaCotizada: new Prisma.Decimal('285.4'),
+    },
+  });
 });
 
 // ─────────────────────────── CAJEROS ───────────────────────────
 
 describe('Admin — GET /admin/cajeros', () => {
   test('lista todos los cajeros con semáforo y días sin conectarse', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
     await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       nombre: 'Verde',
       limiteCents: 100_000n,
       saldoCents: 0n,
@@ -187,6 +237,7 @@ describe('Admin — GET /admin/cajeros', () => {
 
     const hace5dias = new Date(Date.now() - 5 * 86_400_000);
     await crearCajero({
+      email: '0414-1000002@tav.test',
       telefono: '0414-1000002',
       nombre: 'Ambar',
       limiteCents: 100_000n,
@@ -211,11 +262,12 @@ describe('Admin — GET /admin/cajeros', () => {
   });
 
   test('filtra por estado del semáforo', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    await crearCajero({ telefono: '0414-1000001', nombre: 'Verde', limiteCents: 100_000n });
+    await crearCajero({ email: '0414-1000001@tav.test', nombre: 'Verde', limiteCents: 100_000n });
     await crearCajero({
+      email: '0414-1000002@tav.test',
       telefono: '0414-1000002',
       nombre: 'Rojo',
       limiteCents: 100_000n,
@@ -234,11 +286,12 @@ describe('Admin — GET /admin/cajeros', () => {
   });
 
   test('busca por nombre o teléfono', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    await crearCajero({ telefono: '0414-1000001', nombre: 'Juan Pérez' });
-    await crearCajero({ telefono: '0414-1000002', nombre: 'María Gómez' });
+    await crearCajero({ email: '0414-1000001@tav.test', nombre: 'Juan Pérez' });
+    await crearCajero({ email: '0414-1000002@tav.test',
+      telefono: '0414-1000002', nombre: 'María Gómez' });
 
     const porNombre = await request(app.getHttpServer())
       .get('/admin/cajeros?q=Juan')
@@ -258,13 +311,13 @@ describe('Admin — GET /admin/cajeros', () => {
 
 describe('Admin — GET /admin/cajeros/:id', () => {
   test('ficha completa con movimientos y operaciones', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const caj = await crearCajero({ telefono: '0414-1000001', limiteCents: 500_000n });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', limiteCents: 500_000n });
 
     // Crear una operación via el endpoint del cajero para tener movimiento.
-    const cajToken = await login(app, caj.telefono, caj.password);
+    const cajToken = await login(app, caj.email, caj.password);
     await request(app.getHttpServer())
       .post('/cajero/operaciones')
       .set('Authorization', `Bearer ${cajToken}`)
@@ -288,8 +341,8 @@ describe('Admin — GET /admin/cajeros/:id', () => {
   });
 
   test('404 si el cajero no existe', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
     const res = await request(app.getHttpServer())
       .get('/admin/cajeros/no-existe')
@@ -304,10 +357,10 @@ describe('Admin — GET /admin/cajeros/:id', () => {
 
 describe('Admin — PATCH /admin/cajeros/:id/limite', () => {
   test('cambia el límite y queda registrado en AuditLog con valor anterior y nuevo', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const caj = await crearCajero({ telefono: '0414-1000001', limiteCents: 100_000n });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', limiteCents: 100_000n });
 
     const res = await request(app.getHttpServer())
       .patch(`/admin/cajeros/${caj.id}/limite`)
@@ -333,8 +386,8 @@ describe('Admin — PATCH /admin/cajeros/:id/limite', () => {
   });
 
   test('404 si el cajero no existe', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
     const res = await request(app.getHttpServer())
       .patch('/admin/cajeros/no-existe/limite')
@@ -349,10 +402,10 @@ describe('Admin — PATCH /admin/cajeros/:id/limite', () => {
 
 describe('Admin — GET /admin/ampliaciones', () => {
   test('lista filtradas por estado, pendientes primero', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const caj = await crearCajero({ telefono: '0414-1000001' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
 
     // Crear 3 ampliaciones en distintos estados.
     const pendiente = await prisma.ampliacionCredito.create({
@@ -403,10 +456,10 @@ describe('Admin — GET /admin/ampliaciones', () => {
 
 describe('Admin — POST /admin/ampliaciones/:id/aprobar y /rechazar', () => {
   test('aprueba una ampliación pendiente con nota', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const caj = await crearCajero({ telefono: '0414-1000001' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
     const amp = await prisma.ampliacionCredito.create({
       data: { cajeroId: caj.id, montoCents: 50_000n, motivo: 'Cliente grande' },
     });
@@ -424,10 +477,10 @@ describe('Admin — POST /admin/ampliaciones/:id/aprobar y /rechazar', () => {
   });
 
   test('rechaza una ampliación pendiente', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const caj = await crearCajero({ telefono: '0414-1000001' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
     const amp = await prisma.ampliacionCredito.create({
       data: { cajeroId: caj.id, montoCents: 50_000n, motivo: 'Cliente grande' },
     });
@@ -443,10 +496,10 @@ describe('Admin — POST /admin/ampliaciones/:id/aprobar y /rechazar', () => {
   });
 
   test('no se puede aprobar una ampliación ya resuelta', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const caj = await crearCajero({ telefono: '0414-1000001' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
     const amp = await prisma.ampliacionCredito.create({
       data: {
         cajeroId: caj.id,
@@ -467,12 +520,12 @@ describe('Admin — POST /admin/ampliaciones/:id/aprobar y /rechazar', () => {
   });
 
   test('aprobar una ampliación permite una operación que antes se rechazaba', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const adminToken = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const adminToken = await login(app, admin.email, admin.password);
 
     // Cajero con límite 50.000 y saldo 0. Una operación de 103.000 no cabe.
-    const caj = await crearCajero({ telefono: '0414-1000001', limiteCents: 50_000n });
-    const cajToken = await login(app, caj.telefono, caj.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', limiteCents: 50_000n });
+    const cajToken = await login(app, caj.email, caj.password);
 
     // 1. La operación se rechaza por sin cupo.
     const rechazo = await request(app.getHttpServer())
@@ -519,14 +572,14 @@ describe('Admin — POST /admin/ampliaciones/:id/aprobar y /rechazar', () => {
 
 describe('Admin — GET /admin/cierres', () => {
   test('lista filtradas por estado, enviados primero', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const caj = await crearCajero({ telefono: '0414-1000001', saldoCents: 60_000n, deudaDesde: new Date() });
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', saldoCents: 60_000n, deudaDesde: new Date() });
 
     // Crear un cierre enviado y uno abierto.
-    const cobToken = await login(app, cob.telefono, cob.password);
+    const cobToken = await login(app, cob.email, cob.password);
 
     // Cierre 1: registrar un cobro y enviarlo.
     await request(app.getHttpServer())
@@ -547,10 +600,10 @@ describe('Admin — GET /admin/cierres', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoDeclaradoCents: '30000' });
+      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
 
     // Cierre 2: otro cobrador con cierre abierto (sin cobros aún → sin cierre).
-    const cob2 = await crearCobrador({ telefono: '0414-2000002' });
+    const cob2 = await crearCobrador({ email: '0414-2000002@tav.test' });
 
     const res = await request(app.getHttpServer())
       .get('/admin/cierres')
@@ -564,12 +617,12 @@ describe('Admin — GET /admin/cierres', () => {
   });
 
   test('filtra por estado', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const caj = await crearCajero({ telefono: '0414-1000001', saldoCents: 60_000n, deudaDesde: new Date() });
-    const cobToken = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', saldoCents: 60_000n, deudaDesde: new Date() });
+    const cobToken = await login(app, cob.email, cob.password);
 
     await request(app.getHttpServer())
       .post('/cobrador/cobros')
@@ -589,7 +642,7 @@ describe('Admin — GET /admin/cierres', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoDeclaradoCents: '30000' });
+      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
 
     const res = await request(app.getHttpServer())
       .get('/admin/cierres?estado=enviado')
@@ -609,12 +662,12 @@ describe('Admin — GET /admin/cierres', () => {
 
 describe('Admin — GET /admin/cierres/:id', () => {
   test('detalle con todos los cobros del día', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const caj = await crearCajero({ telefono: '0414-1000001', saldoCents: 60_000n, deudaDesde: new Date() });
-    const cobToken = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', saldoCents: 60_000n, deudaDesde: new Date() });
+    const cobToken = await login(app, cob.email, cob.password);
 
     await request(app.getHttpServer())
       .post('/cobrador/cobros')
@@ -639,18 +692,18 @@ describe('Admin — GET /admin/cierres/:id', () => {
     expect(res.body.id).toBe(cierreActual.body.id);
     expect(res.body.cobros).toHaveLength(1);
     expect(res.body.cobros[0].cajero.usuario.nombre).toBe('Cajero Test');
-    expect(res.body.cobros[0].montoUsdCents).toBe('30000');
+    expect(res.body.cobros[0].montoBaseCents).toBe('30000');
   });
 });
 
 describe('Admin — POST /admin/cierres/:id/verificar', () => {
   test('verifica sin diferencia → estado verificado', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const caj = await crearCajero({ telefono: '0414-1000001', saldoCents: 60_000n, deudaDesde: new Date() });
-    const cobToken = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', saldoCents: 60_000n, deudaDesde: new Date() });
+    const cobToken = await login(app, cob.email, cob.password);
 
     await request(app.getHttpServer())
       .post('/cobrador/cobros')
@@ -670,28 +723,28 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoDeclaradoCents: '30000' });
+      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
 
     const res = await request(app.getHttpServer())
       .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoRecibidoCents: '30000' });
+      .send({ efectivoGydRecibidoCents: '30000', efectivoUsdRecibidoCents: '0' });
 
     expect(res.status).toBe(201);
     expect(res.body.estado).toBe('verificado');
-    expect(res.body.efectivoRecibidoCents).toBe('30000');
-    expect(res.body.diferenciaCents).toBe('0');
+    expect(res.body.efectivoGydRecibidoCents).toBe('30000');
+    expect(res.body.diferenciaGydCents).toBe('0');
     expect(res.body.verificadoPorId).toBe(admin.id);
     expect(res.body.verificadoAt).not.toBeNull();
   });
 
   test('verifica con diferencia → estado con_diferencia, calcula el monto y exige nota', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const caj = await crearCajero({ telefono: '0414-1000001', saldoCents: 60_000n, deudaDesde: new Date() });
-    const cobToken = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', saldoCents: 60_000n, deudaDesde: new Date() });
+    const cobToken = await login(app, cob.email, cob.password);
 
     await request(app.getHttpServer())
       .post('/cobrador/cobros')
@@ -712,29 +765,29 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoDeclaradoCents: '30000' });
+      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
 
     // El admin cuenta 29.500 → diferencia de -500.
     const res = await request(app.getHttpServer())
       .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoRecibidoCents: '29500', nota: 'Faltaron 500 en el cuadre' });
+      .send({ efectivoGydRecibidoCents: '29500', efectivoUsdRecibidoCents: '0', nota: 'Faltaron 500 en el cuadre' });
 
     expect(res.status).toBe(201);
     expect(res.body.estado).toBe('con_diferencia');
-    expect(res.body.efectivoRecibidoCents).toBe('29500');
+    expect(res.body.efectivoGydRecibidoCents).toBe('29500');
     // diferencia = recibido − declarado = 29500 − 30000 = −500
-    expect(res.body.diferenciaCents).toBe('-500');
+    expect(res.body.diferenciaGydCents).toBe('-500');
     expect(res.body.notaAdmin).toBe('Faltaron 500 en el cuadre');
   });
 
   test('verificar con diferencia sin nota → 400', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const caj = await crearCajero({ telefono: '0414-1000001', saldoCents: 60_000n, deudaDesde: new Date() });
-    const cobToken = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', saldoCents: 60_000n, deudaDesde: new Date() });
+    const cobToken = await login(app, cob.email, cob.password);
 
     await request(app.getHttpServer())
       .post('/cobrador/cobros')
@@ -754,24 +807,122 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoDeclaradoCents: '30000' });
+      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
 
     // Diferencia (29500 vs 30000) sin nota → 400.
     const res = await request(app.getHttpServer())
       .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoRecibidoCents: '29500' });
+      .send({ efectivoGydRecibidoCents: '29500', efectivoUsdRecibidoCents: '0' });
 
     expect(res.status).toBe(400);
   });
 
-  test('no se puede verificar un cierre no enviado', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+  test('cierre con efectivo en GYD y USD se declara y verifica por separado', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
-    const caj = await crearCajero({ telefono: '0414-1000001', saldoCents: 60_000n, deudaDesde: new Date() });
-    const cobToken = await login(app, cob.telefono, cob.password);
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', saldoCents: 200_000n, deudaDesde: new Date() });
+    const cobToken = await login(app, cob.email, cob.password);
+
+    // Un cobro en efectivo GYD (40.000 GYD cents → 40.000 GYD base)
+    await request(app.getHttpServer())
+      .post('/cobrador/cobros')
+      .set('Authorization', `Bearer ${cobToken}`)
+      .send({
+        clientUuid: 'cobro-cierre-gyd',
+        cajeroId: caj.id,
+        metodo: 'efectivo_gyd',
+        montoCents: '40000',
+        moneda: 'GYD',
+      });
+
+    // Un cobro en efectivo USD (50.00 USD cents → 10.450 GYD base con tasa 209)
+    // La tasa USD_GYD del beforeEach es 1; la reescribimos a 209.
+    await prisma.tasa.updateMany({ where: { par: 'USD_GYD' }, data: { valor: 209.0 } });
+    await request(app.getHttpServer())
+      .post('/cobrador/cobros')
+      .set('Authorization', `Bearer ${cobToken}`)
+      .send({
+        clientUuid: 'cobro-cierre-usd',
+        cajeroId: caj.id,
+        metodo: 'efectivo_usd',
+        montoCents: '5000',
+        moneda: 'USD',
+      });
+
+    const cierreActual = await request(app.getHttpServer())
+      .get('/cobrador/cierre-actual')
+      .set('Authorization', `Bearer ${cobToken}`);
+
+    // El cobrador declara 40.000 GYD y 50.00 USD por separado.
+    await request(app.getHttpServer())
+      .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
+      .set('Authorization', `Bearer ${cobToken}`)
+      .send({ efectivoGydDeclaradoCents: '40000', efectivoUsdDeclaradoCents: '5000' });
+
+    // El admin cuenta exactamente eso: 40.000 GYD y 50.00 USD.
+    const res = await request(app.getHttpServer())
+      .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ efectivoGydRecibidoCents: '40000', efectivoUsdRecibidoCents: '5000' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.estado).toBe('verificado');
+    expect(res.body.efectivoGydRecibidoCents).toBe('40000');
+    expect(res.body.efectivoUsdRecibidoCents).toBe('5000');
+    expect(res.body.diferenciaGydCents).toBe('0');
+    expect(res.body.diferenciaUsdCents).toBe('0');
+  });
+
+  test('cierre con diferencia solo en USD → con_diferencia', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', saldoCents: 200_000n, deudaDesde: new Date() });
+    const cobToken = await login(app, cob.email, cob.password);
+
+    await request(app.getHttpServer())
+      .post('/cobrador/cobros')
+      .set('Authorization', `Bearer ${cobToken}`)
+      .send({
+        clientUuid: 'cobro-cierre-diff-usd',
+        cajeroId: caj.id,
+        metodo: 'efectivo_usd',
+        montoCents: '5000',
+        moneda: 'USD',
+      });
+
+    const cierreActual = await request(app.getHttpServer())
+      .get('/cobrador/cierre-actual')
+      .set('Authorization', `Bearer ${cobToken}`);
+
+    await request(app.getHttpServer())
+      .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
+      .set('Authorization', `Bearer ${cobToken}`)
+      .send({ efectivoGydDeclaradoCents: '0', efectivoUsdDeclaradoCents: '5000' });
+
+    // GYD cuadra (0=0), USD no (4800 vs 5000). Hay diferencia → nota obligatoria.
+    const res = await request(app.getHttpServer())
+      .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ efectivoGydRecibidoCents: '0', efectivoUsdRecibidoCents: '4800', nota: 'Faltaron 20 centavos USD' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.estado).toBe('con_diferencia');
+    expect(res.body.diferenciaGydCents).toBe('0');
+    expect(res.body.diferenciaUsdCents).toBe('-200');
+  });
+
+  test('no se puede verificar un cierre no enviado', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', saldoCents: 60_000n, deudaDesde: new Date() });
+    const cobToken = await login(app, cob.email, cob.password);
 
     // Crear un cobro → se abre un cierre en estado 'abierto'.
     await request(app.getHttpServer())
@@ -792,7 +943,7 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
     const res = await request(app.getHttpServer())
       .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoRecibidoCents: '30000' });
+      .send({ efectivoGydRecibidoCents: '30000', efectivoUsdRecibidoCents: '0' });
 
     expect(res.status).toBe(400);
   });
@@ -802,8 +953,8 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
 
 describe('Admin — POST /admin/tasas y GET /admin/tasas', () => {
   test('fija la tasa del día y queda en el historial', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
     const res = await request(app.getHttpServer())
       .post('/admin/tasas')
@@ -822,13 +973,15 @@ describe('Admin — POST /admin/tasas y GET /admin/tasas', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(hist.status).toBe(200);
-    expect(hist.body).toHaveLength(1);
-    expect(hist.body[0].par).toBe('USDT_BS');
+    // Hay tasas de conversión sembradas en beforeEach; filtrar por par.
+    const usdtBs = hist.body.filter((t: { par: string }) => t.par === 'USDT_BS');
+    expect(usdtBs).toHaveLength(1);
+    expect(usdtBs[0].par).toBe('USDT_BS');
   });
 
   test('historial filtrado por par', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
     await request(app.getHttpServer())
       .post('/admin/tasas')
@@ -853,11 +1006,11 @@ describe('Admin — POST /admin/tasas y GET /admin/tasas', () => {
 
 describe('Admin — POST /admin/cobros', () => {
   test('registra un pago en nombre de un cajero sin cobrador (no toca cierre)', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
       deudaDesde: new Date(),
@@ -876,7 +1029,7 @@ describe('Admin — POST /admin/cobros', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.cobro.folio).toMatch(/^COB-/);
-    expect(res.body.cobro.montoUsdCents).toBe('30000');
+    expect(res.body.cobro.montoBaseCents).toBe('30000');
     expect(res.body.cobro.cobradorId).toBeNull();
     // Sin cobrador → sin cierre.
     expect(res.body.cobro.cierreId).toBeNull();
@@ -892,11 +1045,11 @@ describe('Admin — POST /admin/cobros', () => {
   });
 
   test('es idempotente por clientUuid', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
       deudaDesde: new Date(),
@@ -934,17 +1087,17 @@ describe('Admin — POST /admin/cobros', () => {
 
 describe('Admin — GET /admin/resumen', () => {
   test('totales del día: cobrado, operaciones, cartera, semáforo, cierres y ampliaciones', async () => {
-    const admin = await crearAdmin({ telefono: '0414-0000001' });
-    const token = await login(app, admin.telefono, admin.password);
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
 
-    const cob = await crearCobrador({ telefono: '0414-2000001' });
+    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
     const caj = await crearCajero({
-      telefono: '0414-1000001',
+      email: '0414-1000001@tav.test',
       limiteCents: 100_000n,
       saldoCents: 60_000n,
       deudaDesde: new Date(),
     });
-    const cobToken = await login(app, cob.telefono, cob.password);
+    const cobToken = await login(app, cob.email, cob.password);
 
     // Un cobro hoy.
     await request(app.getHttpServer())
@@ -965,7 +1118,7 @@ describe('Admin — GET /admin/resumen', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoDeclaradoCents: '30000' });
+      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
 
     // Una ampliación pendiente (directo en DB para no loguear al cajero,
     // que actualizaría su ultimaVezAt y rompería el conteo de "sin conectarse").
@@ -1006,7 +1159,7 @@ describe('Admin — un cajero y un cobrador reciben 403 en todos los endpoints',
     path: string;
     body?: Record<string, unknown>;
   }> = [
-    { method: 'post', path: '/admin/usuarios', body: { nombre: 'x', telefono: 'x', rol: 'cajero', password: 'x', limiteCents: '100' } },
+    { method: 'post', path: '/admin/usuarios', body: { nombre: 'x', email: 'x@tav.test', rol: 'cajero', password: 'x', limiteCents: '100' } },
     { method: 'get', path: '/admin/cajeros' },
     { method: 'get', path: '/admin/cajeros/fake-id' },
     { method: 'patch', path: '/admin/cajeros/fake-id/limite', body: { limiteCents: '100' } },
@@ -1015,7 +1168,7 @@ describe('Admin — un cajero y un cobrador reciben 403 en todos los endpoints',
     { method: 'post', path: '/admin/ampliaciones/fake-id/rechazar', body: {} },
     { method: 'get', path: '/admin/cierres' },
     { method: 'get', path: '/admin/cierres/fake-id' },
-    { method: 'post', path: '/admin/cierres/fake-id/verificar', body: { efectivoRecibidoCents: '100' } },
+    { method: 'post', path: '/admin/cierres/fake-id/verificar', body: { efectivoGydRecibidoCents: '100', efectivoUsdRecibidoCents: '0' } },
     { method: 'post', path: '/admin/tasas', body: { par: 'USDT_BS', valor: '285.4' } },
     { method: 'get', path: '/admin/tasas' },
     { method: 'post', path: '/admin/cobros', body: { clientUuid: 'x', cajeroId: 'x', metodo: 'efectivo_usd', montoCents: '100', moneda: 'USD' } },
@@ -1024,8 +1177,8 @@ describe('Admin — un cajero y un cobrador reciben 403 en todos los endpoints',
 
   for (const ep of endpoints) {
     test(`cajero 403 en ${ep.method.toUpperCase()} ${ep.path}`, async () => {
-      const caj = await crearCajero({ telefono: '0414-1000001' });
-      const token = await login(app, caj.telefono, caj.password);
+      const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+      const token = await login(app, caj.email, caj.password);
 
       const req = request(app.getHttpServer())[ep.method](ep.path).set(
         'Authorization',
@@ -1038,8 +1191,8 @@ describe('Admin — un cajero y un cobrador reciben 403 en todos los endpoints',
     });
 
     test(`cobrador 403 en ${ep.method.toUpperCase()} ${ep.path}`, async () => {
-      const cob = await crearCobrador({ telefono: '0414-2000001' });
-      const token = await login(app, cob.telefono, cob.password);
+      const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
+      const token = await login(app, cob.email, cob.password);
 
       const req = request(app.getHttpServer())[ep.method](ep.path).set(
         'Authorization',
@@ -1051,4 +1204,86 @@ describe('Admin — un cajero y un cobrador reciben 403 en todos los endpoints',
       expect(res.status).toBe(403);
     });
   }
+});
+
+// ─────────────────────────── UNICIDAD ───────────────────────────
+
+describe('Admin — unicidad de email y teléfono', () => {
+  test('dos usuarios distintos pueden compartir el mismo teléfono', async () => {
+    const telefono = '0414-9990000';
+    await prisma.usuario.create({
+      data: {
+        rol: 'cajero',
+        nombre: 'Cajero Tel',
+        email: 'cajero-tel@tav.test',
+        telefono,
+        passwordHash: 'x',
+        perfilCajero: { create: { limiteCents: 100_000n } },
+      },
+    });
+    await prisma.usuario.create({
+      data: {
+        rol: 'cobrador',
+        nombre: 'Cobrador Tel',
+        email: 'cobrador-tel@tav.test',
+        telefono,
+        passwordHash: 'x',
+        perfilCobrador: { create: {} },
+      },
+    });
+    const users = await prisma.usuario.findMany({ where: { telefono } });
+    expect(users).toHaveLength(2);
+  });
+
+  test('email duplicado devuelve 409 desde POST /admin/usuarios', async () => {
+    const admin = await crearAdmin({ email: 'admin-unicidad@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+
+    const res1 = await request(app.getHttpServer())
+      .post('/admin/usuarios')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        nombre: 'Cajero Uno',
+        email: 'duplicado-admin@tav.test',
+        rol: 'cajero',
+        password: 'clave123',
+        limiteCents: '100',
+      });
+    expect(res1.status).toBe(201);
+
+    const res2 = await request(app.getHttpServer())
+      .post('/admin/usuarios')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        nombre: 'Cajero Dos',
+        email: 'duplicado-admin@tav.test',
+        rol: 'cajero',
+        password: 'clave123',
+        limiteCents: '100',
+      });
+    expect(res2.status).toBe(409);
+  });
+
+  test('prisma.usuario.create con email duplicado lanza P2002', async () => {
+    await prisma.usuario.create({
+      data: {
+        rol: 'cajero',
+        nombre: 'Email Dup 1',
+        email: 'dup-prisma@tav.test',
+        passwordHash: 'x',
+        perfilCajero: { create: { limiteCents: 100_000n } },
+      },
+    });
+    await expect(
+      prisma.usuario.create({
+        data: {
+          rol: 'cobrador',
+          nombre: 'Email Dup 2',
+          email: 'dup-prisma@tav.test',
+          passwordHash: 'x',
+          perfilCobrador: { create: {} },
+        },
+      }),
+    ).rejects.toThrow(/P2002|Unique constraint/);
+  });
 });

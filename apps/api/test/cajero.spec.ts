@@ -34,9 +34,10 @@ const TEST_URL = 'postgresql://tav:tav@localhost:5432/tav_test?schema=public';
 const prisma = new PrismaClient({ datasources: { db: { url: TEST_URL } } });
 
 const TABLAS = [
+  'MovimientoCaja', 'Caja', 'PublicacionTasaItem', 'PublicacionTasas',
   'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Tasa', 'Operacion', 'Cobro',
   'Movimiento', 'AmpliacionCredito', 'Cierre', 'Atencion', 'Aviso', 'AuditLog',
-  'Config',
+  'Config', 'Corredor',
 ];
 
 let app: INestApplication;
@@ -60,18 +61,20 @@ async function seedConfig() {
 }
 
 async function crearCajero(opts: {
-  telefono: string;
+  email: string;
+  telefono?: string;
   password?: string;
   nombre?: string;
   limiteCents?: bigint;
   saldoCents?: bigint;
   deudaDesde?: Date | null;
-}): Promise<{ id: string; telefono: string; password: string; token?: string }> {
+}): Promise<{ id: string; email: string; password: string; token?: string }> {
   const password = opts.password ?? 'clave123';
   const passwordHash = await argon2.hash(password);
   const data: Prisma.UsuarioCreateInput = {
     rol: 'cajero',
     nombre: opts.nombre ?? 'Cajero Test',
+    email: opts.email,
     telefono: opts.telefono,
     passwordHash,
     perfilCajero: {
@@ -83,15 +86,17 @@ async function crearCajero(opts: {
     },
   };
   const u = await prisma.usuario.create({ data });
-  return { id: u.id, telefono: opts.telefono, password };
+  return { id: u.id, email: opts.email, password };
 }
 
-async function login(app: INestApplication, telefono: string, password: string): Promise<string> {
+async function login(app: INestApplication, email: string, password: string): Promise<string> {
   const res = await request(app.getHttpServer())
     .post('/auth/login')
-    .send({ telefono, password });
+    .send({ email, password });
   return res.body.accessToken;
 }
+
+let corredorIdTest: string;
 
 function operacionValida(clientUuid: string, overrides?: Record<string, unknown>) {
   return {
@@ -99,10 +104,8 @@ function operacionValida(clientUuid: string, overrides?: Record<string, unknown>
     tipo: 'usdt_bs',
     montoOrigenCents: '100000',
     monedaOrigen: 'USDT',
-    tasaAplicada: '285.400000',
     comisionCents: '3000',
     totalCents: '103000',
-    montoDestinoCents: '28540000',
     monedaDestino: 'BS',
     beneficiario: {
       nombre: 'María González',
@@ -111,6 +114,7 @@ function operacionValida(clientUuid: string, overrides?: Record<string, unknown>
       cuenta: '0134...4471',
       metodo: 'pago_movil',
     },
+    corredorId: corredorIdTest,
     ...overrides,
   };
 }
@@ -141,14 +145,41 @@ afterAll(async () => {
 beforeEach(async () => {
   await truncateTodo();
   await seedConfig();
+  // Crear un corredor para que operacionValida tenga un corredorId válido.
+  const c = await prisma.corredor.create({
+    data: {
+      pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
+      formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      creadoPorId: 'admin-test',
+    },
+  });
+  await prisma.caja.create({
+    data: { corredorId: c.id, esMadre: false, moneda: 'BS', saldoCents: 0n },
+  });
+  corredorIdTest = c.id;
+
+  // Publicar una tasa para el corredor: pataBase=1, pataDestino=285.4, margen=0
+  // → tasaCotizada = 285.4. Así montoDestino = 100000 × 285.4 = 28540000.
+  const pub = await prisma.publicacionTasas.create({
+    data: { pataBase: new Prisma.Decimal('1'), publicadaPorId: 'admin-test' },
+  });
+  await prisma.publicacionTasaItem.create({
+    data: {
+      publicacionId: pub.id,
+      corredorId: c.id,
+      pataDestino: new Prisma.Decimal('285.4'),
+      margen: new Prisma.Decimal('0'),
+      tasaCotizada: new Prisma.Decimal('285.4'),
+    },
+  });
 });
 
 // ─────────────────────────── RESUMEN ───────────────────────────
 
 describe('Cajero — GET /cajero/resumen', () => {
   test('devuelve saldo, límite, disponible y semáforo', async () => {
-    const c = await crearCajero({ telefono: '0414-1000001', limiteCents: 100_000n });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-1000001@tav.test', limiteCents: 100_000n });
+    const token = await login(app, c.email, c.password);
 
     const res = await request(app.getHttpServer())
       .get('/cajero/resumen')
@@ -166,12 +197,12 @@ describe('Cajero — GET /cajero/resumen', () => {
 
   test('cajero con saldo al 90% muestra semáforo ámbar', async () => {
     const c = await crearCajero({
-      telefono: '0414-1000002',
+      email: '0414-1000002@tav.test',
       limiteCents: 100_000n,
       saldoCents: 90_000n,
       deudaDesde: new Date(),
     });
-    const token = await login(app, c.telefono, c.password);
+    const token = await login(app, c.email, c.password);
 
     const res = await request(app.getHttpServer())
       .get('/cajero/resumen')
@@ -188,8 +219,8 @@ describe('Cajero — GET /cajero/resumen', () => {
 
 describe('Cajero — POST /cajero/operaciones', () => {
   test('crea una operación dentro del cupo', async () => {
-    const c = await crearCajero({ telefono: '0414-2000001', limiteCents: 500_000n });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-2000001@tav.test', limiteCents: 500_000n });
+    const token = await login(app, c.email, c.password);
 
     const res = await request(app.getHttpServer())
       .post('/cajero/operaciones')
@@ -208,8 +239,8 @@ describe('Cajero — POST /cajero/operaciones', () => {
   });
 
   test('idempotencia: mismo clientUuid devuelve la operación existente', async () => {
-    const c = await crearCajero({ telefono: '0414-2000002', limiteCents: 500_000n });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-2000002@tav.test', limiteCents: 500_000n });
+    const token = await login(app, c.email, c.password);
 
     const dto = operacionValida('op-uuid-dup');
     const r1 = await request(app.getHttpServer())
@@ -229,8 +260,8 @@ describe('Cajero — POST /cajero/operaciones', () => {
 
   test('409 con payload {disponible, requerido, faltante} intacto cuando no hay cupo', async () => {
     // Cajero con límite 50.000 y saldo 0. Operación de 103.000 → no cabe.
-    const c = await crearCajero({ telefono: '0414-2000003', limiteCents: 50_000n });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-2000003@tav.test', limiteCents: 50_000n });
+    const token = await login(app, c.email, c.password);
 
     const res = await request(app.getHttpServer())
       .post('/cajero/operaciones')
@@ -252,8 +283,8 @@ describe('Cajero — POST /cajero/operaciones', () => {
   });
 
   test('el DTO rechaza montos incoherentes (totalCents != montoOrigen + comisión)', async () => {
-    const c = await crearCajero({ telefono: '0414-2000004', limiteCents: 100_000n });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-2000004@tav.test', limiteCents: 100_000n });
+    const token = await login(app, c.email, c.password);
 
     // totalCents debería ser 103000 (100000 + 3000) pero mandamos 99999
     const res = await request(app.getHttpServer())
@@ -267,8 +298,8 @@ describe('Cajero — POST /cajero/operaciones', () => {
   });
 
   test('rechaza cajeroId y creadaPorId en el body (forbidNonWhitelisted)', async () => {
-    const c = await crearCajero({ telefono: '0414-2000005', limiteCents: 100_000n });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-2000005@tav.test', limiteCents: 100_000n });
+    const token = await login(app, c.email, c.password);
 
     const res = await request(app.getHttpServer())
       .post('/cajero/operaciones')
@@ -286,8 +317,8 @@ describe('Cajero — POST /cajero/operaciones', () => {
 
 describe('Cajero — GET /cajero/operaciones', () => {
   test('lista paginada con filtro por estado', async () => {
-    const c = await crearCajero({ telefono: '0414-3000001', limiteCents: 500_000n });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-3000001@tav.test', limiteCents: 500_000n });
+    const token = await login(app, c.email, c.password);
 
     // Crear 3 operaciones
     for (let i = 0; i < 3; i++) {
@@ -308,9 +339,9 @@ describe('Cajero — GET /cajero/operaciones', () => {
     expect(res.body.page).toBe(1);
     expect(res.body.limit).toBe(10);
 
-    // Filtro por estado en_verificacion (las nuevas nacen así)
+    // Filtro por estado pendiente (las nuevas nacen así)
     const resFiltro = await request(app.getHttpServer())
-      .get('/cajero/operaciones?estado=en_verificacion')
+      .get('/cajero/operaciones?estado=pendiente')
       .set('Authorization', `Bearer ${token}`);
 
     expect(resFiltro.status).toBe(200);
@@ -322,8 +353,8 @@ describe('Cajero — GET /cajero/operaciones', () => {
 
 describe('Cajero — GET /cajero/movimientos', () => {
   test('estado de cuenta paginado ordenado por seq descendente', async () => {
-    const c = await crearCajero({ telefono: '0414-4000001', limiteCents: 500_000n });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-4000001@tav.test', limiteCents: 500_000n });
+    const token = await login(app, c.email, c.password);
 
     // Crear 2 operaciones → 2 movimientos cargo
     for (let i = 0; i < 2; i++) {
@@ -350,8 +381,8 @@ describe('Cajero — GET /cajero/movimientos', () => {
 
 describe('Cajero — ampliaciones', () => {
   test('POST /cajero/ampliaciones solicita ampliación con monto y motivo', async () => {
-    const c = await crearCajero({ telefono: '0414-5000001', limiteCents: 100_000n });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-5000001@tav.test', limiteCents: 100_000n });
+    const token = await login(app, c.email, c.password);
 
     const res = await request(app.getHttpServer())
       .post('/cajero/ampliaciones')
@@ -368,8 +399,8 @@ describe('Cajero — ampliaciones', () => {
   });
 
   test('GET /cajero/ampliaciones lista sus solicitudes', async () => {
-    const c = await crearCajero({ telefono: '0414-5000002', limiteCents: 100_000n });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-5000002@tav.test', limiteCents: 100_000n });
+    const token = await login(app, c.email, c.password);
 
     await request(app.getHttpServer())
       .post('/cajero/ampliaciones')
@@ -397,7 +428,7 @@ describe('Cajero — ampliaciones', () => {
 describe('Tasas — GET /tasas/vigentes', () => {
   test('devuelve la tasa más reciente de cada par', async () => {
     const admin = await prisma.usuario.create({
-      data: { rol: 'admin', nombre: 'Admin', telefono: 'admin-1', passwordHash: 'x' },
+      data: { rol: 'admin', nombre: 'Admin', email: 'admin-1@tav.test', passwordHash: 'x' },
     });
 
     await prisma.tasa.createMany({
@@ -408,8 +439,8 @@ describe('Tasas — GET /tasas/vigentes', () => {
       ],
     });
 
-    const c = await crearCajero({ telefono: '0414-6000001' });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-6000001@tav.test' });
+    const token = await login(app, c.email, c.password);
 
     const res = await request(app.getHttpServer())
       .get('/tasas/vigentes')
@@ -431,8 +462,8 @@ describe('Tasas — GET /tasas/vigentes', () => {
 
 describe('Uploads — POST /uploads/comprobante', () => {
   test('guarda en disco y devuelve la ruta', async () => {
-    const c = await crearCajero({ telefono: '0414-7000001' });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-7000001@tav.test' });
+    const token = await login(app, c.email, c.password);
 
     const res = await request(app.getHttpServer())
       .post('/uploads/comprobante')
@@ -450,8 +481,8 @@ describe('Uploads — POST /uploads/comprobante', () => {
   });
 
   test('rechaza archivo que no es imagen', async () => {
-    const c = await crearCajero({ telefono: '0414-7000002' });
-    const token = await login(app, c.telefono, c.password);
+    const c = await crearCajero({ email: '0414-7000002@tav.test' });
+    const token = await login(app, c.email, c.password);
 
     const res = await request(app.getHttpServer())
       .post('/uploads/comprobante')
@@ -466,10 +497,10 @@ describe('Uploads — POST /uploads/comprobante', () => {
 
 describe('Cajero — aislamiento entre cajeros', () => {
   test('un cajero no puede ver las operaciones de otro', async () => {
-    const cA = await crearCajero({ telefono: '0414-8000001', limiteCents: 500_000n, nombre: 'Cajero A' });
-    const cB = await crearCajero({ telefono: '0414-8000002', limiteCents: 500_000n, nombre: 'Cajero B' });
-    const tokenA = await login(app, cA.telefono, cA.password);
-    const tokenB = await login(app, cB.telefono, cB.password);
+    const cA = await crearCajero({ email: '0414-8000001@tav.test', limiteCents: 500_000n, nombre: 'Cajero A' });
+    const cB = await crearCajero({ email: '0414-8000002@tav.test', limiteCents: 500_000n, nombre: 'Cajero B' });
+    const tokenA = await login(app, cA.email, cA.password);
+    const tokenB = await login(app, cB.email, cB.password);
 
     // Cajero A crea una operación
     const rOp = await request(app.getHttpServer())
@@ -489,10 +520,10 @@ describe('Cajero — aislamiento entre cajeros', () => {
   });
 
   test('un cajero no puede ver los movimientos de otro', async () => {
-    const cA = await crearCajero({ telefono: '0414-8000003', limiteCents: 500_000n, nombre: 'Cajero A' });
-    const cB = await crearCajero({ telefono: '0414-8000004', limiteCents: 500_000n, nombre: 'Cajero B' });
-    const tokenA = await login(app, cA.telefono, cA.password);
-    const tokenB = await login(app, cB.telefono, cB.password);
+    const cA = await crearCajero({ email: '0414-8000003@tav.test', limiteCents: 500_000n, nombre: 'Cajero A' });
+    const cB = await crearCajero({ email: '0414-8000004@tav.test', limiteCents: 500_000n, nombre: 'Cajero B' });
+    const tokenA = await login(app, cA.email, cA.password);
+    const tokenB = await login(app, cB.email, cB.password);
 
     // Cajero A crea una operación → 1 movimiento
     await request(app.getHttpServer())
@@ -511,21 +542,21 @@ describe('Cajero — aislamiento entre cajeros', () => {
 
   test('el resumen de cada cajero muestra su propio saldo', async () => {
     const cA = await crearCajero({
-      telefono: '0414-8000005',
+      email: '0414-8000005@tav.test',
       limiteCents: 100_000n,
       saldoCents: 50_000n,
       deudaDesde: new Date(),
       nombre: 'Cajero A',
     });
     const cB = await crearCajero({
-      telefono: '0414-8000006',
+      email: '0414-8000006@tav.test',
       limiteCents: 200_000n,
       saldoCents: 10_000n,
       deudaDesde: new Date(),
       nombre: 'Cajero B',
     });
-    const tokenA = await login(app, cA.telefono, cA.password);
-    const tokenB = await login(app, cB.telefono, cB.password);
+    const tokenA = await login(app, cA.email, cA.password);
+    const tokenB = await login(app, cB.email, cB.password);
 
     const resA = await request(app.getHttpServer())
       .get('/cajero/resumen')
@@ -541,10 +572,10 @@ describe('Cajero — aislamiento entre cajeros', () => {
   });
 
   test('un cajero no puede ver las ampliaciones de otro', async () => {
-    const cA = await crearCajero({ telefono: '0414-8000007', limiteCents: 100_000n, nombre: 'Cajero A' });
-    const cB = await crearCajero({ telefono: '0414-8000008', limiteCents: 100_000n, nombre: 'Cajero B' });
-    const tokenA = await login(app, cA.telefono, cA.password);
-    const tokenB = await login(app, cB.telefono, cB.password);
+    const cA = await crearCajero({ email: '0414-8000007@tav.test', limiteCents: 100_000n, nombre: 'Cajero A' });
+    const cB = await crearCajero({ email: '0414-8000008@tav.test', limiteCents: 100_000n, nombre: 'Cajero B' });
+    const tokenA = await login(app, cA.email, cA.password);
+    const tokenB = await login(app, cB.email, cB.password);
 
     // Cajero A solicita una ampliación
     await request(app.getHttpServer())
@@ -570,12 +601,12 @@ describe('Cajero — autorización', () => {
       data: {
         rol: 'cobrador',
         nombre: 'Cobrador',
-        telefono: '0414-9000001',
+        email: '0414-9000001@tav.test',
         passwordHash: await argon2.hash('clave123'),
         perfilCobrador: { create: {} },
       },
     });
-    const token = await login(app, '0414-9000001', 'clave123');
+    const token = await login(app, '0414-9000001@tav.test', 'clave123');
 
     const res = await request(app.getHttpServer())
       .get('/cajero/resumen')
