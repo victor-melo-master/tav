@@ -10,6 +10,7 @@ import '../../data/cajero_api.dart';
 import '../../theme/tav_colors.dart';
 import '../../theme/tav_space.dart';
 import '../../theme/tav_text.dart';
+import '../../utils/format.dart';
 import '../../utils/labels.dart';
 
 /// Detalle de una operación con la línea de tiempo de estados.
@@ -123,16 +124,38 @@ class _OperacionDetailScreenState extends ConsumerState<OperacionDetailScreen> {
                     state: _chipState(op.estado),
                   ),
                   const SizedBox(height: 10),
+                  if (op.montoDestinoCents > 0)
+                    TavMoneyDisplay(
+                      cents: op.montoDestinoCents,
+                      currency: _currencyDestino(op.monedaDestino),
+                      style: TavText.moneyDisplay.copyWith(fontSize: 30),
+                      fitted: true,
+                    )
+                  else
+                    Text(
+                      op.estado == 'pendiente'
+                          ? 'Pendiente de pago'
+                          : op.estado == 'pagada' || op.estado == 'completada'
+                              ? 'Pago por registrar'
+                              : op.estado.estadoLabel,
+                      style: TavText.h2.copyWith(fontSize: 22, color: TavColors.ink),
+                    ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Enviaste ${formatCents(op.montoOrigenCents, currency: TavMoneyCurrency.usd)}',
+                    style: TavText.body2.copyWith(color: TavColors.ink3),
+                  ),
+                  const SizedBox(height: 6),
                   TavMoneyDisplay(
-                    cents: op.montoDestinoCents,
-                    currency: TavMoneyCurrency.bsd,
-                    style: TavText.moneyDisplay.copyWith(fontSize: 30),
+                    cents: op.totalCents,
+                    currency: TavMoneyCurrency.gyd,
+                    style: TavText.moneyDisplay.copyWith(fontSize: 18, color: TavColors.ink3),
                     fitted: true,
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Enviaste ${formatCents(op.montoOrigenCents, currency: op.monedaOrigen == 'USDT' ? TavMoneyCurrency.usdt : TavMoneyCurrency.usd)}',
-                    style: TavText.body2.copyWith(color: TavColors.ink3),
+                    'Te costó',
+                    style: TavText.caption.copyWith(color: TavColors.ink3),
                   ),
                 ],
               ),
@@ -150,12 +173,17 @@ class _OperacionDetailScreenState extends ConsumerState<OperacionDetailScreen> {
           TavCard(
             child: Column(
               children: [
-                _kvRow('Tipo', tipoOperacionLabel(op.tipo)),
-                _kvRow('Tasa aplicada', '${_formatTasa(op.tasaAplicada)} Bs'),
+                _kvRow(
+                  'Servicio',
+                  op.corredorPaisNombre != null && op.corredorServicioNombre != null
+                      ? '${op.corredorPaisNombre} · ${op.corredorServicioNombre}'
+                      : '—',
+                ),
+                _kvRow('Precio', 'G\$ ${formatGydDecimal(op.tasaAplicada)} por dólar'),
                 _kvRow('Fecha y hora', _fechaHora(op.creadaAt)),
                 const Divider(height: 16),
                 _kvRow('Beneficiario', op.beneficiario.nombre),
-                _kvRow('Cuenta destino', '${op.beneficiario.banco} · ${op.beneficiario.cuenta}'),
+                _kvRow('Cuenta destino', '${op.beneficiario.banco} · ${enmascararCuenta(op.beneficiario.cuenta)}'),
               ],
             ),
           ),
@@ -214,10 +242,10 @@ class _OperacionDetailScreenState extends ConsumerState<OperacionDetailScreen> {
     }
 
     // Estado actual
-    if (op.estado == 'en_verificacion' || op.estado == 'en_proceso') {
+    if (op.estado == 'pendiente') {
       pasos.add(const _TimelineStep(
-        titulo: 'Verificando pago',
-        subtitulo: 'En curso · el operador está validando',
+        titulo: 'Pendiente de pago',
+        subtitulo: 'Aún no ha sido pagada',
         estado: _TimelineEstado.actual,
       ));
       pasos.add(const _TimelineStep(
@@ -225,10 +253,10 @@ class _OperacionDetailScreenState extends ConsumerState<OperacionDetailScreen> {
         subtitulo: 'Pendiente',
         estado: _TimelineEstado.pendiente,
       ));
-    } else if (op.estado == 'completada') {
+    } else if (op.estado == 'pagada') {
       pasos.add(const _TimelineStep(
-        titulo: 'Pago verificado',
-        subtitulo: 'Confirmado',
+        titulo: 'Pagada',
+        subtitulo: 'El pagador registró el pago',
         estado: _TimelineEstado.completado,
       ));
       pasos.add(const _TimelineStep(
@@ -236,7 +264,7 @@ class _OperacionDetailScreenState extends ConsumerState<OperacionDetailScreen> {
         subtitulo: 'Completado',
         estado: _TimelineEstado.completado,
       ));
-    } else if (op.estado == 'observada') {
+    } else if (op.estado == 'en_verificacion' || op.estado == 'en_proceso') {
       pasos.add(const _TimelineStep(
         titulo: 'Operación observada',
         subtitulo: 'Requiere revisión',
@@ -303,17 +331,11 @@ class _OperacionDetailScreenState extends ConsumerState<OperacionDetailScreen> {
     return '${d.day} ${meses[d.month - 1]} · $h:$m';
   }
 
-  String _formatTasa(String valor) {
-    final d = double.tryParse(valor);
-    if (d == null) return valor;
-    final s = d.toStringAsFixed(2);
-    final parts = s.split('.');
-    final entero = parts[0].replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]}.',
-    );
-    return '$entero,${parts[1]}';
-  }
+  TavMoneyCurrency _currencyDestino(String moneda) => switch (moneda) {
+        'BS' => TavMoneyCurrency.bsd,
+        'USD' => TavMoneyCurrency.usd,
+        _ => TavMoneyCurrency.gyd,
+      };
 }
 
 enum _TimelineEstado { completado, actual, pendiente, rechazado }

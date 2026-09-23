@@ -6,6 +6,8 @@
 /// su situación sin ver el color.
 extension EstadoOperacionX on String {
   String get estadoLabel => switch (this) {
+        'pendiente' => 'Pendiente',
+        'pagada' => 'Pagada',
         'en_verificacion' => 'En verificación',
         'en_proceso' => 'En proceso',
         'completada' => 'Completada',
@@ -15,13 +17,6 @@ extension EstadoOperacionX on String {
         _ => this,
       };
 }
-
-/// Tipo de operación legible.
-String tipoOperacionLabel(String tipo) => switch (tipo) {
-      'usdt_bs' => 'USDT → Bolívares',
-      'usd_efectivo_bs' => 'USD efectivo → Bs',
-      _ => tipo,
-    };
 
 /// Tipo de movimiento legible.
 String tipoMovimientoLabel(String tipo) => switch (tipo) {
@@ -46,14 +41,6 @@ String inicialesNombre(String nombre) {
   return '?';
 }
 
-/// Convierte un par de tasa ("USDT_BS") a etiqueta legible.
-String parTasaLabel(String par) => switch (par) {
-      'USDT_BS' => 'USDT → Bs',
-      'USD_BS' => 'USD efectivo → Bs',
-      'ZELLE_BS' => 'Zelle → Bs',
-      _ => par,
-    };
-
 /// Símbolo de moneda por código ISO-4217 de tres letras.
 ///
 /// Para monedas de corredores que no están en `TavMoneyCurrency` (BRL, COP,
@@ -62,7 +49,6 @@ String parTasaLabel(String par) => switch (par) {
 String simboloMoneda(String codigo) => switch (codigo) {
       'GYD' => 'G\$ ',
       'USD' => 'US\$ ',
-      'USDT' => '',
       'BS' => 'Bs ',
       'BRL' => 'R\$ ',
       'COP' => 'COP ',

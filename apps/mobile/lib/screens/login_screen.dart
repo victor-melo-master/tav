@@ -170,7 +170,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Cambia USDT, dólares y bolívares a guyaneses con la tasa del día.',
+                'Cambia dólares a guyaneses con el precio fijado para ti.',
                 style: TavText.body.copyWith(
                   color: const Color(0xFFA9C6EB),
                   height: 1.6,

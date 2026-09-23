@@ -79,6 +79,7 @@ export class CajeroService {
         orderBy: { creadaAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
+        include: { corredor: true },
       }),
       this.prisma.operacion.count({ where }),
     ]);

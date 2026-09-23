@@ -166,7 +166,7 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
                   final idx = items.indexOf(op);
                   return TavListRow(
                     title: op.beneficiario.nombre,
-                    subtitle: '#${op.folio} · ${tipoOperacionLabel(op.tipo)} · ${_fechaHora(op.creadaAt)}',
+                    subtitle: '#${op.folio} · ${_servicioLabel(op)} · ${_fechaHora(op.creadaAt)}',
                     trailingTitle: formatCents(op.totalCents),
                     trailingSubtitle: op.estado.estadoLabel,
                     avatar: Icon(
@@ -234,4 +234,11 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
         'anulada' => const Color(0xFFF1F3F6),
         _ => const Color(0xFFF1F3F6),
       };
+
+  String _servicioLabel(OperacionDto op) {
+    if (op.corredorPaisNombre != null && op.corredorServicioNombre != null) {
+      return '${op.corredorPaisNombre} · ${op.corredorServicioNombre}';
+    }
+    return op.tipo;
+  }
 }

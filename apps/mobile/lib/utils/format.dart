@@ -11,3 +11,11 @@ String formatGydDecimal(String value) {
     decimalDigits: 2,
   ).format(n);
 }
+
+/// Enmascara un número de cuenta: deja visibles solo los últimos 4 dígitos.
+/// Ejemplo: "0134123456789012" → "••••9012".
+String enmascararCuenta(String cuenta) {
+  final limpia = cuenta.trim();
+  if (limpia.length <= 4) return '••••';
+  return '••••${limpia.substring(limpia.length - 4)}';
+}

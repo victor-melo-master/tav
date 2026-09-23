@@ -124,6 +124,8 @@ class OperacionDto {
     required this.creadaAt,
     required this.anuladaAt,
     required this.motivoAnulacion,
+    this.corredorPaisNombre,
+    this.corredorServicioNombre,
   });
 
   final String id;
@@ -142,6 +144,8 @@ class OperacionDto {
   final DateTime creadaAt;
   final DateTime? anuladaAt;
   final String? motivoAnulacion;
+  final String? corredorPaisNombre;
+  final String? corredorServicioNombre;
 
   factory OperacionDto.fromJson(Map<String, dynamic> json) {
     return OperacionDto(
@@ -165,6 +169,8 @@ class OperacionDto {
           ? DateTime.parse(json['anuladaAt'] as String)
           : null,
       motivoAnulacion: json['motivoAnulacion'] as String?,
+      corredorPaisNombre: json['corredor']?['paisNombre'] as String?,
+      corredorServicioNombre: json['corredor']?['servicioNombre'] as String?,
     );
   }
 }

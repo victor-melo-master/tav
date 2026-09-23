@@ -73,7 +73,7 @@ class TavMoneyDisplay extends StatelessWidget {
   }
 }
 
-enum TavMoneyCurrency { gyd, usd, bsd, usdt }
+enum TavMoneyCurrency { gyd, usd, bsd }
 
 /// Helper único de formato de moneda en formato venezolano.
 ///
@@ -81,8 +81,8 @@ enum TavMoneyCurrency { gyd, usd, bsd, usdt }
 /// vaya delante: `G$ 1.240,00`, `Bs 353.896,00`. El locale es_VE de intl
 /// pone el símbolo al final por defecto, así que el patrón es obligatorio.
 ///
-/// La moneda base del libro de deuda es GYD → símbolo G$. USD y USDT tienen
-/// sus propios símbolos para que no haya ambigüedad en pantallas que muestran
+/// La moneda base del libro de deuda es GYD → símbolo G$. USD tiene su
+/// propio símbolo para que no haya ambigüedad en pantallas que muestran
 /// varias monedas a la vez.
 ///
 /// [prefix] añade un signo opcional ("+", "−") delante del símbolo.
@@ -113,18 +113,9 @@ String formatCents(
         decimalDigits: 2,
         customPattern: '\u00a4#,##0.00',
       ),
-    TavMoneyCurrency.usdt => NumberFormat.currency(
-        locale: 'es_VE',
-        symbol: '',
-        decimalDigits: 2,
-        customPattern: '#,##0.00',
-      ),
   };
   final formatted = fmt.format(value);
-  final result = switch (currency) {
-    TavMoneyCurrency.usdt => '$formatted USDT',
-    _ => formatted,
-  };
+  final result = formatted;
   final sign = cents < 0 ? '−' : (prefix ?? '');
   return '$sign$result';
 }

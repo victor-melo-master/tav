@@ -486,7 +486,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
           final estadoChip = _chipEstadoOperacion(op.estado);
           return TavListRow(
             title: op.beneficiario.nombre,
-            subtitle: '${tipoOperacionLabel(op.tipo)} · ${_fechaCorta(op.creadaAt)}',
+            subtitle: '${_servicioLabel(op)} · ${_fechaCorta(op.creadaAt)}',
             trailingTitle: formatCents(op.totalCents),
             trailingSubtitle: estadoChip.label,
             avatar: Icon(
@@ -589,6 +589,13 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
       'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
     ];
     return '${d.day} ${meses[d.month - 1]}';
+  }
+
+  String _servicioLabel(OperacionDto op) {
+    if (op.corredorPaisNombre != null && op.corredorServicioNombre != null) {
+      return '${op.corredorPaisNombre} · ${op.corredorServicioNombre}';
+    }
+    return op.tipo;
   }
 }
 

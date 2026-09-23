@@ -15,15 +15,16 @@ import '../../theme/tav_colors.dart';
 import '../../theme/tav_radius.dart';
 import '../../theme/tav_space.dart';
 import '../../theme/tav_text.dart';
+import '../../utils/format.dart';
 import '../../utils/labels.dart';
 
 /// Flujo de nueva operación: destino → monto → beneficiario → resumen → pago → confirmación.
 ///
 /// Fase 9: el cajero escoge un corredor (destino + forma de entrega) y ve
-/// una sola tasa, la cotizada. El desglose es de tres líneas: lo que envía
-/// en GYD, la tasa aplicada, y lo que recibe el beneficiario en la moneda
-/// del destino. Ninguna comisión visible. Si no hay corredores ofrecibles,
-/// un estado vacío que lo explica.
+/// un solo precio, el negociado para él. El desglose es de tres líneas: lo
+/// que envía en GYD, el precio aplicado, y lo que recibe el beneficiario en
+/// la moneda del destino. Ninguna comisión visible. Si no hay corredores
+/// ofrecibles, un estado vacío que lo explica.
 ///
 /// Al recibir un 409 por falta de cupo, muestra el mensaje real del servidor
 /// con cuánto falta y ofrece solicitar ampliación.
@@ -43,7 +44,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
   // El precio del servicio elegido (GYD por dólar), fijado por el admin para
   // este cajero. Es string decimal. La deuda la calcula el servidor.
   String get _precioGyd => _corredor?.precioGyd ?? '';
-  String get _monedaOrigen => 'USDT'; // Fase 9: el cajero envía USDT
+  String get _monedaOrigen => 'USD'; // Fase 9: el cajero envía dólares
   String get _tipo => 'usdt_${_corredor?.moneda.toLowerCase() ?? 'bs'}';
 
   final _benefNombreController = TextEditingController();
@@ -310,7 +311,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
           ),
           const SizedBox(height: TavSpace.sm),
           Text(
-            'El administrador aún no ha publicado tasas para ningún corredor. '
+            'El administrador aún no ha fijado precios para ningún corredor. '
             'Vuelve más tarde o avísale.',
             style: TavText.body2.copyWith(color: TavColors.ink3),
             textAlign: TextAlign.center,
@@ -325,7 +326,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
     final montoDisplay = _montoCents > 0
         ? TavMoneyDisplay(
             cents: _montoCents,
-            currency: TavMoneyCurrency.usdt,
+            currency: TavMoneyCurrency.usd,
             style: TavText.moneyDisplay.copyWith(fontSize: 38),
             fitted: true,
           )
@@ -379,7 +380,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
                 TavCard(
                   child: Column(
                     children: [
-                      _kvRow('Precio aplicado', 'G\$ ${_formatTasa(_precioGyd)} / USD'),
+                      _kvRow('Precio aplicado', 'G\$ ${_formatPrecio(_precioGyd)} / USD'),
                       const Divider(height: 16),
                       _kvRowDisponible(),
                     ],
@@ -423,7 +424,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
                 ],
                 const SizedBox(height: 10),
                 Text(
-                  'La tasa se congela por 15 minutos al confirmar.',
+                  'El precio se congela por 15 minutos al confirmar.',
                   style: TavText.caption.copyWith(color: TavColors.ink3),
                   textAlign: TextAlign.center,
                 ),
@@ -840,7 +841,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
                   children: [
                     Text(r.nombre, style: TavText.label.copyWith(fontSize: 13)),
                     Text(
-                      '${r.banco} · ${r.cuenta}',
+                      '${r.banco} · ${enmascararCuenta(r.cuenta)}',
                       style: TavText.caption.copyWith(color: TavColors.ink3),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -891,7 +892,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    'Enviando ${formatCents(_montoCents, currency: TavMoneyCurrency.usdt)}',
+                    'Enviando ${formatCents(_montoCents, currency: TavMoneyCurrency.usd)}',
                     style: TavText.caption.copyWith(color: const Color(0xFF9EC0EC)),
                   ),
                 ],
@@ -906,7 +907,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
               children: [
                 _kvRow('Destino', _corredor?.paisNombre ?? '—'),
                 _kvRow('Entrega', _corredor?.formaEntregaNombre ?? '—'),
-                _kvRow('Precio', 'G\$ ${_formatTasa(_precioGyd)} / USD'),
+                _kvRow('Precio', 'G\$ ${_formatPrecio(_precioGyd)} / USD'),
               ],
             ),
           ),
@@ -960,7 +961,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
             ),
             child: Row(
               children: [
-                Text('Tasa congelada', style: TavText.label.copyWith(color: TavColors.blue600)),
+                Text('Precio congelado', style: TavText.label.copyWith(color: TavColors.blue600)),
                 const Spacer(),
                 Text(
                   '${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
@@ -980,7 +981,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    formatCents(_montoCents, currency: TavMoneyCurrency.usdt),
+                    formatCents(_montoCents, currency: TavMoneyCurrency.usd),
                     style: TavText.moneyDisplay.copyWith(fontSize: 26),
                   ),
                 ),
@@ -1103,7 +1104,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
     );
   }
 
-  String _formatTasa(String valor) {
+  String _formatPrecio(String valor) {
     final d = double.tryParse(valor);
     if (d == null) return valor;
     final s = d.toStringAsFixed(2);
@@ -1171,7 +1172,7 @@ class _CorredorCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 9),
                   Text(
-                    'Precio · G\$ ${_formatTasaStatic(corredor.precioGyd)} / USD',
+                    'Precio · G\$ ${_formatPrecioStatic(corredor.precioGyd)} / USD',
                     style: TavText.caption.copyWith(color: TavColors.ink3),
                   ),
                 ],
@@ -1183,7 +1184,7 @@ class _CorredorCard extends StatelessWidget {
     );
   }
 
-  String _formatTasaStatic(String valor) {
+  String _formatPrecioStatic(String valor) {
     final d = double.tryParse(valor);
     if (d == null) return valor;
     final s = d.toStringAsFixed(2);

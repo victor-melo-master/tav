@@ -185,6 +185,7 @@ model Operacion {
   // operaciones anteriores a Fase 9 no lo tienen; sin él no puede pagarse
   // por caja (ejecutarPago valida caja.corredorId === operacion.corredorId).
   corredorId String?
+  corredor   Corredor? @relation(fields: [corredorId], references: [id])
 
   // Fase 9 (Bloque 2): datos que registra el pagador al ejecutar el pago.
   // Van null hasta que la operación pasa a estado `pagada`.
@@ -448,6 +449,7 @@ model Corredor {
   desactivadoPorId   String? // auditable: quién lo desactivó
 
   precios PrecioCajeroServicio[]
+  operaciones Operacion[]
 
   @@index([pais, activo])
   @@index([activo])
