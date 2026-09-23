@@ -14,6 +14,8 @@ class ItemColaPagadorDto {
   const ItemColaPagadorDto({
     required this.id,
     required this.folio,
+    required this.montoOrigenCents,
+    required this.monedaOrigen,
     required this.montoDestinoCents,
     required this.monedaDestino,
     required this.beneficiario,
@@ -24,6 +26,8 @@ class ItemColaPagadorDto {
 
   final String id;
   final String folio;
+  final int montoOrigenCents;
+  final String monedaOrigen;
   final int montoDestinoCents;
   final String monedaDestino;
   final Map<String, dynamic> beneficiario;
@@ -35,6 +39,8 @@ class ItemColaPagadorDto {
     return ItemColaPagadorDto(
       id: json['id'] as String,
       folio: json['folio'] as String,
+      montoOrigenCents: int.parse(json['montoOrigenCents'] as String),
+      monedaOrigen: json['monedaOrigen'] as String,
       montoDestinoCents: int.parse(json['montoDestinoCents'] as String),
       monedaDestino: json['monedaDestino'] as String,
       beneficiario: json['beneficiario'] as Map<String, dynamic>,

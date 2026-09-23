@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../components/tav_button.dart';
 import '../../components/tav_card.dart';
@@ -161,14 +162,20 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
       return;
     }
 
+    final confirmado = await _confirmarSiHayDescuadre(item, montoDestino, tasa);
+    if (!confirmado) return;
+
+    final montoDestinoBs = _parseBolivares(montoDestino);
+    final montoDestinoCents = (montoDestinoBs * 100).round();
+
     setState(() => _enviando = true);
     try {
       final api = ref.read(pagadorApiProvider);
       final res = await api.pagar(EjecutarPagoRequest(
         clientUuid: _clientUuid!,
         operacionId: item.id,
-        montoCents: item.montoDestinoCents.toString(),
-        montoDestinoCents: montoDestino,
+        montoCents: montoDestinoCents.toString(),
+        montoDestinoCents: montoDestinoCents.toString(),
         tasaEjecucion: tasa.replaceAll(',', '.'),
         formaPago: forma,
         nombreCliente: nombre,
@@ -356,5 +363,57 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
         ],
       ),
     );
+  }
+
+  double _parseBolivares(String texto) {
+    return double.tryParse(texto.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+  }
+
+  Future<bool> _confirmarSiHayDescuadre(
+    ItemColaPagadorDto item,
+    String montoDestino,
+    String tasa,
+  ) async {
+    final tasaNum = double.tryParse(tasa.replaceAll(',', '.'));
+    if (tasaNum == null || tasaNum <= 0) return true;
+
+    final entregadoBs = _parseBolivares(montoDestino);
+    if (entregadoBs <= 0) return true;
+
+    final montoUsd = item.montoOrigenCents / 100.0;
+    final esperadoBs = montoUsd * tasaNum;
+    if (esperadoBs <= 0) return true;
+
+    final diferencia = (entregadoBs - esperadoBs).abs() / esperadoBs;
+    if (diferencia <= 0.02) return true;
+
+    final formatter = NumberFormat.currency(
+      locale: 'es_VE',
+      symbol: '',
+      decimalDigits: 2,
+    );
+
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Revisa los números'),
+            content: Text(
+              'Según la tasa y el monto enviado, el beneficiario debería haber recibido aproximadamente Bs ${formatter.format(esperadoBs)}.\n\n'
+              'Tú anotaste Bs ${formatter.format(entregadoBs)}.\n\n'
+              'La diferencia es mayor al 2% — puede deberse a una comisión o redondeo. ¿Quieres continuar?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Corregir'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Continuar'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 }

@@ -72,6 +72,8 @@ export class PagadorService {
       return {
         id: o.id,
         folio: o.folio,
+        montoOrigenCents: o.montoOrigenCents.toString(),
+        monedaOrigen: o.monedaOrigen,
         montoDestinoCents: o.montoDestinoCents.toString(),
         monedaDestino: o.monedaDestino,
         beneficiario: o.beneficiario,
@@ -167,6 +169,8 @@ export class PagadorService {
       return {
         id: o.id,
         folio: o.folio,
+        montoOrigenCents: o.montoOrigenCents.toString(),
+        monedaOrigen: o.monedaOrigen,
         montoDestinoCents: o.montoDestinoCents.toString(),
         monedaDestino: o.monedaDestino,
         beneficiario: o.beneficiario,
