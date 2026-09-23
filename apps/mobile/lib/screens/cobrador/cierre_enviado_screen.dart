@@ -176,12 +176,8 @@ class _CierreEnviadoScreenState extends ConsumerState<CierreEnviadoScreen> {
           child: Column(
             children: [
               TavKvRow(
-                  label: 'Efectivo GYD declarado',
-                  value: formatCents(c.efectivoGydDeclaradoCents)),
-              TavKvRow(
-                  label: 'Efectivo USD declarado',
-                  value: formatCents(c.efectivoUsdDeclaradoCents,
-                      currency: TavMoneyCurrency.usd)),
+                  label: 'Efectivo declarado',
+                  value: formatCents(c.efectivoDeclaradoCents)),
               TavKvRow(
                   label: 'Digital', value: formatCents(c.digitalCents)),
               const TavKvRow(label: 'Entregado a', value: 'Caja Central · Valencia'),

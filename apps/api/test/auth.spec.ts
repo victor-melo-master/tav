@@ -24,7 +24,7 @@ const TEST_URL = 'postgresql://tav:tav@localhost:5432/tav_test?schema=public';
 const prisma = new PrismaClient({ datasources: { db: { url: TEST_URL } } });
 
 const TABLAS = [
-  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Tasa', 'Operacion', 'Cobro',
+  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Operacion', 'Cobro',
   'Movimiento', 'AmpliacionCredito', 'Cierre', 'Atencion', 'Aviso', 'AuditLog',
   'Config',
 ];

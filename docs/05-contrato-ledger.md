@@ -75,7 +75,6 @@ Todas extienden `LedgerException extends Error` y tienen un campo `code: string`
 | `SinCupoException` | `SIN_CUPO` | `payload: {disponible, requerido, faltante}` (los tres `bigint`) | `totalCents` > límite efectivo − saldo. `faltante = requerido − disponible > 0`. `disponible` puede ser negativo si ya estaba sobregirado. |
 | `YaAnuladoException` | `YA_ANULADO` | `tipo: 'operacion'\|'cobro'`, `id: string` | Segundo intento de anular el mismo registro. |
 | `CierreNoAbiertoException` | `CIERRE_NO_ABIERTO` | `cierreId`, `estado: string` | El cierre de hoy del cobrador existe pero su estado no es `abierto`. |
-| `TasaRequeridaException` | `TASA_REQUERIDA` | — | No hay tasa vigente en la base para la moneda de cobro (`{moneda}_GYD`), o la tasa es ≤ 0. |
 | `MotivoRequeridoException` | `MOTIVO_REQUERIDO` | — | `anular` con motivo vacío o solo espacios. |
 | `CajeroNoValidoException` | `CAJERO_NO_VALIDO` | `cajeroId: string` | `cajeroId` no corresponde a un `PerfilCajero`. Se valida **antes** de abrir la transacción. |
 | `CobradorNoValidoException` | `COBRADOR_NO_VALIDO` | `cobradorId: string` | `cobradorId` no corresponde a un `PerfilCobrador`. Se valida **antes** de abrir la transacción. |
@@ -136,28 +135,16 @@ registrarCobro(dto: RegistrarCobroDto):
 ### Precondiciones
 - Existe el `PerfilCajero`. Si `cobradorId` viene, existe el `PerfilCobrador`
   (si no existe, la transacción falla por FK — no hay excepción amigable, ver casos límite).
-- Si `moneda === 'BS'`: `tasaAplicada` presente y > 0, si no `TasaRequeridaException`
-  (se lanza **antes** de abrir la transacción: cero escrituras).
 
 ### Comportamiento
 1. **Idempotencia antes que nada**: `clientUuid` ya existe → devuelve
    `{cobro: elExistente, yaExistia: true}` sin escribir nada. También cubre la
    carrera de dos peticiones simultáneas con el mismo uuid (índice único).
-2. **Conversión a la moneda base (GYD)**: el servicio lee la tasa vigente de
-   la tabla `Tasa` donde `par = "{moneda}_GYD"` (la más reciente por
-   `vigenteDesde`). Cada moneda de cobro tiene su propia tasa: `GYD_GYD`
-   (identidad, 1), `USD_GYD`, `USDT_GYD`, `BS_GYD`. USD y USDT **no** son
-   intercambiables — cotizan distinto. Si no hay tasa vigente para la moneda
-   → `TasaRequeridaException`. La tasa leída se **congela** en
-   `Cobro.tasaAplicada`: sin ella, el día que el admin cambie la tasa, los
-   cobros pasados dejan de poder explicarse (tienes el monto original y el
-   equivalente en GYD, pero no con qué número se llegó de uno a otro).
-   - `montoBaseCents = round_half_up(montoCents × tasa)`.
-   - Para GYD la tasa es 1, así que `montoBaseCents = montoCents` (sin
-     conversión, sin pérdida).
-   - Redondeo: **half-up** (0.5 redondea hacia arriba). Se hace en
-     `Prisma.Decimal` con `ROUND_HALF_UP`, nunca en `Number` o `float`.
-     El resultado es un `BigInt` de centavos de GYD.
+2. **Sin conversión**: el cajero siempre paga en guyaneses (GYD), la moneda
+   base del libro. El `montoCents` del cobro entra directo al libro sin
+   multiplicar por ninguna tasa. Los métodos son `efectivo_gyd` (billetes en
+   mano) y `transferencia_gyd` (se verifica en cuenta); `esEfectivo` distingue
+   los dos.
 3. En transacción con `FOR UPDATE` sobre el cajero y luego sobre el cierre:
    - Si `cobradorId` viene: busca el `Cierre` del cobrador con
      `fecha = hoy en America/Caracas` (no UTC). Si no existe lo crea
@@ -165,16 +152,16 @@ registrarCobro(dto: RegistrarCobroDto):
      → `CierreNoAbiertoException` y rollback.
    - Si `cobradorId` es null (lo registró el admin): `cierreId = null`, no se toca
      ningún cierre.
-   - Inserta el `Cobro` (folio `COB-<n>` de secuencia, `esEfectivo = (metodo === 'efectivo_usd')`,
-     `tasaAplicada` = la tasa leída de la base, congelada, `sincronizadoAt` = ahora),
-     inserta `Movimiento` `{tipo: 'abono', montoCents: −montoBaseCents, saldoDespues}`,
+   - Inserta el `Cobro` (folio `COB-<n>` de secuencia, `esEfectivo = (metodo === 'efectivo_gyd')`,
+     `sincronizadoAt` = ahora),
+     inserta `Movimiento` `{tipo: 'abono', montoCents: −montoCents, saldoDespues}`,
      actualiza el perfil y recalcula los totales del cierre.
 
 ### Postcondiciones (caso éxito)
-- `saldoCents` nuevo = saldo anterior − `montoBaseCents`. **Puede quedar negativo**
+- `saldoCents` nuevo = saldo anterior − `montoCents`. **Puede quedar negativo**
   (pago en exceso); no se rechaza ni se recorta.
 - `deudaDesde`: si el saldo nuevo ≤ 0 → `null`. Si sigue > 0 → conserva su valor.
-- Cierre (cuando aplica): `totalRegistradoCents` = suma de `montoBaseCents` de los
+- Cierre (cuando aplica): `totalRegistradoCents` = suma de `montoCents` de los
   cobros **no anulados** del cierre; `digitalCents` = ídem pero solo los de
   `esEfectivo = false`. `efectivoDeclaradoCents` NO se toca (lo declara el
   cobrador a mano al enviar el cierre).
@@ -209,9 +196,9 @@ En transacción con `FOR UPDATE` sobre el cajero:
   (marcado como `PENDIENTE DE DEFINIR` en el código).
 
 **`tipo === 'cobro'`:**
-- Inserta `Movimiento` `{tipo: 'reverso_abono', montoCents: +montoBaseCents, saldoDespues, motivo, ...}`.
+- Inserta `Movimiento` `{tipo: 'reverso_abono', montoCents: +montoCents, saldoDespues, motivo, ...}`.
 - Marca el cobro: `anuladoAt`, `anuladoPorId`, `motivoAnulacion`.
-- Saldo nuevo = saldo + `montoBaseCents`. `deudaDesde`: si el saldo nuevo > 0 y
+- Saldo nuevo = saldo + `montoCents`. `deudaDesde`: si el saldo nuevo > 0 y
   `deudaDesde` era `null`, se pone en "ahora" (el momento del reverso, no la fecha
   del cargo original — ver casos límite). Si ya tenía valor, se conserva.
 - Si el cobro pertenecía a un cierre, se recalculan `totalRegistradoCents` y

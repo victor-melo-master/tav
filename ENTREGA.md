@@ -19,9 +19,10 @@ en producción. Lo que registren queda registrado.
 | Usuario | `admin@tav.test` |
 | Clave | `tav1234` |
 
-Desde aquí Iván publica las tasas del día, abre y recarga las cajas, fija los
-límites de crédito de cada cajero, aprueba ampliaciones, verifica los cierres
-diarios de los cobradores y crea las cuentas de todo el mundo.
+Desde aquí Iván fija el precio de cada cajero, registra las compras de USDT con
+su precio, abre y recarga las cajas, ve la ganancia del día, fija los límites de
+crédito, aprueba ampliaciones, verifica los cierres de los cobradores y crea las
+cuentas.
 
 ### App móvil (Android)
 
@@ -29,8 +30,8 @@ El APK va adjunto. Android va a advertir que no viene de la Play Store: hay que
 permitir la instalación desde esa fuente. Es normal en una app sin publicar.
 
 **Cajero, cobrador y pagador usan la misma app.** El rol de la cuenta decide qué
-ve cada quien al entrar. La primera vez se entra con correo y clave, y la app
-pide crear un PIN de 4 dígitos para las siguientes.
+ve cada quien. La primera vez se entra con correo y clave, y la app pide crear un
+PIN de 4 dígitos para las siguientes.
 
 Cuentas de prueba, todas con clave `tav1234`:
 
@@ -46,28 +47,59 @@ Cuentas de prueba, todas con clave `tav1234`:
 
 ---
 
+## Cómo funciona el precio
+
+Esta es la parte que más conversamos, así que la dejo escrita tal como quedó.
+
+**Todo se cuenta en dólares.** El cajero pide enviar 100 dólares a un destino.
+
+**Cada cajero tiene su propio precio, en GYD por dólar, y uno por servicio.** Es
+lo que se negoció con él y **no cambia hasta que Iván lo cambie**. Si el precio
+de José para BCV es 240, enviar 100 dólares le cuesta 24.000 GYD.
+
+**Los servicios cargados son siete:**
+
+| Servicio | Precio de ejemplo |
+|---|---|
+| Venezuela · bolívares a BCV | 240 |
+| Venezuela · bolívares a tasa especial | 250 |
+| Venezuela · dólares en efectivo | 255 |
+| Brasil · Pix | 245 |
+| Colombia | 248 |
+| República Dominicana | 252 |
+| México | 260 |
+
+**La ganancia sale de la diferencia con el precio de compra.** Cada vez que Iván
+compra USDT registra a qué precio lo compró — 237, por ejemplo. Vender a 250 lo
+que se compró a 237 es un margen del 5,5%, y el sistema lo calcula solo.
+
+---
+
 ## El recorrido que recomiendo
 
-Toca todo el ciclo, de punta a punta, en unos diez minutos.
+Toca todo el ciclo en unos diez minutos.
 
-**1. Publica las tasas del día.** Entra al panel, ve a tasas, cambia la pata base
-y mira cómo se recalculan los seis corredores de golpe. Publica.
+**1. Mira los precios de un cajero.** En el panel, entra a la ficha de Carlos
+Ruiz y abre su pestaña de precios. Cambia uno y fíjate en que queda el historial
+de quién lo cambió y cuándo.
 
-**2. Revisa las cajas.** En el panel, mira el saldo de cada destino y de la caja
-madre de USDT. Abre o recarga alguna para ver cómo se mueve la plata de una a otra.
+**2. Revisa las cajas.** Mira el saldo de cada caja física y de la caja madre de
+USDT. Registra un ingreso de USDT con su precio de compra, o abre una caja.
 
 **3. Registra una operación.** Entra a la app como `carlos.ruiz@tav.test`, escoge
-un destino, pon un monto y despacha. Fíjate en que el cupo disponible baja.
+un servicio, pon un monto **en dólares** y despacha. Vas a ver las dos cifras:
+envía cien dólares, debe veinticuatro mil GYD.
 
 **4. Paga esa operación.** Entra como el pagador del país que escogiste. La
-operación está en su cola. Ejecútala: escribe a cómo se ejecutó el cambio de
-verdad y el nombre del cliente que recibió.
+operación está en su cola. Al abrirla ve los precios de ese cajero como
+referencia. Anota cuántos bolívares entregó, sube una captura del comprobante y
+ejecuta.
 
-**5. Mira la caja de nuevo.** En el panel, la caja de ese destino bajó por el
-monto que se pagó.
+**5. Mira la ganancia.** En el panel, abre movimientos diarios: ahí está esa
+operación con su precio de venta, su precio de compra y el margen.
 
-**6. Cóbrale al cajero.** Entra como `cobrador1@tav.test`, regístrale un cobro a
-Carlos, cierra el día, y verifícalo desde el panel.
+**6. Cóbrale al cajero.** Entra como `cobrador1@tav.test`, regístrale un cobro,
+cierra el día y verifícalo desde el panel.
 
 Después prueba los cajeros en ámbar y en rojo para ver el bloqueo, y registra un
 cobro **mayor** a la deuda de alguien para ver el saldo a favor.
@@ -76,84 +108,68 @@ cobro **mayor** a la deuda de alguien para ver el saldo a favor.
 
 ## Qué incluye esta versión
 
-**Los destinos.** Venezuela en bolívares por transferencia, Venezuela en dólares
-en efectivo, Brasil, Colombia, República Dominicana y México. Venezuela tiene dos
-porque son dos formas de entrega distintas, con tasas distintas.
+**El pedido en dólares.** El cajero escoge servicio y monto en dólares. El
+servidor calcula lo que debe con el precio de ese cajero y se lo carga al
+instante. El precio queda congelado en la operación: cambiarlo después nunca
+altera una operación ya registrada.
 
-**Las tasas.** Iván escribe tres números por destino: lo que consigue por su USDT,
-lo que vale el USDT en ese país, y su margen. El sistema calcula la tasa que ve el
-cajero. Mover la pata base recalcula todos los destinos a la vez, así que
-actualizar las tasas cada mañana toma menos de un minuto.
+**Sin comisión visible.** El margen va dentro del precio y el cajero no lo ve en
+ninguna parte, tal como quedó acordado.
 
-El cajero ve **un solo número** y el desglose es de tres líneas: lo que envía, la
-tasa aplicada y lo que recibe el beneficiario. **Ninguna comisión visible**, tal
-como quedó acordado: el margen va dentro de la tasa y es interno.
+**El pagador.** Uno por país. Ve su cola de pagos y los precios del cliente como
+referencia, pero no los puede editar — esa fue una decisión para quitar una
+fuente de errores. Al pagar anota cuántos bolívares entregó, que sirve de doble
+verificación, y sube la captura del comprobante, que es obligatoria.
 
-Publicar tasas nuevas nunca altera una operación ya registrada: cada operación
-guarda congelada la tasa con la que se hizo.
+**Las cajas.** Una por sitio donde hay plata: bolívares en cuenta, dólares en
+efectivo, Pix de Brasil, y así. Varios servicios pueden salir de la misma caja —
+BCV y tasa especial comparten los bolívares, porque es la misma cuenta. La caja
+madre de USDT las alimenta. El sistema avisa cuando una queda baja, y avisa
+distinto y más fuerte si queda en negativo.
 
-**Las cajas.** Una por destino, más la caja madre de USDT. El admin abre la caja
-del día convirtiendo desde USDT, y cada pago que ejecuta el pagador la va bajando.
-El sistema avisa cuando una caja queda baja, y avisa distinto —y más fuerte— si
-queda en negativo, que significa que se pagó plata que no había.
+**La ganancia del día.** Una pantalla con todas las operaciones del día, su
+precio de venta, su precio de compra y el margen, con el total y el porcentaje
+ponderado.
 
-**El pagador.** Uno por país. Ve su cola de pagos pendientes y nada más: no ve la
-deuda de los cajeros ni el margen de TAV. Al ejecutar un pago registra a cómo se
-ejecutó el cambio realmente, cómo pagó y el nombre del cliente. Esos datos son los
-que permiten saber después cuánto ganó TAV de verdad en cada operación.
-
-**El crédito.** Cada cajero tiene un límite que fija el admin. Al llegar al 100%
-se le bloquean las transacciones, con señal o sin ella. A las tres cuartas partes
-del cupo recibe un aviso. Puede pedir una ampliación indicando monto y motivo; el
-admin la aprueba o la rechaza, se consume en una operación puntual y el cupo
-vuelve solo.
+**El crédito.** Cada cajero tiene un límite. Al llegar al 100% se le bloquean las
+transacciones, con señal o sin ella. A las tres cuartas partes recibe un aviso.
+Puede pedir ampliación; el admin la aprueba, se consume en una operación y el
+cupo vuelve solo.
 
 **El adelanto.** Un cajero puede abonar de más para operar tranquilo. Ese saldo a
-favor le sube el cupo disponible por encima de su límite, no cuenta como deuda, y
-el contador de días no arranca hasta que se agota.
+favor le sube el cupo por encima de su límite, no cuenta como deuda, y el
+contador de días no arranca hasta que se agota.
 
-**Los cobros.** Todos los cobradores ven a todos los cajeros deudores, con los
-bloqueados de primero. Se puede marcar "lo estoy atendiendo". El cobro queda
-cargado al registrarlo. Anular exige motivo escrito. Se cobra en efectivo
-guyanés, dólares, bolívares, pago móvil o USDT, y la conversión usa la tasa que
-publicó el admin, que queda congelada en el cobro.
+**Los cobros.** Todos los cobradores ven a todos los deudores, con los bloqueados
+primero. El cobro queda cargado al registrarlo; anular exige motivo escrito. El
+cajero siempre paga en guyaneses, en efectivo o por transferencia.
 
-**El cierre diario.** El cobrador declara el efectivo que lleva encima
-**separado por moneda** —guyaneses y dólares son billetes distintos— y lo digital
-aparte. El admin verifica contra lo que recibe en mano.
+**El cierre diario.** El cobrador declara cuánto lleva en efectivo y cuánto entró
+por transferencia. El admin verifica el efectivo contra lo que recibe en mano.
 
-**La contabilidad.** El libro de cuentas es de solo inserción: nada se edita ni se
-borra nunca. Una corrección es un asiento inverso. Los abonos saldan primero la
-deuda más vieja. Hay una verificación automática que comprueba que el saldo de
-cada cajero y de cada caja es exactamente la suma de sus movimientos.
-
-**La moneda.** El cajero debe en dólares guyaneses, que es lo que le pagan allá,
-tal como quedó definido.
+**La contabilidad.** Nada se edita ni se borra: una corrección es un asiento
+inverso. Los abonos saldan primero la deuda más vieja. Hay una verificación
+automática que comprueba que el saldo de cada cajero y de cada caja es
+exactamente la suma de sus movimientos.
 
 ---
 
 ## Qué falta
 
-Nada de esto impide probar el negocio completo. Lo listo para que sepan dónde
-está la línea.
+Nada de esto impide probar el negocio completo.
 
 **Anular un pago ya ejecutado.** Está bloqueado a propósito, esperando su
-respuesta. Ver la pregunta abajo.
+respuesta: si se anula una operación que el pagador ya pagó, ¿la plata vuelve a
+la caja o no?
 
-**Crear destinos desde el panel.** Los seis que hay vienen cargados. Añadir uno
-nuevo requiere que nosotros lo hagamos; la pantalla para que lo haga Iván es
-trabajo de una tarde y la construimos en cuanto haga falta.
+**Crear servicios desde el panel.** Los siete que hay vienen cargados. Añadir uno
+nuevo requiere que nosotros lo hagamos; la pantalla es trabajo de una tarde.
 
 **Trabajo sin conexión.** La app necesita internet para registrar. La siguiente
-entrega trae una cola local para que el cobrador registre sin señal y todo suba
-cuando la recupere.
+entrega trae una cola local para que el cobrador registre sin señal.
 
-**Cuatro pantallas del cajero** —notificaciones, seguridad, abono y beneficiarios
-guardados— muestran "próximamente".
-
-**El reporte de ganancia.** Los datos ya se están guardando: cada operación tiene
-la tasa cotizada y la tasa a la que el pagador la ejecutó de verdad. Falta la
-pantalla que los cruce y muestre el margen real por destino y por período.
+**Cuatro pantallas del cajero** — notificaciones, seguridad, abono y beneficiarios
+guardados — muestran "próximamente".
 
 ---
 
@@ -161,16 +177,14 @@ pantalla que los cruce y muestre el margen real por destino y por período.
 
 **1. Si se anula una operación que el pagador ya pagó, ¿vuelve la plata a la
 caja?** La deuda del cajero se revierte sin problema, pero los bolívares ya
-salieron del banco. Hasta que respondan, el botón de anular un pago está
-bloqueado. Es lo único del sistema que no sabe qué hacer.
+salieron del banco. Es lo único del sistema que no sabe qué hacer.
 
-**2. La lista completa de destinos activos**, con su país, su moneda y su forma de
-entrega. Cargamos seis según lo que nos pasaron; si operan hacia más, dígannos
-cuáles.
+**2. Los precios reales de cada cajero.** Los que están cargados son de ejemplo.
+Pásennos los de verdad, o cámbienlos desde el panel.
 
 **3. Ejemplos reales de mensajes de datos bancarios.** Tres o cuatro mensajes de
-WhatsApp tal como se los mandan a sus cajeros, para afinar el botón de pegar datos
-con los formatos que ustedes ven de verdad.
+WhatsApp tal como se los mandan a sus cajeros, para afinar el botón de pegar
+datos con los formatos que ustedes ven de verdad.
 
 ---
 

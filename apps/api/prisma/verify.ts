@@ -76,27 +76,14 @@ async function main() {
   // y saldoDespues de cada movimiento cuadra con el acumulado en secuencia.
   // Además verifica la coherencia de los campos de conversión (cajaMadreId,
   // montoMadreCents, tasaConversion) que solo deben aparecer en
-  // apertura/recarga, y la restricción esMadre XOR corredorId.
+  // apertura/recarga.
   const cajas = await prisma.caja.findMany({
-    include: { movimientos: { orderBy: { seq: 'asc' } }, corredor: true },
+    include: { movimientos: { orderBy: { seq: 'asc' } } },
   });
 
   let erroresCaja = 0;
 
   for (const caja of cajas) {
-    // Restricción esMadre XOR corredorId (también la exige un CHECK en BD,
-    // pero la verificamos aquí para dar un mensaje claro si algo se corrompe).
-    if (caja.esMadre && caja.corredorId !== null) {
-      console.error(`✗ Caja ${caja.id}: esMadre=true pero corredorId=${caja.corredorId} (debería ser null)`);
-      erroresCaja++;
-      continue;
-    }
-    if (!caja.esMadre && caja.corredorId === null) {
-      console.error(`✗ Caja ${caja.id}: esMadre=false pero corredorId=null (debería tener corredor)`);
-      erroresCaja++;
-      continue;
-    }
-
     const sumaMovimientos = caja.movimientos.reduce((acc, m) => acc + m.montoCents, 0n);
     const saldoCache = caja.saldoCents;
 
@@ -137,9 +124,17 @@ async function main() {
           erroresCaja++;
         }
       }
+
+      // Solo `ingreso` lleva precioCompraGyd (el precio de compra del USDT).
+      const tienePrecioCompra = mov.precioCompraGyd !== null;
+      const debeTenerPrecioCompra = mov.tipo === 'ingreso';
+      if (tienePrecioCompra && !debeTenerPrecioCompra) {
+        console.error(`✗ Caja ${caja.id}: movimiento ${mov.id} tipo=${mov.tipo} lleva precioCompraGyd (solo ingreso)`);
+        erroresCaja++;
+      }
     }
 
-    const etiqueta = caja.esMadre ? `madre ${caja.moneda}` : `${caja.moneda} (${caja.corredor?.paisNombre ?? '?'})`;
+    const etiqueta = caja.esMadre ? `madre ${caja.moneda}` : `${caja.nombre} (${caja.moneda})`;
     console.log(`✓ Caja ${etiqueta}: saldo=${saldoCache} suma=${sumaMovimientos} movs=${caja.movimientos.length}`);
   }
 
@@ -169,11 +164,11 @@ async function recalcularDeudaDesdeFifo(cajeroId: string): Promise<Date | null> 
   const abonos = await prisma.cobro.findMany({
     where: { cajeroId, anuladoAt: null },
     orderBy: { creadoAt: 'asc' },
-    select: { montoBaseCents: true },
+    select: { montoCents: true },
   });
 
   let abonoIdx = 0;
-  let abonoRestante = abonos.length > 0 ? abonos[0].montoBaseCents : 0n;
+  let abonoRestante = abonos.length > 0 ? abonos[0].montoCents : 0n;
 
   for (const cargo of cargos) {
     let cargoRestante = cargo.totalCents;
@@ -181,7 +176,7 @@ async function recalcularDeudaDesdeFifo(cajeroId: string): Promise<Date | null> 
       if (abonoRestante === 0n) {
         abonoIdx++;
         if (abonoIdx < abonos.length) {
-          abonoRestante = abonos[abonoIdx].montoBaseCents;
+          abonoRestante = abonos[abonoIdx].montoCents;
         }
         continue;
       }
@@ -191,7 +186,7 @@ async function recalcularDeudaDesdeFifo(cajeroId: string): Promise<Date | null> 
       if (abonoRestante === 0n) {
         abonoIdx++;
         if (abonoIdx < abonos.length) {
-          abonoRestante = abonos[abonoIdx].montoBaseCents;
+          abonoRestante = abonos[abonoIdx].montoCents;
         }
       }
     }

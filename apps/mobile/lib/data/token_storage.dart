@@ -11,9 +11,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// se limpia automáticamente y la app manda al usuario a login.
 class TokenStorage {
   TokenStorage({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage(
-          aOptions: AndroidOptions(encryptedSharedPreferences: true),
-        );
+      : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
 

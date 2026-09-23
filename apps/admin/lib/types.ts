@@ -15,7 +15,7 @@ export type EstadoOperacion =
   | 'observada'
   | 'rechazada'
   | 'anulada';
-export type MetodoCobro = 'efectivo_gyd' | 'efectivo_usd' | 'bolivares' | 'pago_movil' | 'usdt';
+export type MetodoCobro = 'efectivo_gyd' | 'transferencia_gyd';
 export type TipoMovimiento = 'cargo' | 'abono' | 'reverso_cargo' | 'reverso_abono' | 'ajuste';
 
 export interface UsuarioPublico {
@@ -107,7 +107,6 @@ export interface Operacion {
   montoOrigenCents: string;
   monedaOrigen: string;
   tasaAplicada: string;
-  comisionCents: string;
   totalCents: string;
   montoDestinoCents: string;
   monedaDestino: string;
@@ -120,6 +119,14 @@ export interface Operacion {
   anuladaAt?: string | null;
   anuladaPorId?: string | null;
   motivoAnulacion?: string | null;
+  corredorId?: string | null;
+  pagadaAt?: string | null;
+  tasaEjecucion?: string | null;
+  formaPago?: string | null;
+  nombreCliente?: string | null;
+  pagadaPorId?: string | null;
+  comprobantePagoUrl?: string | null;
+  precioCompraGyd?: string | null;
 }
 
 export interface AmpliacionCredito {
@@ -167,9 +174,6 @@ export interface Cobro {
   cobradorId?: string | null;
   metodo: MetodoCobro;
   montoCents: string;
-  moneda: string;
-  tasaAplicada?: string | null;
-  montoBaseCents: string;
   esEfectivo: boolean;
   cierreId?: string | null;
   comprobanteUrl?: string | null;
@@ -187,8 +191,7 @@ export interface Cierre {
   cobrador?: { usuarioId: string; usuario: { nombre: string; email: string; telefono?: string | null } } | null;
   fecha: string;
   totalRegistradoCents: string;
-  efectivoGydDeclaradoCents: string;
-  efectivoUsdDeclaradoCents: string;
+  efectivoDeclaradoCents: string;
   digitalCents: string;
   estado: EstadoCierre;
   entregadoA?: string | null;
@@ -196,10 +199,8 @@ export interface Cierre {
   enviadoAt?: string | null;
   verificadoAt?: string | null;
   verificadoPorId?: string | null;
-  efectivoGydRecibidoCents?: string | null;
-  efectivoUsdRecibidoCents?: string | null;
-  diferenciaGydCents?: string | null;
-  diferenciaUsdCents?: string | null;
+  efectivoRecibidoCents?: string | null;
+  diferenciaCents?: string | null;
   notaAdmin?: string | null;
   cobros?: Cobro[];
   cobrosCount?: number;
@@ -212,53 +213,33 @@ export interface PaginaCierres {
   limit: number;
 }
 
-// ─────────────────────────── TASAS ───────────────────────────
+// ──────────────────── PRECIOS POR CAJERO (nuevo modelo) ────────────────────
 
-export interface Tasa {
+// Precio vigente de un servicio para un cajero, o null si falta por fijar.
+// `precioGyd` es GYD por dólar (string decimal). La deuda se calcula en el
+// servidor: deudaGydCents = round_half_up(montoUsdCents × precioGyd ÷ 100).
+
+export interface PrecioCajeroServicio {
+  servicioId: string;
+  paisNombre: string;
+  moneda: string;
+  monedaNombre: string;
+  formaEntregaNombre: string;
+  servicio: string | null;
+  servicioNombre: string | null;
+  precioGyd: string | null;
+  vigenteDesde: string | null;
+  fijadoPorId: string | null;
+}
+
+export interface PrecioCajeroHistorial {
   id: string;
-  par: string;
-  valor: string;
+  cajeroId: string;
+  servicioId: string;
+  precioGyd: string;
   vigenteDesde: string;
-  creadaPorId: string;
-}
-
-// ──────────────────── TASAS POR CORREDOR (Fase 9) ────────────────────
-
-export interface PublicacionTasaItem {
-  id: string;
-  publicacionId: string;
-  corredorId: string;
-  corredor?: { id: string; paisNombre: string; moneda: string; monedaNombre: string; formaEntregaNombre: string };
-  pataDestino: string;
-  margen: string;
-  tasaCotizada: string;
-}
-
-export interface PublicacionTasas {
-  id: string;
-  pataBase: string;
-  publicadaPorId: string;
-  publicadaAt: string;
-  items: PublicacionTasaItem[];
-}
-
-export interface PublicarTasaItemPayload {
-  corredorId: string;
-  pataDestino: string;
-  margen: string;
-}
-
-export interface PublicarTasasPayload {
-  pataBase: string;
-  items: PublicarTasaItemPayload[];
-}
-
-export interface AvisoPublicacion {
-  tipo: 'corredor_omitido' | 'desviacion_pata_base' | 'desviacion_pata_destino' | 'desviacion_margen';
-  corredorId: string | null;
-  antes: string | null;
-  ahora: string | null;
-  pct: string | null;
+  fijadoPorId: string;
+  servicio: { paisNombre: string; moneda: string; formaEntregaNombre: string };
 }
 
 // ─────────────────────────── TABLERO ───────────────────────────
@@ -280,8 +261,6 @@ export interface RegistrarCobroAdminPayload {
   cajeroId: string;
   metodo: MetodoCobro;
   montoCents: string;
-  moneda: 'GYD' | 'USD' | 'BS' | 'USDT';
-  tasaAplicada?: string;
   comprobanteUrl?: string;
   nota?: string;
 }
@@ -307,9 +286,10 @@ export type TipoAlertaCaja = 'saldo_bajo' | 'saldo_negativo';
 
 export interface Caja {
   id: string;
-  corredorId: string | null;
   esMadre: boolean;
   moneda: string;
+  nombre: string;
+  pais: string | null;
   saldoCents: string;
   umbralAlertaCents: string | null;
   creadaAt: string;
@@ -325,6 +305,7 @@ export interface MovimientoCaja {
   cajaMadreId?: string | null;
   montoMadreCents?: string | null;
   tasaConversion?: string | null;
+  precioCompraGyd?: string | null;
   origenTipo: string;
   origenId: string;
   clientUuid: string;
@@ -346,13 +327,14 @@ export interface AlertaCaja {
   saldoCents: string;
   umbralAlertaCents: string | null;
   moneda: string;
-  corredorDescripcion: string;
+  cajaNombre: string;
 }
 
 export interface IngresarCajaMadrePayload {
   clientUuid: string;
   cajaMadreId: string;
   montoCents: string;
+  precioCompraGyd: string;
   motivo: string;
 }
 
@@ -387,4 +369,31 @@ export interface AperturaCajaRespuesta {
 export interface AnulacionAperturaRespuesta {
   movimientoDestino: MovimientoCaja;
   movimientoMadre: MovimientoCaja;
+}
+
+// ─────────────────────── MOVIMIENTOS DIARIOS ───────────────────────
+
+export interface MovimientoDiarioItem {
+  id: string;
+  folio: string;
+  cajero: string;
+  servicio: string;
+  montoUsdCents: string;
+  precioVenta: string;
+  precioCompra: string | null;
+  margenGydCents: string | null;
+  pctMargen: string | null;
+}
+
+export interface MovimientosDiariosTotales {
+  operaciones: number;
+  usdCents: string;
+  gananciaGydCents: string;
+  pctPromedioPonderado: string | null;
+}
+
+export interface MovimientosDiarios {
+  fecha: string;
+  operaciones: MovimientoDiarioItem[];
+  totales: MovimientosDiariosTotales;
 }

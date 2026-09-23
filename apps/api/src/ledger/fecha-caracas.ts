@@ -7,11 +7,20 @@
  * Prisma persiste una columna `@db.Date`.
  */
 export function fechaCaracasHoy(ahora: Date = new Date()): Date {
-  const ymd = new Intl.DateTimeFormat('en-CA', {
+  const ymd = fechaCaracasYmd(ahora);
+  return new Date(`${ymd}T00:00:00.000Z`);
+}
+
+/**
+ * Devuelve la fecha de hoy en Caracas como string "YYYY-MM-DD".
+ * Mismo truco que `fechaCaracasHoy` pero sin el `Date` — para pasarle
+ * a los endpoints que esperan una fecha como query param.
+ */
+export function fechaCaracasYmd(ahora: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Caracas',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   }).format(ahora); // "2026-08-12"
-  return new Date(`${ymd}T00:00:00.000Z`);
 }

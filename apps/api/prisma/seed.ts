@@ -2,6 +2,7 @@ import { PrismaClient, Prisma, Rol, TipoMovimiento, MetodoCobro, EstadoOperacion
 import * as crypto from 'crypto';
 import argon2 from 'argon2';
 import { CajaService } from '../src/cajas/caja.service';
+import { PrecioCajeroService } from '../src/precio-cajero/precio-cajero.service';
 import { calcularMontoDestinoEsperado, cuadraApertura } from '../src/cajas/coherencia-caja';
 const randomUUID = crypto.randomUUID;
 
@@ -45,13 +46,13 @@ async function main() {
   await prisma.operacion.deleteMany();
   await prisma.ampliacionCredito.deleteMany();
   await prisma.cierre.deleteMany();
-  await prisma.tasa.deleteMany();
+  await prisma.precioCajeroServicio.deleteMany();
   await prisma.perfilCajero.deleteMany();
   await prisma.perfilCobrador.deleteMany();
   await prisma.perfilPagador.deleteMany();
   await prisma.movimientoCaja.deleteMany();
-  await prisma.caja.deleteMany();
   await prisma.corredor.deleteMany();
+  await prisma.caja.deleteMany();
   await prisma.usuario.deleteMany();
   await prisma.config.deleteMany();
 
@@ -137,145 +138,117 @@ async function main() {
     include: { perfilPagador: true },
   });
 
-  // ── Tasas ──
-  // Tasas de conversión de cobros a la moneda base (GYD). Cada moneda de
-  // cobro tiene su propia tasa: USD y USDT no cotizan igual. El cobrador
-  // no escribe tasas; el servicio lee la vigente de aquí.
-  await prisma.tasa.create({
+  // ── Cajas físicas (Fase 9, paso 2: separación Caja/Servicio) ──
+  // La caja es FÍSICA: dónde está la plata, no qué servicio la usa. Varios
+  // servicios pueden descontar de la misma caja (BCV y tasa especial comparten
+  // la caja de bolívares en cuenta). La caja madre USDT no tiene país.
+  interface CajaFisicaSpec {
+    nombre: string;
+    moneda: string;
+    pais: string | null;
+    // Tasa de apertura desde USDT y monto madre para el saldo inicial.
+    tasaApertura: string;
+    montoMadreApertura: bigint;
+  }
+
+  const cajasFisicasSpecs: CajaFisicaSpec[] = [
+    { nombre: 'Bolívares en cuenta', moneda: 'BS',  pais: 'VEN', tasaApertura: '285.4', montoMadreApertura: 2_000_000n },
+    { nombre: 'USD en efectivo',      moneda: 'USD', pais: 'VEN', tasaApertura: '0.995', montoMadreApertura: 500_000n },
+    { nombre: 'Brasil Pix',           moneda: 'BRL', pais: 'BRA', tasaApertura: '5.5',   montoMadreApertura: 800_000n },
+    { nombre: 'Colombia',             moneda: 'COP', pais: 'COL', tasaApertura: '4150',  montoMadreApertura: 600_000n },
+    { nombre: 'Rep. Dominicana',      moneda: 'DOP', pais: 'DOM', tasaApertura: '58.5',  montoMadreApertura: 400_000n },
+    { nombre: 'México',               moneda: 'MXN', pais: 'MEX', tasaApertura: '20.4',  montoMadreApertura: 700_000n },
+  ];
+
+  // Crear las cajas físicas primero. Los servicios las referencian por
+  // cajaId, así que necesitan existir antes.
+  const cajasFisicas: { id: string; spec: CajaFisicaSpec }[] = [];
+  for (const spec of cajasFisicasSpecs) {
+    const caja = await prisma.caja.create({
+      data: {
+        id: randomUUID(),
+        esMadre: false,
+        moneda: spec.moneda,
+        nombre: spec.nombre,
+        pais: spec.pais,
+        saldoCents: 0n,
+        umbralAlertaCents: null, // se fija tras la apertura abajo
+      },
+    });
+    cajasFisicas.push({ id: caja.id, spec });
+  }
+
+  // ── Caja madre USDT ──
+  // USDT es la caja madre: las cajas físicas se llenan convirtiendo desde
+  // aquí. No tiene país ni servicios asociados.
+  const cajaMadreUsdt = await prisma.caja.create({
     data: {
       id: randomUUID(),
-      par: 'USDT_BS',
-      valor: 285.4,
-      creadaPorId: admin.id,
-      vigenteDesde: daysAgo(30),
+      esMadre: true,
+      moneda: 'USDT',
+      nombre: 'Caja madre USDT',
+      pais: null,
+      saldoCents: 0n,
     },
   });
 
-  await prisma.tasa.create({
-    data: {
-      id: randomUUID(),
-      par: 'USD_BS',
-      valor: 283.0,
-      creadaPorId: admin.id,
-      vigenteDesde: daysAgo(30),
-    },
-  });
-
-  await prisma.tasa.create({
-    data: {
-      id: randomUUID(),
-      par: 'USD_GYD',
-      valor: 209.0,
-      creadaPorId: admin.id,
-      vigenteDesde: daysAgo(30),
-    },
-  });
-
-  await prisma.tasa.create({
-    data: {
-      id: randomUUID(),
-      par: 'USDT_GYD',
-      valor: 208.0,
-      creadaPorId: admin.id,
-      vigenteDesde: daysAgo(30),
-    },
-  });
-
-  await prisma.tasa.create({
-    data: {
-      id: randomUUID(),
-      par: 'BS_GYD',
-      valor: 0.732314,
-      creadaPorId: admin.id,
-      vigenteDesde: daysAgo(30),
-    },
-  });
-
-  // GYD → GYD: tasa identidad. El cobro en efectivo guyanés no necesita
-  // conversión, pero el servicio la lee igual que las demás para no tener
-  // una rama especial. Es 1:1.
-  await prisma.tasa.create({
-    data: {
-      id: randomUUID(),
-      par: 'GYD_GYD',
-      valor: 1.0,
-      creadaPorId: admin.id,
-      vigenteDesde: daysAgo(30),
-    },
-  });
-
-  // ── Corredores (Fase 9) ──
-  // Los seis corredores iniciales que dio Saddiel. La lista NO se quema en
-  // el código: el admin puede añadir más desde el panel. Uno desactivado
-  // desaparece de la app del cajero pero conserva su historia.
-  //
-  // Un corredor es destino + forma de entrega, NO un par de monedas.
-  // Venezuela tiene dos (Bs por transferencia y USD en efectivo) con tasas
-  // distintas; por eso no se modela como par de monedas.
-  interface CorredorSpec {
+  // ── Servicios (Corredor = país + producto) ──
+  // Los siete servicios reales. BCV y tasa especial son dos servicios
+  // distintos que descuentan de la MISMA caja de bolívares en cuenta.
+  // La lista NO se quema en el código: el admin puede añadir más desde el
+  // panel. Uno desactivado desaparece de la app del cajero pero conserva
+  // su historia (las operaciones lo siguen referenciando).
+  interface ServicioSpec {
     pais: string;
     paisNombre: string;
     moneda: string;
     monedaNombre: string;
     formaEntrega: string;
     formaEntregaNombre: string;
+    servicio: string;
+    servicioNombre: string;
+    cajaNombre: string; // a qué caja física descuenta
   }
 
-  const corredorSpecs: CorredorSpec[] = [
-    { pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS',  monedaNombre: 'Bolívares',        formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia' },
-    { pais: 'VEN', paisNombre: 'Venezuela', moneda: 'USD', monedaNombre: 'Dólares',          formaEntrega: 'efectivo',      formaEntregaNombre: 'Efectivo en mano' },
-    { pais: 'BRA', paisNombre: 'Brasil',    moneda: 'BRL', monedaNombre: 'Reales',           formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia (Pix)' },
-    { pais: 'COL', paisNombre: 'Colombia',  moneda: 'COP', monedaNombre: 'Pesos colombianos',formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia' },
-    { pais: 'DOM', paisNombre: 'Rep. Dominicana', moneda: 'DOP', monedaNombre: 'Pesos dominicanos', formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia' },
-    { pais: 'MEX', paisNombre: 'México',    moneda: 'MXN', monedaNombre: 'Pesos mexicanos',  formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia' },
+  const servicioSpecs: ServicioSpec[] = [
+    { pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS',  monedaNombre: 'Bolívares',         formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',        servicio: 'bcv',           servicioNombre: 'BCV',             cajaNombre: 'Bolívares en cuenta' },
+    { pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS',  monedaNombre: 'Bolívares',         formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',        servicio: 'tasa_especial', servicioNombre: 'Tasa especial',   cajaNombre: 'Bolívares en cuenta' },
+    { pais: 'VEN', paisNombre: 'Venezuela', moneda: 'USD', monedaNombre: 'Dólares',          formaEntrega: 'efectivo',      formaEntregaNombre: 'Efectivo en mano',      servicio: 'efectivo',      servicioNombre: 'Efectivo en mano', cajaNombre: 'USD en efectivo' },
+    { pais: 'BRA', paisNombre: 'Brasil',    moneda: 'BRL', monedaNombre: 'Reales',            formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia (Pix)',   servicio: 'pix',           servicioNombre: 'Pix',             cajaNombre: 'Brasil Pix' },
+    { pais: 'COL', paisNombre: 'Colombia',  moneda: 'COP', monedaNombre: 'Pesos colombianos', formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',        servicio: 'transferencia', servicioNombre: 'Transferencia',   cajaNombre: 'Colombia' },
+    { pais: 'DOM', paisNombre: 'Rep. Dominicana', moneda: 'DOP', monedaNombre: 'Pesos dominicanos', formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia', servicio: 'transferencia', servicioNombre: 'Transferencia',   cajaNombre: 'Rep. Dominicana' },
+    { pais: 'MEX', paisNombre: 'México',    moneda: 'MXN', monedaNombre: 'Pesos mexicanos',  formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',        servicio: 'transferencia', servicioNombre: 'Transferencia',   cajaNombre: 'México' },
   ];
 
-  const corredores: { id: string; spec: CorredorSpec }[] = [];
-  for (const spec of corredorSpecs) {
+  const corredores: { id: string; spec: ServicioSpec }[] = [];
+  for (const spec of servicioSpecs) {
+    const caja = cajasFisicas.find((c) => c.spec.nombre === spec.cajaNombre);
+    if (!caja) throw new Error(`Caja física "${spec.cajaNombre}" no encontrada para servicio ${spec.servicio}`);
     const c = await prisma.corredor.create({
       data: {
         id: randomUUID(),
         creadoPorId: admin.id,
-        ...spec,
+        pais: spec.pais,
+        paisNombre: spec.paisNombre,
+        moneda: spec.moneda,
+        monedaNombre: spec.monedaNombre,
+        formaEntrega: spec.formaEntrega,
+        formaEntregaNombre: spec.formaEntregaNombre,
+        servicio: spec.servicio,
+        servicioNombre: spec.servicioNombre,
+        cajaId: caja.id,
       },
     });
     corredores.push({ id: c.id, spec });
   }
 
-  // ── Caja madre USDT ──
-  // USDT es la caja madre: las cajas de corredor se llenan convirtiendo
-  // desde aquí. Es una caja sin corredor (esMadre=true, corredorId=null),
-  // garantizado por el CHECK Caja_esMadre_xor_corredorId.
-  const cajaMadreUsdt = await prisma.caja.create({
-    data: {
-      id: randomUUID(),
-      esMadre: true,
-      moneda: 'USDT',
-      saldoCents: 0n,
-    },
-  });
+  // Servicio usado para los cargos sembrados: tasa_especial (precio 250 GYD/USD).
+  // Así todos los cálculos de totalCents = montoUsdCents × precio son exactos
+  // y los porcentajes de cupo quedan redondos.
+  const corredorSeedId = corredores[1].id;
+  const MONEDA_SEED = corredores[1].spec.moneda;
 
-  // ── Cajas de corredor ──
-  // Una caja por corredor. Saldo 0 al nacer; se abre abajo con una
-  // conversión desde USDT (movimiento `apertura` con doble entrada).
-  const cajasCorredor: { id: string; corredorId: string; spec: CorredorSpec }[] = [];
-  for (const { id: corredorId, spec } of corredores) {
-    const caja = await prisma.caja.create({
-      data: {
-        id: randomUUID(),
-        corredorId,
-        esMadre: false,
-        moneda: spec.moneda,
-        saldoCents: 0n,
-        // Umbral de alerta: 10% del saldo inicial sembrado. Así la alerta
-        // de saldo bajo funciona desde el día uno.
-        umbralAlertaCents: null, // se fija tras la apertura abajo
-      },
-    });
-    cajasCorredor.push({ id: caja.id, corredorId, spec });
-  }
-
-  // ── Ingreso a la caja madre + aperturas por corredor ──
+  // ── Ingreso a la caja madre + aperturas de cajas físicas ──
   // El seed pasa por CajaService.ingresarCajaMadre y CajaService.abrirCaja:
   // misma validación, misma doble entrada, mismo FOR UPDATE que runtime.
   // Antes de cada apertura se verifica la coherencia aritmética con
@@ -283,40 +256,27 @@ async function main() {
   // del seed no cuadran, el seed falla y no siembra datos inválidos.
   //
   // Ingreso: 50.000 USDT (5.000.000 cents) a la caja madre.
+  // El precio de compra del USDT es el marcador del día: 237 GYD por USD
+  // (Iván compra a 237 y vende entre 240 y 260). Cada operación congela
+  // el precio de compra vigente — el del ingreso más reciente.
   await cajas.ingresarCajaMadre({
     clientUuid: randomUUID(),
     cajaMadreId: cajaMadreUsdt.id,
     montoCents: 5_000_000n,
+    precioCompraGyd: '237',
     motivo: 'Capital inicial sembrado',
     registradoPorId: admin.id,
   });
 
-  // Apertura por corredor: tasas realistas (1 USDT = X moneda destino).
-  // montoMadre en centavos USDT, montoDestino se calcula con
-  // calcularMontoDestinoEsperado (mismo redondeo half-up que el DTO).
-  // USD usa 0.995, no 1: el sistema tiene USD_GYD=209 y USDT_GYD=208,
-  // o sea que un USDT vale algo menos que un dólar físico.
-  const tasasApertura: Record<string, { tasa: string; montoMadre: bigint }> = {
-    BS:  { tasa: '285.4', montoMadre: 1_000_000n },   // 10.000 USDT → 2.854.000,00 Bs
-    USD: { tasa: '0.995', montoMadre: 500_000n },     // 5.000 USDT → 4.975,00 USD
-    BRL: { tasa: '5.5',   montoMadre: 800_000n },    // 8.000 USDT → 44.000,00 BRL
-    COP: { tasa: '4150',  montoMadre: 600_000n },    // 6.000 USDT → 24.900.000,00 COP
-    DOP: { tasa: '58.5',  montoMadre: 400_000n },    // 4.000 USDT → 234.000,00 DOP
-    MXN: { tasa: '20.4',  montoMadre: 700_000n },    // 7.000 USDT → 142.800,00 MXN
-  };
-
-  for (const { id: cajaId, spec } of cajasCorredor) {
-    const cfg = tasasApertura[spec.moneda];
-    if (!cfg) continue; // moneda no contemplada: la caja queda en 0
-
-    const montoDestino = calcularMontoDestinoEsperado(cfg.montoMadre, cfg.tasa);
-    if (montoDestino === null) throw new Error(`Tasa inválida en seed: ${cfg.tasa}`);
+  for (const { id: cajaId, spec } of cajasFisicas) {
+    const montoDestino = calcularMontoDestinoEsperado(spec.montoMadreApertura, spec.tasaApertura);
+    if (montoDestino === null) throw new Error(`Tasa inválida en seed: ${spec.tasaApertura}`);
 
     // Misma validación de coherencia que el DTO HTTP.
-    if (!cuadraApertura(cfg.montoMadre, montoDestino, cfg.tasa)) {
+    if (!cuadraApertura(spec.montoMadreApertura, montoDestino, spec.tasaApertura)) {
       throw new Error(
-        `Seed incoherente para ${spec.moneda}: montoMadre=${cfg.montoMadre} ` +
-          `tasa=${cfg.tasa} montoDestino=${montoDestino} no cuadran`,
+        `Seed incoherente para ${spec.moneda}: montoMadre=${spec.montoMadreApertura} ` +
+          `tasa=${spec.tasaApertura} montoDestino=${montoDestino} no cuadran`,
       );
     }
 
@@ -325,9 +285,9 @@ async function main() {
       clientUuid: randomUUID(),
       cajaId,
       cajaMadreId: cajaMadreUsdt.id,
-      montoMadreCents: cfg.montoMadre,
+      montoMadreCents: spec.montoMadreApertura,
       montoDestinoCents: montoDestino,
-      tasaConversion: cfg.tasa,
+      tasaConversion: spec.tasaApertura,
       registradoPorId: admin.id,
     });
 
@@ -339,37 +299,8 @@ async function main() {
     });
   }
 
-  // ── Publicación inicial de tasas por corredor (Fase 9 Bloque 3) ──
-  // La tasa que ve el cajero se compone de tres números: pata base (1 USDT = X GYD),
-  // pata destino (1 USDT = Y moneda destino) y margen (%). Ver docs/07 §3.
-  //
-  //   tasaCotizada = (pataDestino ÷ pataBase) × (1 − margen/100)
-  //
-  // Pata base 208 (1 USDT = 208 GYD). Patas destino y márgenes realistas
-  // por corredor. La publicación es atómica: un snapshot completo.
-  const pataBase = new Prisma.Decimal(208);
-  const itemsTasas = corredores.map(({ id: corredorId, spec }) => {
-    const pataDestino = new Prisma.Decimal(
-      spec.moneda === 'BS' ? 285 :
-      spec.moneda === 'USD' ? 1 :
-      spec.moneda === 'BRL' ? 5.5 :
-      spec.moneda === 'COP' ? 4150 :
-      spec.moneda === 'DOP' ? 58.5 :
-      spec.moneda === 'MXN' ? 20.4 : 1,
-    );
-    const margen = new Prisma.Decimal(2.5);
-    const tasaCotizada = pataDestino.div(pataBase).mul(new Prisma.Decimal(1).minus(margen.div(100)));
-    return { corredorId, pataDestino, margen, tasaCotizada };
-  });
-
-  const publicacionTasas = await prisma.publicacionTasas.create({
-    data: {
-      pataBase,
-      publicadaPorId: admin.id,
-      items: { create: itemsTasas },
-    },
-  });
-  void publicacionTasas;
+  // ── Precios por cajero (nuevo modelo de Fase 9) ──
+  // Se fija después de crear los cajeros (ver más abajo).
 
   // ── Cajeros ──
   // Definimos límites y escenarios. El saldo se deriva de los movimientos.
@@ -435,18 +366,59 @@ async function main() {
     });
   }
 
+  // ── Precios por cajero (nuevo modelo de Fase 9) ──
+  // Cada cajero tiene su propio precio en GYD por dólar, por servicio, fijado
+  // por el admin. El precio determina la deuda: deudaGydCents = round_half_up(
+  // montoUsdCents × precioGyd). Ver docs/07 (modelo corregido).
+  //
+  // La tabla PrecioCajeroServicio es de SOLO INSERCIÓN: cada cambio es un
+  // INSERT nuevo. El precio se congela en cada operación; cambiarlo aquí
+  // nunca altera una operación registrada.
+  //
+  // Precios realistas por SERVICIO (GYD por 1 USD). El precio es lo que el
+  // cajero paga por cada dólar que envía, igual para todos los destinos: Iván
+  // compra a 237 y vende entre 240 y 260. BCV más barato que la tasa especial,
+  // el efectivo un poco más caro. Colombia, RD y México comparten el código
+  // `transferencia` pero con precios distintos, así que el map es por
+  // `pais:servicio`. Todos los cajeros empiezan con el mismo precio; el admin
+  // lo cambia desde la ficha.
+  const precioPorServicio: Record<string, string> = {
+    'VEN:bcv': '240',
+    'VEN:tasa_especial': '250',
+    'VEN:efectivo': '255',
+    'BRA:pix': '245',
+    'COL:transferencia': '248',
+    'DOM:transferencia': '252',
+    'MEX:transferencia': '260',
+  };
+
+  // Se fija precio para cada cajero contra cada servicio. Así el cajero ve
+  // todos los servicios ofrecibles al arrancar.
+  for (const cajero of cajeros) {
+    for (const { id: corredorId, spec } of corredores) {
+      const clave = `${spec.pais}:${spec.servicio}`;
+      const precioGyd = precioPorServicio[clave];
+      if (!precioGyd) continue;
+      await prisma.precioCajeroServicio.create({
+        data: {
+          cajeroId: cajero.perfilId,
+          servicioId: corredorId,
+          precioGyd: new Prisma.Decimal(precioGyd),
+          fijadoPorId: admin.id,
+          vigenteDesde: daysAgo(30),
+        },
+      });
+    }
+  }
+
   // ── Función para insertar un movimiento y actualizar saldo ──
   // Esta es la única forma de construir saldos: insertar movimiento, derivar saldo.
   let folioOperacion = 2400;
   let folioCobro = 400;
 
-  // Tasa USDT→GYD del seed (entera para que el cálculo salga limpio).
-  const USDT_GYD = 208n;
-  const USDT_BS_CENTS = BigInt(Math.round(285.4 * 100)); // 28540 centavos de tasa
-
   async function registrarCargo(
     cajeroIdx: number,
-    montoGydCents: bigint, // total en GYD que suma a la deuda (ya con comisión)
+    montoUsdCents: bigint, // monto en dólares (centavos USDT)
     fecha: Date,
     creadoPorId: string,
   ): Promise<{ operacionId: string; folio: string }> {
@@ -454,19 +426,23 @@ async function main() {
     const folio = `TAV-${++folioOperacion}`;
     const operacionId = randomUUID();
 
-    // Leer saldo actual del perfil
-    const perfil = await prisma.perfilCajero.findUniqueOrThrow({ where: { usuarioId: cajero.perfilId } });
+    // Leer saldo actual del perfil y el precio vigente del cajero para el servicio.
+    const [perfil, precioGyd] = await Promise.all([
+      prisma.perfilCajero.findUniqueOrThrow({ where: { usuarioId: cajero.perfilId } }),
+      prisma.precioCajeroServicio.findFirst({
+        where: { cajeroId: cajero.perfilId, servicioId: corredorSeedId },
+        orderBy: { vigenteDesde: 'desc' },
+      }),
+    ]);
+    if (!precioGyd) {
+      throw new Error(`No hay precio para cajero ${cajeroIdx} y servicio ${corredorSeedId}`);
+    }
     const saldoActual = perfil.saldoCents;
 
-    // Back-calcular el monto origen (USDT) y la comisión desde el total GYD.
-    // total = origen_gyd * 1.03 → origen_gyd = total * 100 / 103
-    const origenGyd = (montoGydCents * 100n) / 103n;
-    const comisionCents = montoGydCents - origenGyd;
-
-    // Equivalentes para el registro de la operación (informativo):
-    const montoOrigenCents = origenGyd / USDT_GYD; // USDT centavos
-    const montoDestinoCents = montoOrigenCents * USDT_BS_CENTS / 100n; // BS centavos
-    const saldoDespues = saldoActual + montoGydCents;
+    // Calcular la deuda en GYD exactamente como lo hace CajeroService.crearOperacion:
+    // totalCents = round_half_up(montoUsdCents × precioGyd).
+    const totalCents = PrecioCajeroService.calcularDeudaGydCents(montoUsdCents, precioGyd.precioGyd);
+    const saldoDespues = saldoActual + totalCents;
 
     await prisma.operacion.create({
       data: {
@@ -475,13 +451,12 @@ async function main() {
         clientUuid: randomUUID(),
         cajeroId: cajero.perfilId,
         tipo: 'usdt_bs',
-        montoOrigenCents,
+        montoOrigenCents: montoUsdCents,
         monedaOrigen: 'USDT',
-        tasaAplicada: 285.4,
-        comisionCents,
-        totalCents: montoGydCents,
-        montoDestinoCents,
-        monedaDestino: 'BS',
+        tasaAplicada: precioGyd.precioGyd.toString(),
+        totalCents,
+        montoDestinoCents: 0n, // el pagador lo registra al ejecutar
+        monedaDestino: MONEDA_SEED,
         beneficiario: { nombre: 'Cliente genérico', documento: 'V12345678', banco: 'Banesco', cuenta: '0134123456789012', metodo: 'pago_movil' },
         estado: EstadoOperacion.completada,
         creadaPorId: creadoPorId,
@@ -495,7 +470,7 @@ async function main() {
         id: randomUUID(),
         cajeroId: cajero.perfilId,
         tipo: TipoMovimiento.cargo,
-        montoCents: montoGydCents,
+        montoCents: totalCents,
         saldoDespues,
         origenTipo: 'operacion',
         origenId: operacionId,
@@ -547,9 +522,8 @@ async function main() {
       });
     }
 
-    // Insertar cobro: el abono del seed es en USD efectivo.
-    // montoCents = monto en USD centavos; montoBaseCents = monto en GYD centavos.
-    const montoUsdCents = montoGydCents / 209n; // USD→GYD tasa 209
+    // Insertar cobro: el cajero siempre paga en guyaneses. El monto entra
+    // directo al libro, sin conversión.
     await prisma.cobro.create({
       data: {
         id: cobroId,
@@ -557,11 +531,8 @@ async function main() {
         clientUuid: randomUUID(),
         cajeroId: cajero.perfilId,
         cobradorId,
-        metodo: MetodoCobro.efectivo_usd,
-        montoCents: montoUsdCents,
-        moneda: 'USD',
-        tasaAplicada: 209.0,
-        montoBaseCents: montoGydCents,
+        metodo: MetodoCobro.efectivo_gyd,
+        montoCents: montoGydCents,
         esEfectivo: true,
         cierreId: cierre.id,
         creadoAt: fecha,
@@ -591,25 +562,18 @@ async function main() {
       data: { saldoCents: saldoDespues, deudaDesde },
     });
 
-    // Recalcular totales del cierre
+    // Recalcular totales del cierre — una sola pila de guyaneses.
     const cobrosCierre = await prisma.cobro.findMany({ where: { cierreId: cierre.id } });
-    const totalRegistrado = cobrosCierre.reduce((sum, c) => sum + c.montoBaseCents, 0n);
-    const efectivoGyd = cobrosCierre
-      .filter(c => c.esEfectivo && c.moneda === 'GYD')
-      .reduce((sum, c) => sum + c.montoCents, 0n);
-    const efectivoUsd = cobrosCierre
-      .filter(c => c.esEfectivo && c.moneda === 'USD')
-      .reduce((sum, c) => sum + c.montoCents, 0n);
-    const efectivoTotalGyd = cobrosCierre
+    const totalRegistrado = cobrosCierre.reduce((sum, c) => sum + c.montoCents, 0n);
+    const efectivo = cobrosCierre
       .filter(c => c.esEfectivo)
-      .reduce((sum, c) => sum + c.montoBaseCents, 0n);
-    const digital = totalRegistrado - efectivoTotalGyd;
+      .reduce((sum, c) => sum + c.montoCents, 0n);
+    const digital = totalRegistrado - efectivo;
     await prisma.cierre.update({
       where: { id: cierre.id },
       data: {
         totalRegistradoCents: totalRegistrado,
-        efectivoGydDeclaradoCents: efectivoGyd,
-        efectivoUsdDeclaradoCents: efectivoUsd,
+        efectivoDeclaradoCents: efectivo,
         digitalCents: digital,
       },
     });
@@ -622,42 +586,44 @@ async function main() {
   // Los montos son en GYD (la moneda base del libro de deuda).
 
   // Cajero 0: José Blanco — bloqueado al 100% (saldo = límite = 100.000 GYD)
-  // Cargo 120.000 GYD (incluye 3% com), abono 20.000 GYD → saldo = 100.000 = 100%
-  await registrarCargo(0, 120_000_00n, daysAgo(5), cajeros[0].id);
-  await registrarAbono(0, 20_000_00n, daysAgo(3), cob1.perfilCobrador!.usuarioId);
+  // Cargo 400 USD × 250 = 100.000 GYD, sin abono → saldo = 100.000 = 100%
+  await registrarCargo(0, 40_000n, daysAgo(5), cajeros[0].id);
 
-  // Cajero 1: Ana Rodríguez — 88% del cupo (saldo = 176.000 de 200.000 GYD)
-  // Cargo 200.000 GYD, abono 24.000 GYD → saldo = 176.000 = 88%
-  await registrarCargo(1, 200_000_00n, daysAgo(4), cajeros[1].id);
-  await registrarAbono(1, 24_000_00n, daysAgo(2), cob1.perfilCobrador!.usuarioId);
+  // Cajero 1: Ana Rodríguez — 87,5% del cupo (saldo = 175.000 de 200.000 GYD)
+  // Cargo 1.000 USD × 250 = 250.000 GYD, abono 300 USD × 250 = 75.000 GYD
+  await registrarCargo(1, 100_000n, daysAgo(4), cajeros[1].id);
+  await registrarAbono(1, 75_000_00n, daysAgo(2), cob1.perfilCobrador!.usuarioId);
 
   // Cajero 2: Pedro Mendoza — 8 días de deuda (deudaDesde = 8 días atrás)
-  await registrarCargo(2, 100_000_00n, daysAgo(8), cajeros[2].id);
-  await registrarCargo(2, 60_000_00n, daysAgo(3), cajeros[2].id);
+  // Dos cargos, sin abono. 700 USD × 250 = 175.000 + 0 = 175.000? No, para 40%
+  // de 400.000 = 160.000 GYD. Cargo 700 USD × 250 = 175.000, abono 60 USD × 250 = 15.000
+  await registrarCargo(2, 70_000n, daysAgo(8), cajeros[2].id);
+  await registrarAbono(2, 15_000_00n, daysAgo(3), cob1.perfilCobrador!.usuarioId);
 
   // Cajero 3: María Torres — sin conectarse hace 4 días, saldo moderado
-  await registrarCargo(3, 80_000_00n, daysAgo(6), cajeros[3].id);
-  await registrarAbono(3, 30_000_00n, daysAgo(5), cob2.perfilCobrador!.usuarioId);
+  // Cargo 250 USD × 250 = 62.500 GYD, abono 50 USD × 250 = 12.500 GYD → saldo = 50.000
+  await registrarCargo(3, 25_000n, daysAgo(6), cajeros[3].id);
+  await registrarAbono(3, 12_500_00n, daysAgo(5), cob2.perfilCobrador!.usuarioId);
 
   // Cajero 4: Carlos Ruiz — al día, saldo bajo
-  // Cargo 40.000 GYD, abono 38.000 GYD → saldo = 2.000 GYD
-  await registrarCargo(4, 40_000_00n, daysAgo(2), cajeros[4].id);
-  await registrarAbono(4, 38_000_00n, daysAgo(1), cob1.perfilCobrador!.usuarioId);
+  // Cargo 200 USD × 250 = 50.000 GYD, abono 192 USD × 250 = 48.000 GYD → saldo = 2.000
+  await registrarCargo(4, 20_000n, daysAgo(2), cajeros[4].id);
+  await registrarAbono(4, 48_000_00n, daysAgo(1), cob1.perfilCobrador!.usuarioId);
 
   // Cajero 5: Sofía Díaz — al día, saldo cero
-  // Cargo 60.000 GYD, abono 60.000 GYD → saldo = 0
-  await registrarCargo(5, 60_000_00n, daysAgo(3), cajeros[5].id);
-  await registrarAbono(5, 60_000_00n, daysAgo(1), cob2.perfilCobrador!.usuarioId);
+  // Cargo 250 USD × 250 = 62.500 GYD, abono 250 USD × 250 = 62.500 GYD → saldo = 0
+  await registrarCargo(5, 25_000n, daysAgo(3), cajeros[5].id);
+  await registrarAbono(5, 62_500_00n, daysAgo(1), cob2.perfilCobrador!.usuarioId);
 
   // Cajero 6: Luis Hernández — al día, saldo muy bajo
-  // Cargo 20.000 GYD, abono 19.400 GYD → saldo = 600 GYD
-  await registrarCargo(6, 20_000_00n, daysAgo(1), cajeros[6].id);
-  await registrarAbono(6, 19_400_00n, hoursAgo(12), cob1.perfilCobrador!.usuarioId);
+  // Cargo 50 USD × 250 = 12.500 GYD, abono 48 USD × 250 = 12.000 GYD → saldo = 500
+  await registrarCargo(6, 5_000n, daysAgo(1), cajeros[6].id);
+  await registrarAbono(6, 12_000_00n, hoursAgo(12), cob1.perfilCobrador!.usuarioId);
 
   // Cajero 7: Elena Vargas — deuda moderada
-  await registrarCargo(7, 160_000_00n, daysAgo(6), cajeros[7].id);
-  await registrarAbono(7, 60_000_00n, daysAgo(4), cob2.perfilCobrador!.usuarioId);
-  await registrarCargo(7, 40_000_00n, daysAgo(2), cajeros[7].id);
+  // Cargo 700 USD × 250 = 175.000 GYD, abono 140 USD × 250 = 35.000 GYD → saldo = 140.000
+  await registrarCargo(7, 70_000n, daysAgo(6), cajeros[7].id);
+  await registrarAbono(7, 35_000_00n, daysAgo(4), cob2.perfilCobrador!.usuarioId);
 
   // Total: 15 movimientos (9 cargos + 6 abonos)
 

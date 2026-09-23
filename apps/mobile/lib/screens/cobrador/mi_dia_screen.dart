@@ -157,7 +157,7 @@ class _MiDiaScreenState extends ConsumerState<MiDiaScreen> {
     final cierre = cierreState.data;
     final activos = cierre.cobrosActivos;
     final total = cierre.totalRegistradoCents;
-    final efectivo = cierre.efectivoTotalGydCents;
+    final efectivo = cierre.efectivoCents;
     final digital = cierre.digitalCalculadoCents;
 
     // Cajeros visitados = cajeros distintos con cobro hoy.

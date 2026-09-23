@@ -49,7 +49,7 @@ export default function CajasPage() {
     <>
       <PageHeader
         titulo="Cajas"
-        descripcion="Tesorería: la caja madre de USDT y una caja por corredor. Los saldos cuadran con la suma de movimientos (db:verify)."
+        descripcion="Tesorería: la caja madre de USDT y las cajas físicas por país/moneda. Varios servicios pueden compartir una caja (BCV y tasa especial → misma caja de bolívares). Los saldos cuadran con la suma de movimientos (db:verify)."
       />
 
       <PageContent className="flex flex-col gap-6">
@@ -82,11 +82,11 @@ export default function CajasPage() {
               </div>
             )}
 
-            {/* Cajas de corredor */}
+            {/* Cajas físicas */}
             <div className="overflow-hidden rounded-lg border border-tav-line bg-tav-surface shadow-tav">
               <div className="border-b border-tav-line bg-[#FAFBFC] px-4 py-3">
                 <h2 className="text-[13px] font-bold uppercase tracking-[0.07em] text-tav-ink-3">
-                  Cajas de corredor · {corredores.length}
+                  Cajas físicas · {corredores.length}
                 </h2>
               </div>
               <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2 lg:grid-cols-3">
@@ -113,13 +113,14 @@ export default function CajasPage() {
 function CajaMadreCard({ caja, onCambio }: { caja: Caja; onCambio: () => void }) {
   const [abierta, setAbierta] = React.useState(false);
   const [monto, setMonto] = React.useState('');
+  const [precioCompra, setPrecioCompra] = React.useState('');
   const [motivo, setMotivo] = React.useState('');
   const [enviando, setEnviando] = React.useState(false);
 
   async function registrar() {
     const cents = monto.replace(/[.,\s]/g, '');
-    if (!cents || !motivo.trim()) {
-      toast.error('Faltan el monto o el motivo');
+    if (!cents || !precioCompra.trim() || !motivo.trim()) {
+      toast.error('Faltan el monto, el precio de compra o el motivo');
       return;
     }
     setEnviando(true);
@@ -128,11 +129,13 @@ function CajaMadreCard({ caja, onCambio }: { caja: Caja; onCambio: () => void })
         clientUuid: crypto.randomUUID(),
         cajaMadreId: caja.id,
         montoCents: cents,
+        precioCompraGyd: precioCompra.trim(),
         motivo: motivo.trim(),
       });
-      toast.success('Ingreso registrado', { description: `${formatoMoneda(cents, 'USDT')} a la caja madre` });
+      toast.success('Ingreso registrado', { description: `${formatoMoneda(cents, 'USDT')} a ${precioCompra.trim()} GYD/USD` });
       setAbierta(false);
       setMonto('');
+      setPrecioCompra('');
       setMotivo('');
       onCambio();
     } catch (e) {
@@ -181,6 +184,20 @@ function CajaMadreCard({ caja, onCambio }: { caja: Caja; onCambio: () => void })
                 </span>
               </div>
               <div className="flex flex-col gap-1.5">
+                <Label htmlFor="precio-compra">Precio de compra (GYD por USD)</Label>
+                <Input
+                  id="precio-compra"
+                  inputMode="decimal"
+                  placeholder="237"
+                  value={precioCompra}
+                  onChange={(e) => setPrecioCompra(e.target.value)}
+                  className="font-mono tabular-nums"
+                />
+                <span className="text-[12px] text-tav-ink-3">
+                  A cuánto se compró el USDT que entra. Es el marcador del día.
+                </span>
+              </div>
+              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="motivo-madre">Motivo (obligatorio)</Label>
                 <Input
                   id="motivo-madre"
@@ -222,7 +239,7 @@ function AlertaBanner({ alerta }: { alerta: AlertaCaja }) {
           {esNegativo ? 'Saldo negativo — se pagó plata que no había' : 'Saldo bajo — prepara la recarga'}
         </span>
         <span className="text-[12px] opacity-90">
-          {alerta.corredorDescripcion} · {formatoMoneda(alerta.saldoCents, alerta.moneda)}
+          {alerta.cajaNombre} · {formatoMoneda(alerta.saldoCents, alerta.moneda)}
           {alerta.umbralAlertaCents && !esNegativo && (
             <> · umbral: {formatoMoneda(alerta.umbralAlertaCents, alerta.moneda)}</>
           )}
@@ -258,8 +275,8 @@ function CajaCorredorCard({
     }`}>
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-[13px] font-bold text-tav-ink">{caja.moneda}</div>
-          <div className="text-[11px] text-tav-ink-3">{caja.id.slice(0, 8)}</div>
+          <div className="text-[13px] font-bold text-tav-ink">{caja.nombre}</div>
+          <div className="text-[11px] text-tav-ink-3">{caja.moneda}{caja.pais ? ` · ${caja.pais}` : ''}</div>
         </div>
         {alerta && (
           <Badge variant={alerta.tipo === 'saldo_negativo' ? 'rojo' : 'ambar'}>

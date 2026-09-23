@@ -44,9 +44,17 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-30d}
       CORS_ORIGIN: ${CORS_ORIGIN}
+      UPLOAD_DIR: /data/uploads
     # 127.0.0.1: nunca 0.0.0.0. Solo nginx (aaPanel) puede alcanzar la API.
     ports:
       - '127.0.0.1:3001:3001'
+    # Capturas de pago: bind mount a una carpeta del servidor fuera de
+    # /opt/tav/apps para que sobrevivan a `deploy.sh` (que reconstruye el
+    # contenedor). Si se guardaran dentro del contenedor, cada despliegue
+    # borraría todos los comprobantes — y son la única información del
+    # sistema que no se puede regenerar.
+    volumes:
+      - /opt/tav-uploads:/data/uploads
     networks:
       - tav_internal
 

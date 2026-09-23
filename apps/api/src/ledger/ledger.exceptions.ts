@@ -6,7 +6,6 @@
  *   SinCupoException        → 409 SIN_CUPO
  *   YaAnuladoException      → 409 YA_ANULADO
  *   CierreNoAbiertoException→ 409 CIERRE_NO_ABIERTO
- *   TasaRequeridaException  → 422 TASA_REQUERIDA
  *   MotivoRequeridoException→ 422 MOTIVO_REQUERIDO
  *   CajeroNoValidoException → 422 CAJERO_NO_VALIDO
  *   CobradorNoValidoException → 422 COBRADOR_NO_VALIDO
@@ -47,14 +46,6 @@ export class CierreNoAbiertoException extends LedgerException {
   readonly code = 'CIERRE_NO_ABIERTO';
   constructor(readonly cierreId: string, readonly estado: string) {
     super(`El cierre ${cierreId} está en estado "${estado}", no admite más cobros`);
-  }
-}
-
-/** No se encontró tasa vigente para la moneda de cobro. Sin tasa no hay conversión a GYD. */
-export class TasaRequeridaException extends LedgerException {
-  readonly code = 'TASA_REQUERIDA';
-  constructor() {
-    super('No hay tasa vigente para la moneda de cobro — no se puede convertir a la moneda base');
   }
 }
 

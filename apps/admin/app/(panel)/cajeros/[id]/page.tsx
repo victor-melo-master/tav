@@ -21,6 +21,7 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import { SemaforoBadge, CargandoPagina, ErrorTabla, VacioTabla } from '@/components/estados';
+import { PreciosCajero } from '@/components/precios-cajero';
 import { cn } from '@/lib/utils';
 
 const TIPO_MOV: Record<TipoMovimiento, { label: string; color: string }> = {
@@ -48,7 +49,7 @@ const ESTADO_AMP: Record<string, 'navy' | 'verde' | 'rojo' | 'outline' | 'ambar'
   expirada: 'outline',
 };
 
-type Pestana = 'movimientos' | 'operaciones' | 'ampliaciones';
+type Pestana = 'movimientos' | 'operaciones' | 'ampliaciones' | 'precios';
 
 export default function FichaCajeroPage() {
   const { id } = useParams<{ id: string }>();
@@ -176,6 +177,7 @@ export default function FichaCajeroPage() {
               ['movimientos', `Movimientos (${data.movimientos.length})`],
               ['operaciones', `Operaciones (${data.operaciones.length})`],
               ['ampliaciones', `Ampliaciones (${data.ampliaciones.length})`],
+              ['precios', 'Precios'],
             ] as [Pestana, string][]
           ).map(([key, label]) => (
             <button
@@ -333,6 +335,8 @@ export default function FichaCajeroPage() {
               </TableBody>
             </Table>
           )}
+
+          {pestana === 'precios' && <PreciosCajero cajeroId={id} />}
         </div>
       </PageContent>
     </>

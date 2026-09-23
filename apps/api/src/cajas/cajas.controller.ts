@@ -63,6 +63,7 @@ export class CajasController {
       clientUuid: dto.clientUuid,
       cajaMadreId: dto.cajaMadreId,
       montoCents: BigInt(dto.montoCents),
+      precioCompraGyd: dto.precioCompraGyd,
       motivo: dto.motivo,
       registradoPorId: req.user.sub,
     });

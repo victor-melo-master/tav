@@ -60,9 +60,7 @@ String tiempoRelativo(DateTime desde, DateTime ahora) {
 
 /// Etiqueta corta del método de cobro para listas compactas.
 String metodoCobroCorto(String metodoValor) => switch (metodoValor) {
-      'efectivo_usd' => 'Efectivo',
-      'bolivares' => 'Bs',
-      'pago_movil' => 'Pago móvil',
-      'usdt' => 'USDT',
+      'efectivo_gyd' => 'Efectivo',
+      'transferencia_gyd' => 'Transferencia',
       _ => metodoValor,
     };

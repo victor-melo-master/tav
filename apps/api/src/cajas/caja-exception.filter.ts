@@ -10,6 +10,8 @@ import {
   CajaNoEncontradaException,
   CorredorNoEncontradoException,
   CajaMadreInvalidaException,
+  CajaEsMadreException,
+  CajaMonedaMismatchException,
   CorredorInactivoException,
   CorredorDuplicadoException,
   OperacionNoEncontradaException,
@@ -40,8 +42,9 @@ interface CajaErrorBody {
   tipo?: string;
   movimientoCajaId?: string;
   pais?: string;
-  moneda?: string;
-  formaEntrega?: string;
+  servicio?: string;
+  monedaCaja?: string;
+  monedaServicio?: string;
 }
 
 /**
@@ -85,13 +88,22 @@ export class CajaExceptionFilter implements ExceptionFilter {
     if (ex instanceof CajaMadreInvalidaException) {
       return { status: HttpStatus.UNPROCESSABLE_ENTITY, body: { code: ex.code, message: ex.message, cajaId: ex.cajaId } };
     }
+    if (ex instanceof CajaEsMadreException) {
+      return { status: HttpStatus.UNPROCESSABLE_ENTITY, body: { code: ex.code, message: ex.message, cajaId: ex.cajaId } };
+    }
+    if (ex instanceof CajaMonedaMismatchException) {
+      return {
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        body: { code: ex.code, message: ex.message, cajaId: ex.cajaId, monedaCaja: ex.monedaCaja, monedaServicio: ex.monedaServicio },
+      };
+    }
     if (ex instanceof CorredorInactivoException) {
       return { status: HttpStatus.CONFLICT, body: { code: ex.code, message: ex.message, corredorId: ex.corredorId } };
     }
     if (ex instanceof CorredorDuplicadoException) {
       return {
         status: HttpStatus.CONFLICT,
-        body: { code: ex.code, message: ex.message, pais: ex.pais, moneda: ex.moneda, formaEntrega: ex.formaEntrega },
+        body: { code: ex.code, message: ex.message, pais: ex.pais, servicio: ex.servicio },
       };
     }
     if (ex instanceof OperacionNoPendienteException) {

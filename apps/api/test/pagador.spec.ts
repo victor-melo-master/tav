@@ -27,8 +27,8 @@ const TEST_URL = 'postgresql://tav:tav@localhost:5432/tav_test?schema=public';
 const prisma = new PrismaClient({ datasources: { db: { url: TEST_URL } } });
 
 const TABLAS = [
-  'MovimientoCaja', 'Caja', 'PublicacionTasaItem', 'PublicacionTasas',
-  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'PerfilPagador', 'Tasa',
+  'MovimientoCaja', 'Caja', 'PrecioCajeroServicio',
+  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'PerfilPagador',
   'Operacion', 'Cobro', 'Movimiento', 'AmpliacionCredito', 'Cierre',
   'Atencion', 'Aviso', 'AuditLog', 'Config', 'Corredor',
 ];
@@ -73,8 +73,11 @@ async function login(email: string, password: string): Promise<string> {
 
 async function crearCorredorYCaja(
   adminId: string,
-  opts: { pais: string; paisNombre: string; moneda: string; monedaNombre: string; formaEntrega: string; formaEntregaNombre: string },
+  opts: { pais: string; paisNombre: string; moneda: string; monedaNombre: string; formaEntrega: string; formaEntregaNombre: string; servicio: string; servicioNombre: string; cajaNombre: string },
 ): Promise<{ corredorId: string; cajaId: string }> {
+  const caja = await prisma.caja.create({
+    data: { esMadre: false, moneda: opts.moneda, nombre: opts.cajaNombre, pais: opts.pais, saldoCents: 0n },
+  });
   const corredor = await prisma.corredor.create({
     data: {
       pais: opts.pais,
@@ -83,11 +86,11 @@ async function crearCorredorYCaja(
       monedaNombre: opts.monedaNombre,
       formaEntrega: opts.formaEntrega,
       formaEntregaNombre: opts.formaEntregaNombre,
+      servicio: opts.servicio,
+      servicioNombre: opts.servicioNombre,
+      cajaId: caja.id,
       creadoPorId: adminId,
     },
-  });
-  const caja = await prisma.caja.create({
-    data: { corredorId: corredor.id, esMadre: false, moneda: opts.moneda, saldoCents: 0n },
   });
   return { corredorId: corredor.id, cajaId: caja.id };
 }
@@ -117,7 +120,6 @@ async function crearOperacionPendiente(
       montoOrigenCents: 100_000n,
       monedaOrigen: 'USDT',
       tasaAplicada: new (require('@prisma/client').Prisma).Decimal('285.4'),
-      comisionCents: 3000n,
       totalCents: 103_000n,
       montoDestinoCents,
       monedaDestino: 'BS',
@@ -158,10 +160,12 @@ describe('Fase 9 — Rol pagador', () => {
     const ven = await crearCorredorYCaja(admin.id, {
       pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
       formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      servicio: 'bcv', servicioNombre: 'BCV', cajaNombre: 'Bolívares en cuenta',
     });
     const bra = await crearCorredorYCaja(admin.id, {
       pais: 'BRA', paisNombre: 'Brasil', moneda: 'BRL', monedaNombre: 'Reales',
       formaEntrega: 'pix', formaEntregaNombre: 'Pix',
+      servicio: 'pix', servicioNombre: 'Pix', cajaNombre: 'Brasil Pix',
     });
 
     // Dos operaciones: una Venezuela, una Brasil.
@@ -185,6 +189,7 @@ describe('Fase 9 — Rol pagador', () => {
     const ven = await crearCorredorYCaja(admin.id, {
       pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
       formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      servicio: 'bcv', servicioNombre: 'BCV', cajaNombre: 'Bolívares en cuenta',
     });
 
     // Dar saldo a la caja.
@@ -199,9 +204,11 @@ describe('Fase 9 — Rol pagador', () => {
         clientUuid: crypto.randomUUID(),
         operacionId: opId,
         montoCents: '28540000',
+        montoDestinoCents: '28540000',
         tasaEjecucion: '240.5',
         formaPago: 'pago_movil',
         nombreCliente: 'María González',
+        comprobantePagoUrl: '/uploads/test.jpg',
       });
     expect(res.status).toBe(201);
 
@@ -211,6 +218,8 @@ describe('Fase 9 — Rol pagador', () => {
     expect(op!.tasaEjecucion.toString()).toBe('240.5');
     expect(op!.formaPago).toBe('pago_movil');
     expect(op!.nombreCliente).toBe('María González');
+    expect(op!.montoDestinoCents).toBe(28540000n); // los bolívares que anotó el pagador
+    expect(op!.comprobantePagoUrl).toBe('/uploads/test.jpg'); // la captura
     expect(op!.pagadaPorId).toBe(pagador.id);
 
     // La caja bajó 28.540.000.
@@ -227,6 +236,7 @@ describe('Fase 9 — Rol pagador', () => {
     const ven = await crearCorredorYCaja(admin.id, {
       pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
       formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      servicio: 'bcv', servicioNombre: 'BCV', cajaNombre: 'Bolívares en cuenta',
     });
     await prisma.caja.update({ where: { id: ven.cajaId }, data: { saldoCents: 100_000_000n } });
 
@@ -240,9 +250,11 @@ describe('Fase 9 — Rol pagador', () => {
         clientUuid: crypto.randomUUID(),
         operacionId: opId,
         montoCents: '28540000',
+        montoDestinoCents: '28540000',
         tasaEjecucion: '240.5',
         formaPago: 'pago_movil',
         nombreCliente: 'María González',
+        comprobantePagoUrl: '/uploads/test.jpg',
       });
     expect(res1.status).toBe(201);
     expect(res1.body.yaExistia).toBe(false);
@@ -257,9 +269,11 @@ describe('Fase 9 — Rol pagador', () => {
         clientUuid: crypto.randomUUID(),
         operacionId: opId,
         montoCents: '28540000',
+        montoDestinoCents: '28540000',
         tasaEjecucion: '999', // distinta
         formaPago: 'efectivo', // distinto
         nombreCliente: 'Otro Cliente', // distinto
+        comprobantePagoUrl: '/uploads/test.jpg',
       });
     expect(res2.status).toBe(201);
     expect(res2.body.yaExistia).toBe(true);
@@ -290,6 +304,7 @@ describe('Fase 9 — Rol pagador', () => {
     const ven = await crearCorredorYCaja(admin.id, {
       pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
       formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      servicio: 'bcv', servicioNombre: 'BCV', cajaNombre: 'Bolívares en cuenta',
     });
     // Caja con saldo 0 (sin fondos).
 
@@ -302,9 +317,11 @@ describe('Fase 9 — Rol pagador', () => {
         clientUuid: crypto.randomUUID(),
         operacionId: opId,
         montoCents: '28540000',
+        montoDestinoCents: '28540000',
         tasaEjecucion: '240',
         formaPago: 'pago_movil',
         nombreCliente: 'María González',
+        comprobantePagoUrl: '/uploads/test.jpg',
       });
     // No se bloquea: el pago pasa.
     expect(res.status).toBe(201);
@@ -336,6 +353,7 @@ describe('Fase 9 — Rol pagador', () => {
     const ven = await crearCorredorYCaja(admin.id, {
       pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
       formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      servicio: 'bcv', servicioNombre: 'BCV', cajaNombre: 'Bolívares en cuenta',
     });
     await prisma.caja.update({ where: { id: ven.cajaId }, data: { saldoCents: 50_000_000n } });
 
@@ -376,9 +394,11 @@ describe('Fase 9 — Rol pagador', () => {
         clientUuid: crypto.randomUUID(),
         operacionId: opId,
         montoCents: '28540000',
+        montoDestinoCents: '28540000',
         tasaEjecucion: '240',
         formaPago: 'pago_movil',
         nombreCliente: 'María González',
+        comprobantePagoUrl: '/uploads/test.jpg',
       });
 
     const resDia = await request(app.getHttpServer())
@@ -404,6 +424,7 @@ describe('Fase 9 — Rol pagador', () => {
     const ven = await crearCorredorYCaja(admin.id, {
       pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
       formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      servicio: 'bcv', servicioNombre: 'BCV', cajaNombre: 'Bolívares en cuenta',
     });
     await prisma.caja.update({ where: { id: ven.cajaId }, data: { saldoCents: 100_000_000n } });
 
@@ -423,9 +444,11 @@ describe('Fase 9 — Rol pagador', () => {
         clientUuid: crypto.randomUUID(),
         operacionId: opId,
         montoCents: '28540000',
+        montoDestinoCents: '28540000',
         tasaEjecucion: '240',
         formaPago: 'pago_movil',
         nombreCliente: 'María González',
+        comprobantePagoUrl: '/uploads/test.jpg',
       });
 
     // Después de pagar: la cola está vacía.
@@ -433,5 +456,72 @@ describe('Fase 9 — Rol pagador', () => {
       .get('/pagador/cola')
       .set('Authorization', `Bearer ${token}`);
     expect(resDespues.body.length).toBe(0);
+  });
+
+  test('6. Sin comprobante de pago falla (captura obligatoria)', async () => {
+    const admin = await crearUsuario('admin', 'admin-p6@tav.test');
+    const pagador = await crearUsuario('pagador', 'pagador-p6@tav.test', { pais: 'VEN' });
+    const cajero = await crearCajero(admin.id);
+    const token = await login(pagador.email, pagador.password);
+
+    const ven = await crearCorredorYCaja(admin.id, {
+      pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
+      formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      servicio: 'bcv', servicioNombre: 'BCV', cajaNombre: 'Bolívares en cuenta',
+    });
+    await prisma.caja.update({ where: { id: ven.cajaId }, data: { saldoCents: 100_000_000n } });
+    const opId = await crearOperacionPendiente(cajero.id, ven.corredorId, 28540000n);
+
+    // Falta comprobantePagoUrl → 400.
+    const res = await request(app.getHttpServer())
+      .post('/pagador/pagar')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        operacionId: opId,
+        montoCents: '28540000',
+        montoDestinoCents: '28540000',
+        tasaEjecucion: '240',
+        formaPago: 'pago_movil',
+        nombreCliente: 'María González',
+        // sin comprobantePagoUrl
+      });
+    expect(res.status).toBe(400);
+    // No se pagó.
+    const op = await prisma.operacion.findUnique({ where: { id: opId } });
+    expect(op!.estado).toBe('pendiente');
+  });
+
+  test('7. Sin montoDestinoCents falla (los bolívares son obligatorios)', async () => {
+    const admin = await crearUsuario('admin', 'admin-p7@tav.test');
+    const pagador = await crearUsuario('pagador', 'pagador-p7@tav.test', { pais: 'VEN' });
+    const cajero = await crearCajero(admin.id);
+    const token = await login(pagador.email, pagador.password);
+
+    const ven = await crearCorredorYCaja(admin.id, {
+      pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
+      formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      servicio: 'bcv', servicioNombre: 'BCV', cajaNombre: 'Bolívares en cuenta',
+    });
+    await prisma.caja.update({ where: { id: ven.cajaId }, data: { saldoCents: 100_000_000n } });
+    const opId = await crearOperacionPendiente(cajero.id, ven.corredorId, 28540000n);
+
+    // Falta montoDestinoCents → 400.
+    const res = await request(app.getHttpServer())
+      .post('/pagador/pagar')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        operacionId: opId,
+        montoCents: '28540000',
+        tasaEjecucion: '240',
+        formaPago: 'pago_movil',
+        nombreCliente: 'María González',
+        comprobantePagoUrl: '/uploads/test.jpg',
+        // sin montoDestinoCents
+      });
+    expect(res.status).toBe(400);
+    const op = await prisma.operacion.findUnique({ where: { id: opId } });
+    expect(op!.estado).toBe('pendiente');
   });
 });

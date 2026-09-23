@@ -15,6 +15,7 @@ export interface IngresarCajaMadreDto {
   clientUuid: string; // idempotencia
   cajaMadreId: string; // la caja madre a la que entra el USDT
   montoCents: bigint; // en centavos de la moneda de la caja madre (USDT)
+  precioCompraGyd: string; // precio al que se compró el USDT (GYD por 1 USD). Obligatorio, > 0.
   motivo: string; // obligatorio: "recarga de capital", "venta del día", ...
   registradoPorId: string; // el admin
 }
@@ -34,9 +35,11 @@ export interface EjecutarPagoDto {
   operacionId: string; // la operación que se paga
   cajaId: string; // de qué caja del corredor sale la plata
   montoCents: bigint; // cuánto se descuenta de la caja (centavos de la moneda del corredor)
+  montoDestinoCents: bigint; // cuánto recibió el beneficiario (centavos de la moneda destino). Llena el campo que dejó en 0 el paso 3.
   tasaEjecucion: string; // a cómo se ejecutó el cambio (240, 244, 250...). Se congela.
   formaPago: string; // "pago_movil" | "transferencia" | "efectivo" | ...
   nombreCliente: string; // el nombre del cliente que recibió
+  comprobantePagoUrl: string; // captura del pago (subida antes, ruta devuelta por /uploads/comprobante)
   registradoPorId: string; // el pagador
 }
 
@@ -59,7 +62,19 @@ export interface CrearCorredorDto {
   monedaNombre: string; // "Bolívares"
   formaEntrega: string; // "transferencia" | "efectivo" | ...
   formaEntregaNombre: string; // etiqueta legible
+  servicio: string; // "bcv" | "tasa_especial" | "efectivo" | "pix" | ... — el producto
+  servicioNombre: string; // "BCV", "Tasa especial" — etiqueta legible
+  cajaId: string; // → Caja.id (la caja física de la que descuenta)
   creadoPorId: string; // el admin
+}
+
+export interface EditarCorredorDto {
+  cajaId?: string; // cambiar la caja física (valida moneda y no-madre)
+  formaEntrega?: string;
+  formaEntregaNombre?: string;
+  servicioNombre?: string; // etiqueta legible (el código `servicio` no se edita)
+  moneda?: string; // cambia la moneda del servicio (valida contra la caja)
+  monedaNombre?: string;
 }
 
 export interface CajaResultado {
@@ -89,5 +104,5 @@ export interface AlertaCaja {
   saldoCents: bigint;
   umbralAlertaCents: bigint | null;
   moneda: string;
-  corredorDescripcion: string; // "Venezuela — Bolívares (Transferencia)" o "Caja madre USDT"
+  cajaNombre: string; // "Bolívares en cuenta" o "Caja madre USDT" — de Caja.nombre
 }

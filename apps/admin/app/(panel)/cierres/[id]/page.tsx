@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Check, AlertTriangle } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
-import { gyd, usd, bs, formatFecha, formatTasa, parseUserAmountToCents } from '@/lib/format';
+import { gyd, formatFecha, parseUserAmountToCents } from '@/lib/format';
 import type { Cierre, EstadoCierre } from '@/lib/types';
 import { PageHeader, PageContent } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -35,10 +35,8 @@ const ESTILO_ESTADO: Record<EstadoCierre, { label: string; variant: 'navy' | 've
 };
 
 const METODO_LABEL: Record<string, string> = {
-  efectivo_usd: 'Efectivo USD',
-  bolivares: 'Bolívares',
-  pago_movil: 'Pago móvil',
-  usdt: 'USDT',
+  efectivo_gyd: 'Efectivo',
+  transferencia_gyd: 'Transferencia',
 };
 
 export default function CierreDetallePage() {
@@ -49,73 +47,51 @@ export default function CierreDetallePage() {
     [id],
   );
 
-  const [recibidoGydInput, setRecibidoGydInput] = React.useState('');
-  const [recibidoUsdInput, setRecibidoUsdInput] = React.useState('');
+  const [recibidoInput, setRecibidoInput] = React.useState('');
   const [nota, setNota] = React.useState('');
   const [enviando, setEnviando] = React.useState(false);
 
-  const declaradoGydCents = cierre?.efectivoGydDeclaradoCents ?? '0';
-  const declaradoUsdCents = cierre?.efectivoUsdDeclaradoCents ?? '0';
-  const recibidoGydCents = React.useMemo(
-    () => parseUserAmountToCents(recibidoGydInput),
-    [recibidoGydInput],
+  const declaradoCents = cierre?.efectivoDeclaradoCents ?? '0';
+  const recibidoCents = React.useMemo(
+    () => parseUserAmountToCents(recibidoInput),
+    [recibidoInput],
   );
-  const recibidoUsdCents = React.useMemo(
-    () => parseUserAmountToCents(recibidoUsdInput),
-    [recibidoUsdInput],
-  );
-  const diferenciaGyd = React.useMemo(() => {
-    if (recibidoGydCents === null) return null;
-    return BigInt(recibidoGydCents) - BigInt(declaradoGydCents);
-  }, [recibidoGydCents, declaradoGydCents]);
-  const diferenciaUsd = React.useMemo(() => {
-    if (recibidoUsdCents === null) return null;
-    return BigInt(recibidoUsdCents) - BigInt(declaradoUsdCents);
-  }, [recibidoUsdCents, declaradoUsdCents]);
+  const diferencia = React.useMemo(() => {
+    if (recibidoCents === null) return null;
+    return BigInt(recibidoCents) - BigInt(declaradoCents);
+  }, [recibidoCents, declaradoCents]);
 
-  const hayDiferencia =
-    (diferenciaGyd !== null && diferenciaGyd !== 0n) ||
-    (diferenciaUsd !== null && diferenciaUsd !== 0n);
+  const hayDiferencia = diferencia !== null && diferencia !== 0n;
   const notaObligatoria = hayDiferencia;
   const puedeEnviar =
     cierre?.estado === 'enviado' &&
-    recibidoGydCents !== null &&
-    recibidoUsdCents !== null &&
+    recibidoCents !== null &&
     (!notaObligatoria || nota.trim().length > 0) &&
     !enviando;
 
   // Pre-llenar el efectivo recibido con lo declarado al cargar (flujo rápido:
   // el admin normalmente recibe lo mismo; solo cambia si hay descuadre).
   React.useEffect(() => {
-    if (cierre && cierre.estado === 'enviado' && !recibidoGydInput) {
-      const cents = BigInt(cierre.efectivoGydDeclaradoCents);
+    if (cierre && cierre.estado === 'enviado' && !recibidoInput) {
+      const cents = BigInt(cierre.efectivoDeclaradoCents);
       const enteros = cents / 100n;
       const dec = cents % 100n;
-      setRecibidoGydInput(`${enteros.toString()},${dec.toString().padStart(2, '0')}`);
-    }
-  }, [cierre]);
-  React.useEffect(() => {
-    if (cierre && cierre.estado === 'enviado' && !recibidoUsdInput) {
-      const cents = BigInt(cierre.efectivoUsdDeclaradoCents);
-      const enteros = cents / 100n;
-      const dec = cents % 100n;
-      setRecibidoUsdInput(`${enteros.toString()},${dec.toString().padStart(2, '0')}`);
+      setRecibidoInput(`${enteros.toString()},${dec.toString().padStart(2, '0')}`);
     }
   }, [cierre]);
 
   async function verificar() {
-    if (!cierre || recibidoGydCents === null || recibidoUsdCents === null) return;
+    if (!cierre || recibidoCents === null) return;
     setEnviando(true);
     try {
       const res = await api.verificarCierre(cierre.id, {
-        efectivoGydRecibidoCents: recibidoGydCents,
-        efectivoUsdRecibidoCents: recibidoUsdCents,
+        efectivoRecibidoCents: recibidoCents,
         nota: nota.trim() || undefined,
       });
       const est = res.estado === 'con_diferencia' ? 'con diferencia' : 'verificado';
       const desc =
-        diferenciaGyd !== 0n || diferenciaUsd !== 0n
-          ? `Diferencia GYD: ${gyd(diferenciaGyd ?? 0n)} · USD: ${usd(diferenciaUsd ?? 0n)}`
+        diferencia !== 0n
+          ? `Diferencia: ${gyd(diferencia ?? 0n)}`
           : 'Cuadró perfecto';
       toast.success(`Cierre ${est}`, { description: desc });
       router.push('/cierres');
@@ -143,10 +119,10 @@ export default function CierreDetallePage() {
   const cobros = cierre.cobros ?? [];
   const efectivoTotal = cobros
     .filter((c) => c.esEfectivo)
-    .reduce((acc, c) => acc + BigInt(c.montoBaseCents), 0n);
+    .reduce((acc, c) => acc + BigInt(c.montoCents), 0n);
   const digitalTotal = cobros
     .filter((c) => !c.esEfectivo)
-    .reduce((acc, c) => acc + BigInt(c.montoBaseCents), 0n);
+    .reduce((acc, c) => acc + BigInt(c.montoCents), 0n);
 
   return (
     <>
@@ -164,7 +140,7 @@ export default function CierreDetallePage() {
 
       <PageContent className="flex flex-col gap-6">
         {/* Resumen superior */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <Card>
             <CardContent className="p-4">
               <div className="text-[12px] font-medium text-tav-ink-3">Estado</div>
@@ -183,17 +159,9 @@ export default function CierreDetallePage() {
           </Card>
           <Card>
             <CardContent className="p-4">
-              <div className="text-[12px] font-medium text-tav-ink-3">Efectivo GYD declarado</div>
+              <div className="text-[12px] font-medium text-tav-ink-3">Efectivo declarado</div>
               <div className="mt-1 text-[18px] font-semibold tabular-nums">
-                {gyd(cierre.efectivoGydDeclaradoCents)}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-[12px] font-medium text-tav-ink-3">Efectivo USD declarado</div>
-              <div className="mt-1 text-[18px] font-semibold tabular-nums">
-                {usd(cierre.efectivoUsdDeclaradoCents)}
+                {gyd(cierre.efectivoDeclaradoCents)}
               </div>
             </CardContent>
           </Card>
@@ -226,13 +194,12 @@ export default function CierreDetallePage() {
                   <TableHead>Cajero</TableHead>
                   <TableHead>Método</TableHead>
                   <TableHead className="text-right">Monto</TableHead>
-                  <TableHead className="text-right">USD</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {cobros.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="p-0">
+                    <TableCell colSpan={4} className="p-0">
                       <VacioTabla mensaje="Este cierre no tiene cobros" />
                     </TableCell>
                   </TableRow>
@@ -248,16 +215,8 @@ export default function CierreDetallePage() {
                     <TableCell className="text-tav-ink-2">
                       {METODO_LABEL[c.metodo] ?? c.metodo}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-tav-ink-2">
-                      {c.moneda === 'BS' ? bs(c.montoCents) : gyd(c.montoCents)}
-                      {c.tasaAplicada ? (
-                        <span className="ml-1 text-[11px] text-tav-ink-4">
-                          @ {formatTasa(c.tasaAplicada)}
-                        </span>
-                      ) : null}
-                    </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
-                      {gyd(c.montoBaseCents)}
+                      {gyd(c.montoCents)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -277,22 +236,14 @@ export default function CierreDetallePage() {
                   {cierre.verificadoAt && (
                     <> el {formatFecha(cierre.verificadoAt, true)}</>
                   )}.
-                  {cierre.efectivoGydRecibidoCents !== null && cierre.efectivoGydRecibidoCents !== undefined && (
+                  {cierre.efectivoRecibidoCents !== null && cierre.efectivoRecibidoCents !== undefined && (
                     <div className="mt-3 space-y-1.5 border-t border-tav-line pt-3">
-                      <Fila label="Efectivo GYD recibido" valor={gyd(cierre.efectivoGydRecibidoCents)} />
+                      <Fila label="Efectivo recibido" valor={gyd(cierre.efectivoRecibidoCents)} />
                       <Fila
-                        label="Diferencia GYD"
-                        valor={gyd(cierre.diferenciaGydCents ?? '0')}
+                        label="Diferencia"
+                        valor={gyd(cierre.diferenciaCents ?? '0')}
                         destacado={
-                          BigInt(cierre.diferenciaGydCents ?? '0') === 0n ? 'ok' : 'diff'
-                        }
-                      />
-                      <Fila label="Efectivo USD recibido" valor={usd(cierre.efectivoUsdRecibidoCents ?? '0')} />
-                      <Fila
-                        label="Diferencia USD"
-                        valor={usd(cierre.diferenciaUsdCents ?? '0')}
-                        destacado={
-                          BigInt(cierre.diferenciaUsdCents ?? '0') === 0n ? 'ok' : 'diff'
+                          BigInt(cierre.diferenciaCents ?? '0') === 0n ? 'ok' : 'diff'
                         }
                       />
                       {cierre.notaAdmin && (
@@ -307,31 +258,18 @@ export default function CierreDetallePage() {
               ) : (
                 <>
                   <div className="rounded-md bg-tav-blue-50 p-3 text-[13px] text-tav-blue-600">
-                    Captura el efectivo que realmente recibiste, por moneda. El sistema
-                    cuadra contra lo declarado (GYD {gyd(cierre.efectivoGydDeclaradoCents)} ·
-                    USD {usd(cierre.efectivoUsdDeclaradoCents)}).
+                    Captura el efectivo que realmente recibiste. El sistema
+                    cuadra contra lo declarado ({gyd(cierre.efectivoDeclaradoCents)}).
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="recibido-gyd">Efectivo GYD recibido</Label>
+                    <Label htmlFor="recibido">Efectivo recibido</Label>
                     <Input
-                      id="recibido-gyd"
+                      id="recibido"
                       inputMode="decimal"
                       placeholder="0,00"
-                      value={recibidoGydInput}
-                      onChange={(e) => setRecibidoGydInput(e.target.value)}
-                      className="font-mono tabular-nums"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="recibido-usd">Efectivo USD recibido</Label>
-                    <Input
-                      id="recibido-usd"
-                      inputMode="decimal"
-                      placeholder="0,00"
-                      value={recibidoUsdInput}
-                      onChange={(e) => setRecibidoUsdInput(e.target.value)}
+                      value={recibidoInput}
+                      onChange={(e) => setRecibidoInput(e.target.value)}
                       className="font-mono tabular-nums"
                     />
                   </div>
@@ -339,57 +277,30 @@ export default function CierreDetallePage() {
                   {/* Cálculo en vivo */}
                   <div className="rounded-md border border-tav-line bg-tav-bg p-3 space-y-1.5">
                     <div className="flex items-center justify-between text-[13px]">
-                      <span className="text-tav-ink-3">Declarado GYD</span>
+                      <span className="text-tav-ink-3">Declarado</span>
                       <span className="tabular-nums font-medium text-tav-ink-2">
-                        {gyd(declaradoGydCents)}
+                        {gyd(declaradoCents)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-[13px]">
-                      <span className="text-tav-ink-3">Recibido GYD</span>
+                      <span className="text-tav-ink-3">Recibido</span>
                       <span className="tabular-nums font-medium text-tav-ink-2">
-                        {recibidoGydCents !== null ? gyd(recibidoGydCents) : '—'}
+                        {recibidoCents !== null ? gyd(recibidoCents) : '—'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between border-t border-tav-line pt-1.5">
-                      <span className="text-[13px] font-semibold text-tav-ink">Diferencia GYD</span>
+                      <span className="text-[13px] font-semibold text-tav-ink">Diferencia</span>
                       <span
                         className={cn(
                           'tabular-nums text-[15px] font-bold',
-                          diferenciaGyd === null
+                          diferencia === null
                             ? 'text-tav-ink-4'
-                            : diferenciaGyd === 0n
+                            : diferencia === 0n
                               ? 'text-tav-green-600'
                               : 'text-tav-red-700',
                         )}
                       >
-                        {diferenciaGyd === null ? '—' : gyd(diferenciaGyd)}
-                      </span>
-                    </div>
-                    <div className="mt-1.5 flex items-center justify-between text-[13px]">
-                      <span className="text-tav-ink-3">Declarado USD</span>
-                      <span className="tabular-nums font-medium text-tav-ink-2">
-                        {usd(declaradoUsdCents)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-[13px]">
-                      <span className="text-tav-ink-3">Recibido USD</span>
-                      <span className="tabular-nums font-medium text-tav-ink-2">
-                        {recibidoUsdCents !== null ? usd(recibidoUsdCents) : '—'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between border-t border-tav-line pt-1.5">
-                      <span className="text-[13px] font-semibold text-tav-ink">Diferencia USD</span>
-                      <span
-                        className={cn(
-                          'tabular-nums text-[15px] font-bold',
-                          diferenciaUsd === null
-                            ? 'text-tav-ink-4'
-                            : diferenciaUsd === 0n
-                              ? 'text-tav-green-600'
-                              : 'text-tav-red-700',
-                        )}
-                      >
-                        {diferenciaUsd === null ? '—' : usd(diferenciaUsd)}
+                        {diferencia === null ? '—' : gyd(diferencia)}
                       </span>
                     </div>
                   </div>

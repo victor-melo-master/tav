@@ -34,21 +34,18 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(resumenProvider.notifier).cargar();
       ref.read(movimientosProvider.notifier).cargar();
-      ref.read(tasasProvider.notifier).cargar();
     });
   }
 
   void _recargar() {
     ref.read(resumenProvider.notifier).cargar();
     ref.read(movimientosProvider.notifier).cargar();
-    ref.read(tasasProvider.notifier).cargar();
   }
 
   @override
   Widget build(BuildContext context) {
     final resumenState = ref.watch(resumenProvider);
     final movsState = ref.watch(movimientosProvider);
-    final tasasState = ref.watch(tasasProvider);
 
     return Scaffold(
       backgroundColor: TavColors.bg,
@@ -78,7 +75,7 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildDeuda(resumenState, tasasState),
+                _buildDeuda(resumenState),
                 const SizedBox(height: TavSpace.lg),
                 _buildSemaforo(resumenState),
                 const SizedBox(height: TavSpace.lg),
@@ -100,28 +97,14 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
     );
   }
 
-  Widget _buildDeuda(CajeroDataState resumenState, CajeroDataState tasasState) {
+  Widget _buildDeuda(CajeroDataState resumenState) {
     int saldo = 0;
-    double tasaBsGyd = 0;
     bool tieneFavor = false;
 
     if (resumenState is CajeroDataLoaded<ResumenDto>) {
       saldo = resumenState.data.saldoCents;
       tieneFavor = saldo < 0;
     }
-    if (tasasState is CajeroDataLoaded<List<TasaDto>>) {
-      for (final t in tasasState.data) {
-        if (t.par == 'BS_GYD') {
-          tasaBsGyd = double.tryParse(t.valor) ?? 0;
-          break;
-        }
-      }
-    }
-
-    // El saldo está en GYD. Para mostrar la equivalencia en BS, dividimos
-    // por la tasa BS_GYD (que va de BS a GYD). Si BS_GYD = 0.732, entonces
-    // 1 GYD = 1/0.732 BS.
-    final saldoBs = tasaBsGyd > 0 ? (saldo.abs() / tasaBsGyd).round() : 0;
 
     return Container(
       width: double.infinity,
@@ -148,14 +131,6 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
             style: TavText.moneyDisplay.copyWith(fontSize: 32),
             fitted: true,
           ),
-          const SizedBox(height: 2),
-          if (tasaBsGyd > 0)
-            Text(
-              tieneFavor
-                  ? '≈ Bs ${_formatBs(saldoBs)} a tasa de hoy'
-                  : '≈ Bs ${_formatBs(saldoBs)} a tasa de hoy',
-              style: TavText.caption.copyWith(color: const Color(0xFF9EC0EC)),
-            ),
         ],
       ),
     );
@@ -349,14 +324,4 @@ class _EstadoCuentaScreenState extends ConsumerState<EstadoCuentaScreen> {
     return '${d.day} ${meses[d.month - 1]} · $h:$m';
   }
 
-  String _formatBs(int cents) {
-    final value = cents.abs() / 100.0;
-    final s = value.toStringAsFixed(2);
-    final parts = s.split('.');
-    final entero = parts[0].replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]}.',
-    );
-    return '$entero,${parts[1]}';
-  }
 }

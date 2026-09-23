@@ -8,7 +8,6 @@ import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { CajeroModule } from './cajero/cajero.module';
 import { CobradorModule } from './cobrador/cobrador.module';
-import { TasaModule } from './tasa/tasa.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { CajasModule } from './cajas/cajas.module';
 import { CorredoresModule } from './corredores/corredores.module';
@@ -23,7 +22,6 @@ import { PagadorModule } from './pagador/pagador.module';
     AdminModule,
     CajeroModule,
     CobradorModule,
-    TasaModule,
     UploadsModule,
     CajasModule,
     CorredoresModule,

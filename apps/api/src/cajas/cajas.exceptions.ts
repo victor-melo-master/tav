@@ -42,15 +42,35 @@ export class CorredorInactivoException extends CajaException {
   }
 }
 
-/** Ya existe un corredor activo con la misma combinación pais + moneda + formaEntrega. */
+/** Ya existe un corredor activo con la misma combinación pais + servicio. */
 export class CorredorDuplicadoException extends CajaException {
   readonly code = 'CORREDOR_DUPLICADO';
+  constructor(readonly pais: string, readonly servicio: string) {
+    super(`Ya existe un servicio activo ${pais} + ${servicio}`);
+  }
+}
+
+/** La moneda del servicio no coincide con la moneda de su caja. */
+export class CajaMonedaMismatchException extends CajaException {
+  readonly code = 'CAJA_MONEDA_MISMATCH';
   constructor(
-    readonly pais: string,
-    readonly moneda: string,
-    readonly formaEntrega: string,
+    readonly cajaId: string,
+    readonly monedaCaja: string,
+    readonly monedaServicio: string,
   ) {
-    super(`Ya existe un corredor activo ${pais} + ${moneda} + ${formaEntrega}`);
+    super(
+      `La caja ${cajaId} es de ${monedaCaja} pero el servicio es de ${monedaServicio}: ` +
+        'un servicio en bolívares no puede apuntar a la caja de dólares.',
+    );
+  }
+}
+
+/** Se intentó asignar una caja madre a un servicio. La madre solo se mueve
+ *  con ingresos y aperturas; un servicio nunca descuenta de ella. */
+export class CajaEsMadreException extends CajaException {
+  readonly code = 'CAJA_ES_MADRE';
+  constructor(readonly cajaId: string) {
+    super(`La caja ${cajaId} es madre: un servicio no puede apuntar a ella`);
   }
 }
 

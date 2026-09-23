@@ -117,8 +117,8 @@ location / {
     proxy_read_timeout 60s;
     proxy_send_timeout 60s;
 
-    # Uploads de comprobantes: 10MB
-    client_max_body_size 10m;
+    # Uploads de comprobantes: 5MB (límite del servidor)
+    client_max_body_size 5m;
 }
 ```
 
@@ -335,3 +335,63 @@ Programa un cron diario:
 - **El seed aborta en producción.** Los usuarios con contraseña `tav1234` no
   pueden llegar al servidor.
 - **CORS** solo acepta el dominio configurado en `CORS_ORIGIN`.
+
+---
+
+## Lo que sobrevive a un despliegue
+
+`deploy.sh` reconstruye los contenedores en cada despliegue. Todo lo que viva
+dentro del contenedor se pierde. Para que los datos sobrevivan, viven en
+**volúmenes de Docker** o **carpetas del servidor** que el contenedor monta al arrancar.
+
+| Qué | Volumen / carpeta | Montado en | Dónde vive en el servidor |
+|---|---|---|---|
+| Base de datos | `tav_pgdata_prod` (volume de Docker) | `/var/lib/postgresql/data` (contenedor db) | Volume de Docker (gestionado por Docker) |
+| Capturas de pago | `/opt/tav-uploads` (bind mount) | `/data/uploads` (contenedor api) | `/opt/tav-uploads` en el host |
+
+### Capturas de pago
+
+Las capturas que suben los pagadores (comprobantes de transferencia, pago
+móvil, etc.) se guardan en `/data/uploads` dentro del contenedor de la API,
+que es un **bind mount** a `/opt/tav-uploads` en el servidor — fuera de
+`/opt/tav/apps`. **Si se guardaran dentro del contenedor, cada `deploy.sh`
+las borraría** — y son la única información del sistema que no se puede
+regenerar: si un cajero reclama un pago de hace un mes, el comprobante
+tiene que seguir ahí.
+
+El bind mount apunta a `/opt/tav-uploads` en el host. Docker crea la
+carpeta si no existe. No se borra al reconstruir el contenedor. Los
+archivos son visibles directamente desde el servidor:
+
+```bash
+ls -la /opt/tav-uploads/
+```
+
+> **Backup:** las capturas no están en la base de datos, así que el
+> `pg_dump` de la sección 9 no las respalda. Hay que respaldar la carpeta
+> por separado:
+>
+> ```bash
+> tar czf /opt/backups/uploads_$(date +%Y%m%d).tar.gz -C /opt/tav-uploads .
+> ```
+
+### Verificar que una captura sobrevive a un despliegue
+
+```bash
+# 1. Subir una captura de prueba (requiere un token de pagador o admin)
+curl -X POST -H "Authorization: Bearer <TOKEN>" \
+  -F "file=@/tmp/test.jpg" \
+  https://api.tav.rolapro.com/uploads/comprobante
+# → {"url":"/uploads/abc-123.jpg","filename":"abc-123.jpg",...}
+
+# 2. Verificar que el archivo está en el servidor
+ls /opt/tav-uploads/
+# → abc-123.jpg
+
+# 3. Desplegar
+./scripts/deploy.sh
+
+# 4. Verificar que el archivo sigue ahí
+ls /opt/tav-uploads/
+# → abc-123.jpg sigue presente
+```

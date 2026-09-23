@@ -118,8 +118,6 @@ export class CobradorService {
       cobradorId,
       metodo: dto.metodo,
       montoCents: BigInt(dto.montoCents),
-      moneda: dto.moneda as 'USD' | 'BS' | 'USDT',
-      tasaAplicada: dto.tasaAplicada ?? null,
       comprobanteUrl: dto.comprobanteUrl,
       nota: dto.nota,
       registradoPorId: cobradorId,
@@ -170,8 +168,7 @@ export class CobradorService {
         cobradorId,
         fecha: hoy,
         totalRegistradoCents: 0n,
-        efectivoGydDeclaradoCents: 0n,
-        efectivoUsdDeclaradoCents: 0n,
+        efectivoDeclaradoCents: 0n,
         digitalCents: 0n,
         estado: 'abierto',
         cobros: [],
@@ -202,24 +199,22 @@ export class CobradorService {
     }
 
     // Calcular efectivo y digital de los cobros no anulados.
-    // El efectivo total (en GYD, para contabilidad) sigue siendo la suma
-    // de todos los cobros esEfectivo convertidos a la moneda base.
-    const efectivoGyd = cierre.cobros
+    // El cajero siempre paga en guyaneses: montoCents ya es la moneda base.
+    const efectivo = cierre.cobros
       .filter((c) => c.esEfectivo)
-      .reduce((sum, c) => sum + c.montoBaseCents, 0n);
+      .reduce((sum, c) => sum + c.montoCents, 0n);
     const digital = cierre.cobros
       .filter((c) => !c.esEfectivo)
-      .reduce((sum, c) => sum + c.montoBaseCents, 0n);
+      .reduce((sum, c) => sum + c.montoCents, 0n);
 
     return this.prisma.cierre.update({
       where: { id: cierreId },
       data: {
         estado: 'enviado',
         enviadoAt: new Date(),
-        efectivoGydDeclaradoCents: BigInt(dto.efectivoGydDeclaradoCents),
-        efectivoUsdDeclaradoCents: BigInt(dto.efectivoUsdDeclaradoCents),
+        efectivoDeclaradoCents: BigInt(dto.efectivoDeclaradoCents),
         digitalCents: digital,
-        totalRegistradoCents: efectivoGyd + digital,
+        totalRegistradoCents: efectivo + digital,
         notaCobrador: dto.notaCobrador,
       },
       include: { cobros: { where: { anuladoAt: null }, orderBy: { creadoAt: 'desc' } } },

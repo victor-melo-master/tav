@@ -6,7 +6,6 @@ import {
   EstadoOperacion,
   Operacion,
   Prisma,
-  Tasa,
   TipoMovimiento,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,7 +17,6 @@ import {
   MotivoRequeridoException,
   NoEncontradoException,
   SinCupoException,
-  TasaRequeridaException,
   YaAnuladoException,
 } from './ledger.exceptions';
 import { fechaCaracasHoy } from './fecha-caracas';
@@ -118,13 +116,13 @@ export class LedgerService {
             tipo: dto.tipo,
             montoOrigenCents: dto.montoOrigenCents,
             monedaOrigen: dto.monedaOrigen,
-            tasaAplicada: new Prisma.Decimal(dto.tasaAplicada), // tasa congelada
-            comisionCents: dto.comisionCents,
+            tasaAplicada: new Prisma.Decimal(dto.tasaAplicada), // precio congelado
             totalCents: dto.totalCents,
             montoDestinoCents: dto.montoDestinoCents,
             monedaDestino: dto.monedaDestino,
             beneficiario: dto.beneficiario as unknown as Prisma.InputJsonValue,
             comprobanteUrl: dto.comprobanteUrl,
+            precioCompraGyd: dto.precioCompraGyd ? new Prisma.Decimal(dto.precioCompraGyd) : null,
             ampliacionId: usaAmpliacion ? ampliacion!.id : null,
             creadaPorId: dto.creadaPorId,
             // Fase 9: toda operación entra a la cola del pagador.
@@ -204,8 +202,10 @@ export class LedgerService {
     });
     if (previo) return { cobro: previo, yaExistia: true };
 
-    const { montoBaseCents, tasa: tasaVigente } = await this.convertirAMonedaBase(dto);
-    const esEfectivo = dto.metodo === 'efectivo_usd' || dto.metodo === 'efectivo_gyd';
+    // El cajero siempre paga en guyaneses: el monto del cobro entra directo
+    // al libro, sin conversión.
+    const montoCents = dto.montoCents;
+    const esEfectivo = dto.metodo === 'efectivo_gyd';
 
     try {
       const { cobro, yaExistia } = await this.prisma.$transaction(async (tx) => {
@@ -232,7 +232,7 @@ export class LedgerService {
         }
 
         const folio = await this.nextFolio(tx, 'folio_cobro_seq', 'COB');
-        const saldoDespues = perfil.saldoCents - montoBaseCents;
+        const saldoDespues = perfil.saldoCents - montoCents;
 
         const cobro = await tx.cobro.create({
           data: {
@@ -242,9 +242,6 @@ export class LedgerService {
             cobradorId: dto.cobradorId ?? null,
             metodo: dto.metodo,
             montoCents: dto.montoCents,
-            moneda: dto.moneda,
-            tasaAplicada: tasaVigente.valor,
-            montoBaseCents,
             esEfectivo,
             cierreId: cierre?.id ?? null,
             comprobanteUrl: dto.comprobanteUrl,
@@ -257,7 +254,7 @@ export class LedgerService {
           data: {
             cajeroId: dto.cajeroId,
             tipo: TipoMovimiento.abono,
-            montoCents: -montoBaseCents,
+            montoCents: -montoCents,
             saldoDespues,
             origenTipo: 'cobro',
             origenId: cobro.id,
@@ -375,13 +372,13 @@ export class LedgerService {
       const cobroLocked = await tx.cobro.findUniqueOrThrow({ where: { id } });
       if (cobroLocked.anuladoAt) throw new YaAnuladoException('cobro', id);
 
-      const saldoDespues = perfil.saldoCents + cobro.montoBaseCents;
+      const saldoDespues = perfil.saldoCents + cobro.montoCents;
 
       await tx.movimiento.create({
         data: {
           cajeroId: cobro.cajeroId,
           tipo: TipoMovimiento.reverso_abono,
-          montoCents: cobro.montoBaseCents,
+          montoCents: cobro.montoCents,
           saldoDespues,
           origenTipo: 'cobro',
           origenId: cobro.id,
@@ -462,12 +459,12 @@ export class LedgerService {
     const abonos = await tx.cobro.findMany({
       where: { cajeroId, anuladoAt: null },
       orderBy: { creadoAt: 'asc' },
-      select: { montoBaseCents: true },
+      select: { montoCents: true },
     });
 
     // FIFO: cada abono salda el cargo más viejo con saldo pendiente.
     let abonoIdx = 0;
-    let abonoRestante = abonos.length > 0 ? abonos[0].montoBaseCents : 0n;
+    let abonoRestante = abonos.length > 0 ? abonos[0].montoCents : 0n;
 
     for (const cargo of cargos) {
       let cargoRestante = cargo.totalCents;
@@ -475,7 +472,7 @@ export class LedgerService {
         if (abonoRestante === 0n) {
           abonoIdx++;
           if (abonoIdx < abonos.length) {
-            abonoRestante = abonos[abonoIdx].montoBaseCents;
+            abonoRestante = abonos[abonoIdx].montoCents;
           }
           continue;
         }
@@ -485,7 +482,7 @@ export class LedgerService {
         if (abonoRestante === 0n) {
           abonoIdx++;
           if (abonoIdx < abonos.length) {
-            abonoRestante = abonos[abonoIdx].montoBaseCents;
+            abonoRestante = abonos[abonoIdx].montoCents;
           }
         }
       }
@@ -534,8 +531,8 @@ export class LedgerService {
     // para que RETURNING devuelva la fila también en el camino del DO UPDATE
     // (con DO NOTHING, RETURNING no devuelve nada sobre la fila existente).
     const creada = await tx.$queryRaw<{ id: string }[]>`
-      INSERT INTO "Cierre" ("id", "cobradorId", "fecha", "totalRegistradoCents", "efectivoGydDeclaradoCents", "efectivoUsdDeclaradoCents", "digitalCents", "estado")
-      VALUES (gen_random_uuid(), ${cobradorId}, ${ymd}::date, 0, 0, 0, 0, 'abierto')
+      INSERT INTO "Cierre" ("id", "cobradorId", "fecha", "totalRegistradoCents", "efectivoDeclaradoCents", "digitalCents", "estado")
+      VALUES (gen_random_uuid(), ${cobradorId}, ${ymd}::date, 0, 0, 0, 'abierto')
       ON CONFLICT ("cobradorId", "fecha") DO UPDATE
         SET "cobradorId" = EXCLUDED."cobradorId"
       RETURNING "id"
@@ -563,53 +560,20 @@ export class LedgerService {
     const [total, digital] = await Promise.all([
       tx.cobro.aggregate({
         where: { cierreId, anuladoAt: null },
-        _sum: { montoBaseCents: true },
+        _sum: { montoCents: true },
       }),
       tx.cobro.aggregate({
         where: { cierreId, anuladoAt: null, esEfectivo: false },
-        _sum: { montoBaseCents: true },
+        _sum: { montoCents: true },
       }),
     ]);
     await tx.cierre.update({
       where: { id: cierreId },
       data: {
-        totalRegistradoCents: total._sum.montoBaseCents ?? 0n,
-        digitalCents: digital._sum.montoBaseCents ?? 0n,
+        totalRegistradoCents: total._sum.montoCents ?? 0n,
+        digitalCents: digital._sum.montoCents ?? 0n,
       },
     });
-  }
-
-  /**
-   * Conversión a USD con la tasa congelada del cobro. La división usa Decimal
-   * (la tasa no es dinero) y el resultado vuelve a centavos enteros con
-   * redondeo half-up. El único punto del módulo donde hay aritmética no entera.
-   */
-  /**
-   * Convierte el monto del cobro a la moneda base (GYD) usando la tasa vigente
-   * de la moneda de cobro, leída de la tabla Tasa. El cobrador no escribe
-   * tasas: el sistema aplica la vigente. La tasa se congela en el cobro.
-   *
-   * Cada moneda de cobro tiene su propia tasa (USD_GYD, USDT_GYD, BS_GYD).
-   * USD y USDT no cotizan igual en este mercado.
-   */
-  private async convertirAMonedaBase(dto: RegistrarCobroDto): Promise<{ montoBaseCents: bigint; tasa: Tasa }> {
-    const par = `${dto.moneda}_GYD`;
-    const tasa = await this.prisma.tasa.findFirst({
-      where: { par },
-      orderBy: { vigenteDesde: 'desc' },
-    });
-    if (!tasa) throw new TasaRequeridaException();
-    if (tasa.valor.lte(0)) throw new TasaRequeridaException();
-
-    // montoBaseCents = montoCents × tasa (tasa = "GYD por unidad de moneda")
-    // Todo en Decimal para no usar float; el resultado se redondea half-up.
-    const montoBaseCents = BigInt(
-      new Prisma.Decimal(dto.montoCents.toString())
-        .mul(tasa.valor)
-        .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP)
-        .toFixed(0),
-    );
-    return { montoBaseCents, tasa };
   }
 
   /** Folios desde secuencias de Postgres, nunca contando filas. */

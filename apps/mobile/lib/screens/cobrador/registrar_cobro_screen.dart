@@ -9,7 +9,6 @@ import '../../components/tav_chip.dart';
 import '../../components/tav_field.dart';
 import '../../components/tav_kv_row.dart';
 import '../../components/tav_money_display.dart';
-import '../../data/cajero_api.dart' as cajero;
 import '../../data/cobrador_api.dart';
 import '../../state/cobrador_state.dart';
 import '../../theme/tav_colors.dart';
@@ -45,7 +44,6 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
   String _quick = 'other';
 
   CajeroCobradorDto? _cajero;
-  List<cajero.TasaDto> _tasas = [];
   CobroDto? _cobroCreado;
 
   final _notaCtrl = TextEditingController();
@@ -60,13 +58,7 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
     setState(() => _loading = true);
     try {
       final api = ref.read(cobradorApiProvider);
-      final cajeroApi = ref.read(cajero.cajeroApiProvider);
-      final results = await Future.wait([
-        api.cajeros(),
-        cajeroApi.tasasVigentes(),
-      ]);
-      _tasas = results[1] as List<cajero.TasaDto>;
-      final cajeros = results[0] as List<CajeroCobradorDto>;
+      final cajeros = await api.cajeros();
       _cajero = cajeros.where((c) => c.id == widget.cajeroId).firstOrNull;
       _error = _cajero == null ? 'No encontramos este cajero.' : null;
     } on DioException catch (e) {
@@ -78,32 +70,11 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
     }
   }
 
-  /// Tasa vigente de la moneda de cobro a GYD. Lee la par `{moneda}_GYD`
-  /// de la lista de tasas que trae la API. Para GYD es 1 (identidad).
-  double? get _tasaMonedaGyd {
-    final par = '${_metodo.moneda}_GYD';
-    final t = _tasas.where((t) => t.par == par).firstOrNull;
-    if (t == null) return null;
-    return double.tryParse(t.valor);
-  }
-
-  /// Monto equivalente en la moneda base (GYD). Multiplica por la tasa.
-  int get _montoBaseCents {
-    if (_cajero == null || _montoCents == 0) return 0;
-    final t = _tasaMonedaGyd;
-    if (t == null || t <= 0) return 0;
-    return (_montoCents * t).round();
-  }
-
+  /// El cajero siempre paga en guyaneses: el monto entra directo al libro.
   int get _deudaDespues =>
-      _cajero == null ? 0 : _cajero!.saldoCents - _montoBaseCents;
+      _cajero == null ? 0 : _cajero!.saldoCents - _montoCents;
 
-  bool get _puedeContinuar =>
-      _montoCents > 0 &&
-      (_metodo == MetodoCobro.efectivoGyd ||
-          _metodo == MetodoCobro.efectivoUsd ||
-          _metodo == MetodoCobro.usdt ||
-          _tasaMonedaGyd != null);
+  bool get _puedeContinuar => _montoCents > 0;
 
   @override
   Widget build(BuildContext context) {
@@ -151,12 +122,7 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
   Widget _buildPasoMonto() {
     final c = _cajero!;
     final chip = semaforoChipState(c.semaforo);
-    final currency = switch (_metodo) {
-      MetodoCobro.efectivoGyd => TavMoneyCurrency.gyd,
-      MetodoCobro.efectivoUsd => TavMoneyCurrency.usd,
-      MetodoCobro.usdt => TavMoneyCurrency.usdt,
-      MetodoCobro.bolivares || MetodoCobro.pagoMovil => TavMoneyCurrency.bsd,
-    };
+    const currency = TavMoneyCurrency.gyd;
 
     return Column(
       children: [
@@ -295,34 +261,26 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
   String _hintMetodo() => switch (_metodo) {
         MetodoCobro.efectivoGyd =>
             'Efectivo en guyanés. Suma a lo que debes entregar al cierre del día.',
-        MetodoCobro.efectivoUsd =>
-            'Efectivo en dólares. Suma a lo que debes entregar al cierre del día.',
-        MetodoCobro.bolivares =>
-            'Transferencia en bolívares. No suma a tu efectivo, se verifica en cuenta.',
-        MetodoCobro.pagoMovil =>
-            'Pago móvil en bolívares. No suma a tu efectivo, se verifica en cuenta.',
-        MetodoCobro.usdt =>
-            'Transferencia en USDT. No suma a tu efectivo, se verifica en wallet.',
+        MetodoCobro.transferenciaGyd =>
+            'Transferencia en guyaneses. No suma a tu efectivo, se verifica en cuenta.',
       };
 
   String _textoDeuda() {
     if (_cajero == null || _montoCents == 0) return 'Selecciona un monto';
     final saldo = _cajero!.saldoCents;
-    final base = _montoBaseCents;
-    final esBs = _metodo == MetodoCobro.bolivares || _metodo == MetodoCobro.pagoMovil;
-    final equiv = esBs ? '\nEquivale a ${formatCents(base)}' : '';
+    final base = _montoCents;
     if (base > saldo) {
-      return 'Quedará con ${formatCents(base - saldo)} a favor$equiv';
+      return 'Quedará con ${formatCents(base - saldo)} a favor';
     }
     if (base == saldo) {
-      return 'Salda la deuda completa ✓$equiv';
+      return 'Salda la deuda completa ✓';
     }
-    return 'Le quedarían ${formatCents(saldo - base)}$equiv';
+    return 'Le quedarían ${formatCents(saldo - base)}';
   }
 
   Color _colorDeuda() {
     if (_montoCents == 0) return TavColors.ink3;
-    if (_montoBaseCents == _cajero!.saldoCents) return TavColors.green600;
+    if (_montoCents == _cajero!.saldoCents) return TavColors.green600;
     return TavColors.ink3;
   }
 
@@ -387,21 +345,13 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
   void _aplicarQuick(String tipo) {
     if (_cajero == null) return;
     final saldo = _cajero!.saldoCents;
-    final esBs = _metodo == MetodoCobro.bolivares || _metodo == MetodoCobro.pagoMovil;
-    final t = _tasaMonedaGyd;
     setState(() {
       _quick = tipo;
       switch (tipo) {
         case 'all':
-          // Para saldar toda la deuda, el monto en la moneda recibida
-          // es deuda / tasa (inverso de la conversión).
-          _montoCents = esBs
-              ? (t == null ? 0 : (saldo / t).round())
-              : saldo;
+          _montoCents = saldo;
         case 'half':
-          _montoCents = esBs
-              ? (t == null ? 0 : (saldo / t / 2).round())
-              : saldo ~/ 2;
+          _montoCents = saldo ~/ 2;
         default:
           _montoCents = 0;
       }
@@ -411,12 +361,12 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
   // Paso 1: confirmación
   Widget _buildPasoConfirmar() {
     final c = _cajero!;
-    final montoBase = _montoBaseCents;
+    final montoBase = _montoCents;
     final deudaDespues = _deudaDespues;
     final cierre = _cierreActual();
     final efectivoPasaA = _metodo.esEfectivo
-        ? (cierre?.efectivoTotalGydCents ?? 0) + montoBase
-        : (cierre?.efectivoTotalGydCents ?? 0);
+        ? (cierre?.efectivoCents ?? 0) + montoBase
+        : (cierre?.efectivoCents ?? 0);
 
     return Column(
       children: [
@@ -538,13 +488,6 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
 
   Future<void> _confirmar() async {
     if (_cajero == null || _montoCents == 0) return;
-    final requiereTasa = _metodo != MetodoCobro.efectivoGyd &&
-        _metodo != MetodoCobro.efectivoUsd;
-    final t = _tasaMonedaGyd;
-    if (requiereTasa && (t == null || t <= 0)) {
-      _toast('No hay tasa vigente para ${_metodo.moneda}.');
-      return;
-    }
     setState(() => _guardando = true);
     try {
       final api = ref.read(cobradorApiProvider);
@@ -553,8 +496,6 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
         cajeroId: _cajero!.id,
         metodo: _metodo.valor,
         montoCents: _montoCents.toString(),
-        moneda: _metodo.moneda,
-        // La tasa la lee el servicio de la base; no la enviamos.
         nota: _notaCtrl.text.isEmpty ? null : _notaCtrl.text,
       );
       final result = await api.registrarCobro(req);
@@ -579,8 +520,8 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
     final c = _cajero!;
     final cobro = _cobroCreado!;
     final cierre = _cierreActual();
-    final efectivo = cierre?.efectivoTotalGydCents ?? 0;
-    final deudaCajero = c.saldoCents - cobro.montoBaseCents;
+    final efectivo = cierre?.efectivoCents ?? 0;
+    final deudaCajero = c.saldoCents - cobro.montoCents;
 
     return Column(
       children: [
@@ -631,7 +572,7 @@ class _RegistrarCobroScreenState extends ConsumerState<RegistrarCobroScreen> {
                   children: [
                     TavKvRow(label: 'N° de registro', value: '#${cobro.folio}'),
                     TavKvRow(label: 'Cajero', value: c.nombre),
-                    TavKvRow(label: 'Monto', value: formatCents(cobro.montoBaseCents)),
+                    TavKvRow(label: 'Monto', value: formatCents(cobro.montoCents)),
                     TavKvRow(label: 'Método', value: cobro.metodo.label),
                     TavKvRow(label: 'Hora', value: horaAmPm(cobro.creadoAt)),
                     TavKvRow(
@@ -832,10 +773,7 @@ class _MethodSelector extends StatelessWidget {
 
   IconData _icono(MetodoCobro m) => switch (m) {
         MetodoCobro.efectivoGyd => Icons.payments_outlined,
-        MetodoCobro.efectivoUsd => Icons.payments_outlined,
-        MetodoCobro.bolivares => Icons.account_balance_wallet_outlined,
-        MetodoCobro.pagoMovil => Icons.phone_iphone_outlined,
-        MetodoCobro.usdt => Icons.currency_bitcoin,
+        MetodoCobro.transferenciaGyd => Icons.account_balance_outlined,
       };
 }
 

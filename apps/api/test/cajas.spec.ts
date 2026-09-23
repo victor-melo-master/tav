@@ -19,13 +19,14 @@ import argon2 from 'argon2';
 import { AppModule } from '../src/app.module';
 import { LedgerExceptionFilter } from '../src/ledger-exception.filter';
 import { CajaExceptionFilter } from '../src/cajas/caja-exception.filter';
+import { CajaService } from '../src/cajas/caja.service';
 
 const TEST_URL = 'postgresql://tav:tav@localhost:5432/tav_test?schema=public';
 const prisma = new PrismaClient({ datasources: { db: { url: TEST_URL } } });
 
 const TABLAS = [
-  'MovimientoCaja', 'Caja', 'PublicacionTasaItem', 'PublicacionTasas',
-  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Tasa', 'Operacion', 'Cobro',
+  'MovimientoCaja', 'Caja', 'PrecioCajeroServicio',
+  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Operacion', 'Cobro',
   'Movimiento', 'AmpliacionCredito', 'Cierre', 'Atencion', 'Aviso', 'AuditLog',
   'Config', 'Corredor',
 ];
@@ -63,23 +64,26 @@ async function login(email: string, password: string): Promise<string> {
   return res.body.accessToken;
 }
 
-/** Crea la caja madre USDT y una caja de corredor BS. Devuelve sus IDs. */
+/** Crea la caja madre USDT, una caja física BS y un servicio BCV que la
+ *  referencia. Devuelve sus IDs. */
 async function crearCajas(): Promise<{ madreId: string; corredorId: string; cajaBsId: string }> {
   const admin = await prisma.usuario.findFirst({ where: { rol: 'admin' } });
   const adminId = admin!.id;
 
+  const madre = await prisma.caja.create({
+    data: { esMadre: true, moneda: 'USDT', nombre: 'Caja madre USDT', pais: null, saldoCents: 0n },
+  });
+  const cajaBs = await prisma.caja.create({
+    data: { esMadre: false, moneda: 'BS', nombre: 'Bolívares en cuenta', pais: 'VEN', saldoCents: 0n },
+  });
   const corredor = await prisma.corredor.create({
     data: {
       pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
       formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      servicio: 'bcv', servicioNombre: 'BCV',
+      cajaId: cajaBs.id,
       creadoPorId: adminId,
     },
-  });
-  const madre = await prisma.caja.create({
-    data: { esMadre: true, moneda: 'USDT', saldoCents: 0n },
-  });
-  const cajaBs = await prisma.caja.create({
-    data: { corredorId: corredor.id, esMadre: false, moneda: 'BS', saldoCents: 0n },
   });
   return { madreId: madre.id, corredorId: corredor.id, cajaBsId: cajaBs.id };
 }
@@ -116,6 +120,7 @@ describe('Fase 9 Bloque 4 — Cajas (tesorería)', () => {
         clientUuid: crypto.randomUUID(),
         cajaMadreId: madreId,
         montoCents: '1000000',
+        precioCompraGyd: '237',
         motivo: 'Capital inicial',
       });
     expect(resIng.status).toBe(201);
@@ -159,6 +164,7 @@ describe('Fase 9 Bloque 4 — Cajas (tesorería)', () => {
         clientUuid: crypto.randomUUID(),
         cajaMadreId: madreId,
         montoCents: '1000000',
+        precioCompraGyd: '237',
         motivo: 'Capital',
       });
     const resAbr = await request(app.getHttpServer())
@@ -222,6 +228,7 @@ describe('Fase 9 Bloque 4 — Cajas (tesorería)', () => {
         clientUuid: crypto.randomUUID(),
         cajaMadreId: madreId,
         montoCents: '1000000',
+        precioCompraGyd: '237',
         motivo: 'Capital',
       });
     await request(app.getHttpServer())
@@ -243,16 +250,18 @@ describe('Fase 9 Bloque 4 — Cajas (tesorería)', () => {
       data: { umbralAlertaCents: 10_000_000n },
     });
 
-    // Crear una segunda caja de corredor (USD) para el caso de negativo.
-    const corredorUsd = await prisma.corredor.create({
+    // Crear una segunda caja física (USD) y un servicio efectivo para el caso de negativo.
+    const cajaUsd = await prisma.caja.create({
+      data: { esMadre: false, moneda: 'USD', nombre: 'USD en efectivo', pais: 'VEN', saldoCents: 0n },
+    });
+    await prisma.corredor.create({
       data: {
         pais: 'VEN', paisNombre: 'Venezuela', moneda: 'USD', monedaNombre: 'Dólares',
         formaEntrega: 'efectivo', formaEntregaNombre: 'Efectivo en mano',
+        servicio: 'efectivo', servicioNombre: 'Efectivo en mano',
+        cajaId: cajaUsd.id,
         creadoPorId: admin.id,
       },
-    });
-    const cajaUsd = await prisma.caja.create({
-      data: { corredorId: corredorUsd.id, esMadre: false, moneda: 'USD', saldoCents: 0n },
     });
     // Abrir la caja USD con 200 USDT.
     await request(app.getHttpServer())
@@ -340,6 +349,7 @@ describe('Fase 9 Bloque 4 — Cajas (tesorería)', () => {
         clientUuid: crypto.randomUUID(),
         cajaMadreId: madreId,
         montoCents: '1000000',
+        precioCompraGyd: '237',
         motivo: 'Capital',
       });
     const resAbr = await request(app.getHttpServer())
@@ -396,6 +406,7 @@ describe('Fase 9 Bloque 4 — Cajas (tesorería)', () => {
         clientUuid: crypto.randomUUID(),
         cajaMadreId: madreId,
         montoCents: '500000',
+        precioCompraGyd: '237',
         motivo: 'Test',
       });
 
@@ -421,6 +432,7 @@ describe('Fase 9 Bloque 4 — Cajas (tesorería)', () => {
         clientUuid: crypto.randomUUID(),
         cajaMadreId: madreId,
         montoCents: '500000',
+        precioCompraGyd: '237',
         motivo: '',
       });
     // class-validator rechaza motivo vacío con 400 (IsNotEmpty).
@@ -440,6 +452,7 @@ describe('Fase 9 Bloque 4 — Cajas (tesorería)', () => {
         clientUuid: crypto.randomUUID(),
         cajaMadreId: madreId,
         montoCents: '1000000',
+        precioCompraGyd: '237',
         motivo: 'Capital',
       });
 
@@ -458,5 +471,183 @@ describe('Fase 9 Bloque 4 — Cajas (tesorería)', () => {
     expect(res.status).toBe(400);
     // El mensaje de error menciona la incoherencia.
     expect(JSON.stringify(res.body)).toContain('cuadra');
+  });
+});
+
+// ─────────────────────── PRECIO DE COMPRA DEL USDT ───────────────────────
+
+describe('CajaService — precio de compra del USDT', () => {
+  test('ingresarCajaMadre guarda precioCompraGyd en el movimiento', async () => {
+    const admin = await crearAdmin('admin-pc1@tav.test');
+    const token = await login(admin.email, admin.password);
+    const { madreId } = await crearCajas();
+
+    const res = await request(app.getHttpServer())
+      .post('/cajas/ingreso-madre')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaMadreId: madreId,
+        montoCents: '1000000',
+        precioCompraGyd: '237',
+        motivo: 'Compra de USDT a 237',
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.movimiento.precioCompraGyd).toBe('237');
+  });
+
+  test('ingresarCajaMadre rechaza precioCompraGyd <= 0', async () => {
+    const admin = await crearAdmin('admin-pc2@tav.test');
+    const token = await login(admin.email, admin.password);
+    const { madreId } = await crearCajas();
+
+    const res = await request(app.getHttpServer())
+      .post('/cajas/ingreso-madre')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaMadreId: madreId,
+        montoCents: '1000000',
+        precioCompraGyd: '0',
+        motivo: 'Precio cero',
+      });
+    // TasaInvalidaException → 422 (precio <= 0).
+    expect(res.status).toBe(422);
+  });
+
+  test('ingresarCajaMadre rechaza precioCompraGyd negativo', async () => {
+    const admin = await crearAdmin('admin-pc3@tav.test');
+    const token = await login(admin.email, admin.password);
+    const { madreId } = await crearCajas();
+
+    const res = await request(app.getHttpServer())
+      .post('/cajas/ingreso-madre')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaMadreId: madreId,
+        montoCents: '1000000',
+        precioCompraGyd: '-5',
+        motivo: 'Precio negativo',
+      });
+    // class-validator rechaza precio negativo (regex no acepta '-') con 400.
+    expect(res.status).toBe(400);
+  });
+
+  test('precioCompraVigente devuelve el precio del ingreso más reciente', async () => {
+    const admin = await crearAdmin('admin-pc4@tav.test');
+    const token = await login(admin.email, admin.password);
+    const { madreId } = await crearCajas();
+    const cajas = app.get(CajaService);
+
+    // Primer ingreso a 230.
+    await request(app.getHttpServer())
+      .post('/cajas/ingreso-madre')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaMadreId: madreId,
+        montoCents: '500000',
+        precioCompraGyd: '230',
+        motivo: 'Compra a 230',
+      });
+
+    // Segundo ingreso a 237 — este es el vigente.
+    await request(app.getHttpServer())
+      .post('/cajas/ingreso-madre')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaMadreId: madreId,
+        montoCents: '500000',
+        precioCompraGyd: '237',
+        motivo: 'Compra a 237',
+      });
+
+    const vigente = await cajas.precioCompraVigente(new Date());
+    expect(vigente?.toString()).toBe('237');
+  });
+
+  test('precioCompraVigente es determinista: dos ingresos el mismo instante, el de mayor seq manda', async () => {
+    const admin = await crearAdmin('admin-pc5@tav.test');
+    const { madreId } = await crearCajas();
+    const cajas = app.get(CajaService);
+
+    // Insertar dos ingresos directamente con el mismo creadoAt para
+    // forzar el desempate por seq.
+    const fecha = new Date();
+    await prisma.movimientoCaja.create({
+      data: {
+        cajaId: madreId,
+        tipo: 'ingreso',
+        montoCents: 100_000n,
+        saldoDespues: 100_000n,
+        origenTipo: 'ingreso',
+        origenId: crypto.randomUUID(),
+        clientUuid: crypto.randomUUID(),
+        motivo: 'Primero (seq menor)',
+        precioCompraGyd: new (require('@prisma/client').Prisma).Decimal('230'),
+        registradoPorId: admin.id,
+        creadoAt: fecha,
+      },
+    });
+    await prisma.movimientoCaja.create({
+      data: {
+        cajaId: madreId,
+        tipo: 'ingreso',
+        montoCents: 100_000n,
+        saldoDespues: 200_000n,
+        origenTipo: 'ingreso',
+        origenId: crypto.randomUUID(),
+        clientUuid: crypto.randomUUID(),
+        motivo: 'Segundo (seq mayor, manda)',
+        precioCompraGyd: new (require('@prisma/client').Prisma).Decimal('240'),
+        registradoPorId: admin.id,
+        creadoAt: fecha,
+      },
+    });
+
+    const vigente = await cajas.precioCompraVigente(fecha);
+    expect(vigente?.toString()).toBe('240');
+  });
+
+  test('precioCompraVigente devuelve null si no hay ingresos', async () => {
+    const cajas = app.get(CajaService);
+    const vigente = await cajas.precioCompraVigente(new Date());
+    // Puede haber ingresos de otros tests, pero si buscamos en una fecha
+    // anterior a todo, debe ser null.
+    const antigua = new Date(2000, 0, 1);
+    const vigenteAntigua = await cajas.precioCompraVigente(antigua);
+    expect(vigenteAntigua).toBeNull();
+  });
+
+  test('precioCompraVigente no devuelve ingresos futuros', async () => {
+    const admin = await crearAdmin('admin-pc6@tav.test');
+    const token = await login(admin.email, admin.password);
+    const { madreId } = await crearCajas();
+    const cajas = app.get(CajaService);
+
+    // Ingreso con fecha futura (mañana).
+    const manana = new Date();
+    manana.setDate(manana.getDate() + 1);
+    await prisma.movimientoCaja.create({
+      data: {
+        cajaId: madreId,
+        tipo: 'ingreso',
+        montoCents: 100_000n,
+        saldoDespues: 100_000n,
+        origenTipo: 'ingreso',
+        origenId: crypto.randomUUID(),
+        clientUuid: crypto.randomUUID(),
+        motivo: 'Ingreso futuro',
+        precioCompraGyd: new (require('@prisma/client').Prisma).Decimal('999'),
+        registradoPorId: admin.id,
+        creadoAt: manana,
+      },
+    });
+
+    // Buscar el vigente hoy: no debe incluir el ingreso futuro.
+    const vigente = await cajas.precioCompraVigente(new Date());
+    expect(vigente?.toString()).not.toBe('999');
   });
 });

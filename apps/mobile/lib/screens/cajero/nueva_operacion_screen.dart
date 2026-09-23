@@ -40,9 +40,9 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
   CorredorDto? _corredor;
   String _montoStr = ''; // en centavos como string
 
-  // La tasa cotizada del corredor elegido. Es string decimal.
-  String get _tasaValor => _corredor?.tasaCotizada ?? '';
-  String get _monedaDestino => _corredor?.moneda ?? 'BS';
+  // El precio del servicio elegido (GYD por dólar), fijado por el admin para
+  // este cajero. Es string decimal. La deuda la calcula el servidor.
+  String get _precioGyd => _corredor?.precioGyd ?? '';
   String get _monedaOrigen => 'USDT'; // Fase 9: el cajero envía USDT
   String get _tipo => 'usdt_${_corredor?.moneda.toLowerCase() ?? 'bs'}';
 
@@ -69,14 +69,13 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
 
   int get _montoCents => int.tryParse(_montoStr) ?? 0;
 
-  /// Tasa escalada a 8 decimales como entero, para multiplicar sin double.
+  /// Precio escalado a 8 decimales como entero, para multiplicar sin double.
   ///
   /// "1.3359375" → 133593750 (1.3359375 × 10^8).
   /// "285.4"     → 28540000000 (285.4 × 10^8).
-  /// Si la tasa tiene más de 8 decimales, se trunca a 8 (la precisión de
-  /// Decimal(18,8) del backend).
-  int get _tasaEscalada {
-    final s = _tasaValor;
+  /// Si el precio tiene más de 8 decimales, se trunca a 8.
+  int get _precioEscalado {
+    final s = _precioGyd;
     if (s.isEmpty) return 0;
     final dot = s.indexOf('.');
     if (dot < 0) return int.parse(s) * 100000000;
@@ -89,18 +88,18 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
     return int.parse('$enteros$decimales');
   }
 
-  // La comisión va implícita dentro de la tasa (docs/01-reglas-de-negocio.md).
-  // El cajero no paga cargo aparte: debe exactamente lo que envía.
-  int get _comisionCents => 0;
-  int get _totalCents => _montoCents;
+  // La comisión va implícita dentro del precio (docs/01-reglas-de-negocio.md).
+  // El cajero no paga cargo aparte: debe exactamente lo que envía × el precio.
+  // El servidor calcula la deuda; el cliente solo la muestra.
 
-  /// montoDestino = round_half_up(montoCents × tasaEscalada / 10^8)
+  /// Deuda en GYD centavos = round_half_up(montoUsdCents × precioGyd).
   ///
   /// Aritmética entera pura, sin double. Coincide con lo que calcula el
   /// servidor con Decimal + ROUND_HALF_UP, porque ambos escalan a 8
-  /// decimales y redondean half-up.
-  int get _montoDestinoCents {
-    final producto = _montoCents * _tasaEscalada;
+  /// decimales y redondean half-up. 100 USD a 240 = 10000 × 240 = 2.400.000
+  /// cents = 24.000 GYD.
+  int get _deudaGydCents {
+    final producto = _montoCents * _precioEscalado;
     return (producto + 50000000) ~/ 100000000;
   }
 
@@ -166,9 +165,6 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
           tipo: _tipo,
           montoOrigenCents: _montoCents.toString(),
           monedaOrigen: _monedaOrigen,
-          comisionCents: _comisionCents.toString(),
-          totalCents: _totalCents.toString(),
-          monedaDestino: _monedaDestino,
           beneficiario: BeneficiarioOperacionDto(
             nombre: _benefNombreController.text.trim(),
             documento: _benefDocController.text.trim(),
@@ -364,11 +360,11 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
                           ],
                         ),
                         const Divider(height: 28),
-                        Text('Tu beneficiario recibe',
+                        Text('Debes',
                             style: TavText.caption.copyWith(color: TavColors.ink3)),
                         const SizedBox(height: 3),
                         Text(
-                          '${simboloMoneda(_monedaDestino)}${_formatMonto(_montoDestinoCents)}',
+                          'G\$ ${_formatMonto(_deudaGydCents)}',
                           style: TavText.h2.copyWith(
                             fontSize: 22,
                             color: TavColors.green600,
@@ -383,7 +379,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
                 TavCard(
                   child: Column(
                     children: [
-                      _kvRow('Tasa aplicada', '${_formatTasa(_tasaValor)} $_monedaDestino/USDT'),
+                      _kvRow('Precio aplicado', 'G\$ ${_formatTasa(_precioGyd)} / USD'),
                       const Divider(height: 16),
                       _kvRowDisponible(),
                     ],
@@ -883,13 +879,13 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
             child: Center(
               child: Column(
                 children: [
-                  Text('Tu beneficiario recibe',
+                  Text('Debes',
                       style: TavText.caption.copyWith(color: const Color(0xFF9EC0EC))),
                   const SizedBox(height: 5),
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      '${simboloMoneda(_monedaDestino)}${_formatMonto(_montoDestinoCents)}',
+                      'G\$ ${_formatMonto(_deudaGydCents)}',
                       style: TavText.moneyDisplay.copyWith(fontSize: 30, color: TavColors.surface),
                     ),
                   ),
@@ -910,7 +906,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
               children: [
                 _kvRow('Destino', _corredor?.paisNombre ?? '—'),
                 _kvRow('Entrega', _corredor?.formaEntregaNombre ?? '—'),
-                _kvRow('Tasa aplicada', '${_formatTasa(_tasaValor)} $_monedaDestino'),
+                _kvRow('Precio', 'G\$ ${_formatTasa(_precioGyd)} / USD'),
               ],
             ),
           ),
@@ -1088,7 +1084,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
     if (resumenState is CajeroDataLoaded<ResumenDto>) {
       disponible = resumenState.data.disponibleCents;
     }
-    final suficiente = disponible >= _totalCents;
+    final suficiente = disponible >= _deudaGydCents;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
@@ -1175,7 +1171,7 @@ class _CorredorCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 9),
                   Text(
-                    'Tasa · ${_formatTasaStatic(corredor.tasaCotizada)} ${corredor.moneda} / USDT',
+                    'Precio · G\$ ${_formatTasaStatic(corredor.precioGyd)} / USD',
                     style: TavText.caption.copyWith(color: TavColors.ink3),
                   ),
                 ],

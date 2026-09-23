@@ -124,8 +124,11 @@ topa su cupo en dos días. Por eso el orden de la lista de cobro lo encabezan lo
   cuándo el cajero anda cerca. **No hay ruta planificada**, hay lista de prioridad.
 - **El cajero no confirma el cobro.** Al registrarlo, queda 100% cargado al sistema.
 - Corregir un cobro exige **anularlo con motivo escrito**. Queda visible para el admin.
-- Métodos: efectivo USD, bolívares, pago móvil, USDT.
-  Solo el **efectivo** suma a lo que el cobrador debe entregar físicamente.
+- **El cajero siempre paga en guyaneses (GYD).** Confirmado por el cliente el
+  19 de septiembre. No hay cobros en otras monedas ni conversión al registrar.
+- Métodos: `efectivo_gyd` (billetes en mano) y `transferencia_gyd` (se verifica
+  en cuenta). Solo el **efectivo** suma a lo que el cobrador debe entregar
+  físicamente.
 
 ### Cierre diario
 
@@ -133,15 +136,11 @@ topa su cupo en dos días. Por eso el orden de la lista de cobro lo encabezan lo
 - **No hay hora límite** definida.
 - Al cerrar declara: total registrado, cuánto es efectivo (lo que entrega en mano)
   y cuánto es digital (verificable en cuenta).
-- **El efectivo se declara por moneda física, no convertido.** El cobrador lleva
-  billetes guyaneses (GYD) y billetes americanos (USD): son dos pilas distintas
-  que el admin cuenta por separado. Declarar un solo total convertido en GYD
-  vuelve imposible la verificación, porque el admin recibe las dos monedas en
-  mano y no puede comparar contra un número mezclado.
-- El **admin verifica** el efectivo recibido contra lo declarado, **por moneda**.
-  Si hay diferencia en cualquiera de las dos, queda registrada y la nota es
-  obligatoria.
-- Lo digital —bolívares, pago móvil, USDT— no se entrega en mano: se verifica
+- **El cajero siempre paga en guyaneses**, así que el cierre declara una sola
+  pila de efectivo GYD. No hay efectivo en otras monedas.
+- El **admin verifica** el efectivo recibido contra lo declarado.
+  Si hay diferencia, queda registrada y la nota es obligatoria.
+- Lo digital —transferencia GYD— no se entrega en mano: se verifica
   en cuenta y no entra en el cuadre de efectivo.
 - Un cierre no puede enviarse con cobros pendientes de sincronizar.
 

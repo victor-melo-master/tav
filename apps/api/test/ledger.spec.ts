@@ -41,7 +41,7 @@ const semaforo = new SemaforoService(prisma);
 const ACTOR = 'actor-admin-test';
 
 const TABLAS = [
-  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Tasa', 'Operacion', 'Cobro',
+  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Operacion', 'Cobro',
   'Movimiento', 'AmpliacionCredito', 'Cierre', 'Atencion', 'Aviso', 'AuditLog',
   'Config',
 ];
@@ -67,24 +67,6 @@ async function seedConfig(): Promise<void> {
       { clave: 'semaforo.pct_ambar', valor: '0.75' },
     ],
     skipDuplicates: true,
-  });
-}
-
-/**
- * Siembra las tasas de conversión a GYD (moneda base) que el servicio lee
- * de la base. USD_GYD = 1 en los tests para que los montos USD pasen tal
- * cual y los tests del ledger se concentren en la mecánica del libro, no
- * en el factor de conversión. La conversión real se prueba en Caso 11
- * con BS_GYD.
- */
-async function seedTasas(): Promise<void> {
-  await prisma.tasa.createMany({
-    data: [
-      { id: uuid(), par: 'GYD_GYD', valor: 1.0, creadaPorId: ACTOR, vigenteDesde: new Date() },
-      { id: uuid(), par: 'USD_GYD', valor: 1.0, creadaPorId: ACTOR, vigenteDesde: new Date() },
-      { id: uuid(), par: 'USDT_GYD', valor: 1.0, creadaPorId: ACTOR, vigenteDesde: new Date() },
-      { id: uuid(), par: 'BS_GYD', valor: 0.732314, creadaPorId: ACTOR, vigenteDesde: new Date() },
-    ],
   });
 }
 
@@ -154,7 +136,6 @@ function opDto(opts: {
   totalCents: bigint;
   clientUuid?: string;
   montoOrigenCents?: bigint;
-  comisionCents?: bigint;
   tasaAplicada?: string;
   creadaPorId?: string;
 }): RegistrarOperacionDto {
@@ -165,7 +146,6 @@ function opDto(opts: {
     montoOrigenCents: opts.montoOrigenCents ?? opts.totalCents,
     monedaOrigen: 'USDT',
     tasaAplicada: opts.tasaAplicada ?? '285.4',
-    comisionCents: opts.comisionCents ?? 0n,
     totalCents: opts.totalCents,
     montoDestinoCents: 0n,
     monedaDestino: 'BS',
@@ -174,7 +154,7 @@ function opDto(opts: {
       documento: 'V12345678',
       banco: 'Banesco',
       cuenta: '01234567890',
-      metodo: 'pago_movil',
+      metodo: 'transferencia_gyd',
     },
     creadaPorId: opts.creadaPorId ?? ACTOR,
   };
@@ -184,9 +164,7 @@ function opDto(opts: {
 function cobroDto(opts: {
   cajeroId: string;
   montoCents: bigint;
-  moneda?: 'GYD' | 'USD' | 'BS' | 'USDT';
   metodo?: MetodoCobro;
-  tasaAplicada?: string | null;
   cobradorId?: string | null;
   clientUuid?: string;
 }): RegistrarCobroDto {
@@ -194,10 +172,8 @@ function cobroDto(opts: {
     clientUuid: opts.clientUuid ?? uuid(),
     cajeroId: opts.cajeroId,
     cobradorId: opts.cobradorId ?? null,
-    metodo: opts.metodo ?? 'efectivo_usd',
+    metodo: opts.metodo ?? 'efectivo_gyd',
     montoCents: opts.montoCents,
-    moneda: opts.moneda ?? 'USD',
-    tasaAplicada: opts.tasaAplicada ?? null,
     registradoPorId: ACTOR,
   };
 }
@@ -256,7 +232,6 @@ afterAll(async () => {
 beforeEach(async () => {
   await truncateTodo();
   await seedConfig();
-  await seedTasas();
 });
 
 afterEach(async () => {
@@ -625,7 +600,7 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
     const { cobro } = await ledger.registrarCobro(
       cobroDto({ cajeroId: c.id, montoCents: 100_000n }),
     );
-    expect(cobro.montoBaseCents).toBe(100_000n);
+    expect(cobro.montoCents).toBe(100_000n);
 
     const p = await perfil(c.id);
     expect(p.saldoCents).toBe(-40_000n);
@@ -654,139 +629,31 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
     // cálculos coinciden; el contrato exige comportarse por Caracas siempre.
   });
 
-  test('Caso 11 — redondeo BS→GYD half-up: 1 Bs cent con tasa 0.732314 → 1 centavo GYD (redondea arriba), no se rechaza', async () => {
+  test('Caso 11 — cobro en efectivo GYD baja la deuda por el monto exacto', async () => {
     const c = await crearCajero({ limiteCents: 100_000n });
     await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
 
     const saldoAntes = (await perfil(c.id)).saldoCents;
 
-    // 1 Bs cent × 0.732314 = 0.732314 → redondea half-up a 1 GYD cent
+    // El cajero siempre paga en guyaneses: 10.000 GYD cents entran directo al libro.
     const { cobro } = await ledger.registrarCobro(
-      cobroDto({
-        cajeroId: c.id,
-        montoCents: 1n,
-        moneda: 'BS',
-        metodo: 'pago_movil',
-      }),
+      cobroDto({ cajeroId: c.id, montoCents: 10_000n, metodo: 'efectivo_gyd' }),
     );
-    expect(cobro.montoBaseCents).toBe(1n);
-    // abono de 1 → saldo baja en 1
-    expect((await perfil(c.id)).saldoCents).toBe(saldoAntes - 1n);
-
-    // caso redondo: 1.000.000 Bs cents × 0.732314 = 732.314 GYD cents
-    const { cobro: cobro2 } = await ledger.registrarCobro(
-      cobroDto({
-        cajeroId: c.id,
-        montoCents: 1_000_000n,
-        moneda: 'BS',
-        metodo: 'pago_movil',
-        clientUuid: uuid(),
-      }),
-    );
-    expect(cobro2.montoBaseCents).toBe(732_314n);
-  });
-
-  test('Caso 11b — conversión USD→GYD con tasa 209: 100 USD cents → 20.900 GYD cents', async () => {
-    // Este test aísla la conversión de dólares. Reescribe la tasa USD_GYD
-    // sembrada en beforeEach (que es 1) a 209, para ejercitar la rama real.
-    await prisma.tasa.updateMany({
-      where: { par: 'USD_GYD' },
-      data: { valor: 209.0 },
-    });
-
-    const c = await crearCajero({ limiteCents: 100_000n });
-    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
-
-    // 100 USD cents × 209 = 20.900 GYD cents
-    const { cobro } = await ledger.registrarCobro(
-      cobroDto({
-        cajeroId: c.id,
-        montoCents: 100n,
-        moneda: 'USD',
-        metodo: 'efectivo_usd',
-      }),
-    );
-    expect(cobro.montoBaseCents).toBe(20_900n);
-    expect(cobro.tasaAplicada?.toString()).toBe('209');
-  });
-
-  test('Caso 11c — conversión USDT→GYD con tasa propia (208): 500 USDT cents → 104.000 GYD cents', async () => {
-    // USDT no cotiza igual que USD. Reescribe USDT_GYD a 208 para
-    // ejercitar la rama con una tasa distinta.
-    await prisma.tasa.updateMany({
-      where: { par: 'USDT_GYD' },
-      data: { valor: 208.0 },
-    });
-
-    const c = await crearCajero({ limiteCents: 200_000n });
-    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
-
-    // 500 USDT cents × 208 = 104.000 GYD cents
-    const { cobro } = await ledger.registrarCobro(
-      cobroDto({
-        cajeroId: c.id,
-        montoCents: 500n,
-        moneda: 'USDT',
-        metodo: 'usdt',
-      }),
-    );
-    expect(cobro.montoBaseCents).toBe(104_000n);
-    expect(cobro.tasaAplicada?.toString()).toBe('208');
-  });
-
-  test('Caso 11d — cobro en efectivo GYD no pide tasa y baja la deuda por el monto exacto', async () => {
-    const c = await crearCajero({ limiteCents: 100_000n });
-    await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
-
-    const saldoAntes = (await perfil(c.id)).saldoCents;
-
-    // 10.000 GYD cents → 10.000 GYD cents (tasa 1, sin conversión)
-    const { cobro } = await ledger.registrarCobro(
-      cobroDto({
-        cajeroId: c.id,
-        montoCents: 10_000n,
-        moneda: 'GYD',
-        metodo: 'efectivo_gyd',
-      }),
-    );
-    expect(cobro.montoBaseCents).toBe(10_000n);
-    expect(cobro.tasaAplicada?.toString()).toBe('1');
+    expect(cobro.montoCents).toBe(10_000n);
     expect(cobro.esEfectivo).toBe(true);
     expect((await perfil(c.id)).saldoCents).toBe(saldoAntes - 10_000n);
   });
 
-  test('Caso 11e — cobro BS congela la tasa de la BD y no confía en la del cliente', async () => {
-    // Reescribe la tasa BS_GYD sembrada (0.732314) a 0.5 para aislar la rama.
-    await prisma.tasa.updateMany({
-      where: { par: 'BS_GYD' },
-      data: { valor: 0.5 },
-    });
-
+  test('Caso 11b — cobro por transferencia GYD no suma al efectivo', async () => {
     const c = await crearCajero({ limiteCents: 100_000n });
     await ledger.registrarOperacion(opDto({ cajeroId: c.id, totalCents: 60_000n }));
 
-    // El cliente envía tasaAplicada = 999 (un valor falso). El servicio
-    // debe ignorarlo y leer 0.5 de la base. 1.000.000 Bs × 0.5 = 500.000 GYD.
     const { cobro } = await ledger.registrarCobro(
-      cobroDto({
-        cajeroId: c.id,
-        montoCents: 1_000_000n,
-        moneda: 'BS',
-        metodo: 'pago_movil',
-        tasaAplicada: '999',
-      }),
+      cobroDto({ cajeroId: c.id, montoCents: 20_000n, metodo: 'transferencia_gyd' }),
     );
-    expect(cobro.montoBaseCents).toBe(500_000n);
-    expect(cobro.tasaAplicada?.toString()).toBe('0.5');
-
-    // Cambiar la tasa en la BD después del cobro no altera el cobro histórico.
-    await prisma.tasa.updateMany({
-      where: { par: 'BS_GYD' },
-      data: { valor: 0.9 },
-    });
-    const cobroRecargado = await prisma.cobro.findUnique({ where: { id: cobro.id } });
-    expect(cobroRecargado?.tasaAplicada?.toString()).toBe('0.5');
-    expect(cobroRecargado?.montoBaseCents).toBe(500_000n);
+    expect(cobro.montoCents).toBe(20_000n);
+    expect(cobro.esEfectivo).toBe(false);
+    expect((await perfil(c.id)).saldoCents).toBe(40_000n);
   });
 
   test('Caso 11f — cobro que deja saldo a favor queda con saldo negativo', async () => {
@@ -795,14 +662,9 @@ describe('Bloque 2 — casos 1-12 del contrato (comportamiento acordado)', () =>
 
     // Cobra 80.000 GYD contra deuda de 60.000 → queda con 20.000 a favor.
     const { cobro } = await ledger.registrarCobro(
-      cobroDto({
-        cajeroId: c.id,
-        montoCents: 80_000n,
-        moneda: 'GYD',
-        metodo: 'efectivo_gyd',
-      }),
+      cobroDto({ cajeroId: c.id, montoCents: 80_000n }),
     );
-    expect(cobro.montoBaseCents).toBe(80_000n);
+    expect(cobro.montoCents).toBe(80_000n);
     expect((await perfil(c.id)).saldoCents).toBe(-20_000n);
   });
 
@@ -1030,17 +892,17 @@ describe('PENDIENTE DE DEFINIR — comportamiento actual, sujeto a decisión del
   });
 
   test('Caso 18 — no se valida la coherencia aritmética del DTO de operación', async () => {
-    // PREGUNTA ABIERTA: ¿debe validarse totalCents == montoOrigenCents + comisionCents
-    //   y montoDestinoCents vs tasa? Hoy el ledger asienta lo que le mandan.
+    // El ledger asienta lo que le mandan — no comprueba que totalCents ==
+    // montoOrigenCents × tasaAplicada. La coherencia la valida la capa HTTP
+    // (CajeroService calcula totalCents), no el ledger.
     const c = await crearCajero({ limiteCents: 100_000n });
 
-    // DTO incoherente: montoOrigen 10.000 + comisión 5.000 ≠ total 60.000
+    // DTO incoherente: montoOrigen 10.000 × tasa 285.4 ≠ total 60.000
     const { operacion } = await ledger.registrarOperacion(
       opDto({
         cajeroId: c.id,
         totalCents: 60_000n,
         montoOrigenCents: 10_000n,
-        comisionCents: 5_000n,
       }),
     );
     expect(operacion.totalCents).toBe(60_000n);

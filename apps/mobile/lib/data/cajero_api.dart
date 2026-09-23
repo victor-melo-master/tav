@@ -114,13 +114,13 @@ class OperacionDto {
     required this.montoOrigenCents,
     required this.monedaOrigen,
     required this.tasaAplicada,
-    required this.comisionCents,
     required this.totalCents,
     required this.montoDestinoCents,
     required this.monedaDestino,
     required this.beneficiario,
     required this.estado,
     required this.comprobanteUrl,
+    required this.precioCompraGyd,
     required this.creadaAt,
     required this.anuladaAt,
     required this.motivoAnulacion,
@@ -132,13 +132,13 @@ class OperacionDto {
   final int montoOrigenCents;
   final String monedaOrigen;
   final String tasaAplicada;
-  final int comisionCents;
   final int totalCents;
   final int montoDestinoCents;
   final String monedaDestino;
   final BeneficiarioOperacionDto beneficiario;
   final String estado;
   final String? comprobanteUrl;
+  final String? precioCompraGyd;
   final DateTime creadaAt;
   final DateTime? anuladaAt;
   final String? motivoAnulacion;
@@ -151,7 +151,6 @@ class OperacionDto {
       montoOrigenCents: int.parse(json['montoOrigenCents'] as String),
       monedaOrigen: json['monedaOrigen'] as String,
       tasaAplicada: json['tasaAplicada'] as String,
-      comisionCents: int.parse(json['comisionCents'] as String),
       totalCents: int.parse(json['totalCents'] as String),
       montoDestinoCents: int.parse(json['montoDestinoCents'] as String),
       monedaDestino: json['monedaDestino'] as String,
@@ -160,6 +159,7 @@ class OperacionDto {
       ),
       estado: json['estado'] as String,
       comprobanteUrl: json['comprobanteUrl'] as String?,
+      precioCompraGyd: json['precioCompraGyd'] as String?,
       creadaAt: DateTime.parse(json['creadaAt'] as String),
       anuladaAt: json['anuladaAt'] != null
           ? DateTime.parse(json['anuladaAt'] as String)
@@ -295,31 +295,6 @@ class AmpliacionDto {
   }
 }
 
-// ───────────────────────────── Tasas ─────────────────────────────
-
-class TasaDto {
-  const TasaDto({
-    required this.id,
-    required this.par,
-    required this.valor,
-    required this.vigenteDesde,
-  });
-
-  final String id;
-  final String par; // 'USDT_BS' | 'USD_BS' | 'ZELLE_BS'
-  final String valor; // string decimal: "285.400000"
-  final DateTime vigenteDesde;
-
-  factory TasaDto.fromJson(Map<String, dynamic> json) {
-    return TasaDto(
-      id: json['id'] as String,
-      par: json['par'] as String,
-      valor: json['valor'] as String,
-      vigenteDesde: DateTime.parse(json['vigenteDesde'] as String),
-    );
-  }
-}
-
 // ─────────────────────── DTOs de petición ───────────────────────
 
 class CrearOperacionRequest {
@@ -328,9 +303,6 @@ class CrearOperacionRequest {
     required this.tipo,
     required this.montoOrigenCents,
     required this.monedaOrigen,
-    required this.comisionCents,
-    required this.totalCents,
-    required this.monedaDestino,
     required this.beneficiario,
     this.comprobanteUrl,
     this.corredorId,
@@ -340,9 +312,6 @@ class CrearOperacionRequest {
   final String tipo;
   final String montoOrigenCents;
   final String monedaOrigen;
-  final String comisionCents;
-  final String totalCents;
-  final String monedaDestino;
   final BeneficiarioOperacionDto beneficiario;
   final String? comprobanteUrl;
   final String? corredorId;
@@ -352,9 +321,6 @@ class CrearOperacionRequest {
         'tipo': tipo,
         'montoOrigenCents': montoOrigenCents,
         'monedaOrigen': monedaOrigen,
-        'comisionCents': comisionCents,
-        'totalCents': totalCents,
-        'monedaDestino': monedaDestino,
         'beneficiario': beneficiario.toJson(),
         if (comprobanteUrl != null) 'comprobanteUrl': comprobanteUrl,
         if (corredorId != null) 'corredorId': corredorId,
@@ -399,8 +365,13 @@ class CupoInsuficienteException implements Exception {
 
 // ─────────────────────────── Corredores (Fase 9) ───────────────────────────
 
-/// Corredor ofrecible al cajero: activo y con tasa publicada.
-/// La API NUNCA devuelve margen ni pataDestino: solo la tasa cotizada.
+/// Servicio ofrecible al cajero: activo y con precio fijado para este cajero.
+/// La API NUNCA devuelve margen ni patas (ese concepto dejó de existir):
+/// solo el precio en GYD por dólar que el admin le fijó a este cajero.
+///
+/// `precioGyd` es un RATIO (GYD por 1 USD), string decimal. La deuda la
+/// calcula el servidor: deudaGydCents = round_half_up(montoUsdCents ×
+/// precioGyd ÷ 100). El precio se congela en cada operación.
 class CorredorDto {
   const CorredorDto({
     required this.id,
@@ -410,7 +381,9 @@ class CorredorDto {
     required this.monedaNombre,
     required this.formaEntrega,
     required this.formaEntregaNombre,
-    required this.tasaCotizada,
+    required this.precioGyd,
+    required this.servicio,
+    required this.servicioNombre,
   });
 
   final String id;
@@ -420,7 +393,9 @@ class CorredorDto {
   final String monedaNombre;
   final String formaEntrega;
   final String formaEntregaNombre;
-  final String tasaCotizada;
+  final String precioGyd; // GYD por 1 USD (string decimal). Ratio, no monto.
+  final String servicio; // 'bcv' | 'tasa_especial' | 'efectivo' | 'pix' | ...
+  final String servicioNombre; // 'BCV', 'Tasa especial', ...
 
   factory CorredorDto.fromJson(Map<String, dynamic> json) {
     return CorredorDto(
@@ -431,7 +406,9 @@ class CorredorDto {
       monedaNombre: json['monedaNombre'] as String,
       formaEntrega: json['formaEntrega'] as String,
       formaEntregaNombre: json['formaEntregaNombre'] as String,
-      tasaCotizada: json['tasaCotizada'] as String,
+      precioGyd: json['precioGyd'] as String,
+      servicio: json['servicio'] as String,
+      servicioNombre: json['servicioNombre'] as String,
     );
   }
 }
@@ -452,8 +429,9 @@ class CajeroApi {
     return ResumenDto.fromJson(r.data as Map<String, dynamic>);
   }
 
-  /// Corredores activos con tasa publicada. La API no devuelve margen ni
-  /// pataDestino: solo id, país, moneda, forma de entrega y tasaCotizada.
+  /// Servicios activos con precio fijado para este cajero. La API no devuelve
+  /// margen ni patas (ese concepto dejó de existir): solo id, país, moneda,
+  /// forma de entrega, servicio y precioGyd (GYD por dólar).
   Future<List<CorredorDto>> corredores() async {
     final r = await dio.get('/cajero/corredores');
     return (r.data as List<dynamic>)
@@ -525,13 +503,6 @@ class CajeroApi {
     final r = await dio.get('/cajero/ampliaciones');
     return (r.data as List<dynamic>)
         .map((e) => AmpliacionDto.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<List<TasaDto>> tasasVigentes() async {
-    final r = await dio.get('/tasas/vigentes');
-    return (r.data as List<dynamic>)
-        .map((e) => TasaDto.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 }

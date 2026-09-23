@@ -91,18 +91,6 @@ model PerfilCobrador {
   atenciones Atencion[]
 }
 
-// ─────────────────────────────── TASAS ───────────────────────────────
-
-model Tasa {
-  id            String   @id @default(uuid())
-  par           String                     // "USDT_BS" | "USD_BS" | "ZELLE_BS"
-  valor         Decimal  @db.Decimal(18, 6)   // la tasa NO es dinero: aquí Decimal sí es correcto
-  vigenteDesde  DateTime @default(now())
-  creadaPorId   String
-
-  @@index([par, vigenteDesde])
-}
-
 // ─────────────────────────────── OPERACIONES ───────────────────────────────
 
 enum EstadoOperacion {

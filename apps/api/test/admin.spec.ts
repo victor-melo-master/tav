@@ -15,7 +15,6 @@
  *   - GET /admin/cierres/:id detalle con cobros
  *   - POST /admin/cierres/:id/verificar marca verificado o con_diferencia
  *   - Verificar con diferencia calcula el monto y exige nota
- *   - POST /admin/tasas fija la tasa; GET /admin/tasas trae el historial
  *   - POST /admin/cobros registra un pago sin cobrador (no toca cierre)
  *   - GET /admin/resumen totales del día y del mes
  *   - Un cobrador y un cajero reciben 403 en todos estos endpoints
@@ -34,8 +33,8 @@ const TEST_URL = 'postgresql://tav:tav@localhost:5432/tav_test?schema=public';
 const prisma = new PrismaClient({ datasources: { db: { url: TEST_URL } } });
 
 const TABLAS = [
-  'MovimientoCaja', 'Caja', 'PublicacionTasaItem', 'PublicacionTasas',
-  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Tasa', 'Operacion', 'Cobro',
+  'MovimientoCaja', 'Caja', 'PrecioCajeroServicio',
+  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Operacion', 'Cobro',
   'Movimiento', 'AmpliacionCredito', 'Cierre', 'Atencion', 'Aviso', 'AuditLog',
   'Config', 'Corredor',
 ];
@@ -56,19 +55,6 @@ async function seedConfig() {
       { clave: 'semaforo.pct_ambar', valor: '0.75' },
     ],
     skipDuplicates: true,
-  });
-}
-
-/** Tasas de conversión a GYD. USD_GYD = 1 para que los tests del ledger
- *  se concentren en mecánica, no en conversión. */
-async function seedTasas() {
-  await prisma.tasa.createMany({
-    data: [
-      { id: randomUUID(), par: 'GYD_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
-      { id: randomUUID(), par: 'USD_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
-      { id: randomUUID(), par: 'USDT_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
-      { id: randomUUID(), par: 'BS_GYD', valor: 0.732314, creadaPorId: 'admin-test', vigenteDesde: new Date() },
-    ],
   });
 }
 
@@ -120,6 +106,19 @@ async function crearCajero(opts: {
     },
   };
   const u = await prisma.usuario.create({ data });
+  // Fijar precio del corredor de test para este cajero. Reemplaza la
+  // publicación de tasa global del modelo viejo: ahora el precio es por
+  // cajero, y sin precio el cajero no ve el servicio (serviciosOfrecibles).
+  if (corredorIdTest) {
+    await prisma.precioCajeroServicio.create({
+      data: {
+        cajeroId: u.id,
+        servicioId: corredorIdTest,
+        precioGyd: new Prisma.Decimal('1.03'),
+        fijadoPorId: 'admin-test',
+      },
+    });
+  }
   return { id: u.id, email: opts.email, password };
 }
 
@@ -158,15 +157,12 @@ function operacionValida(clientUuid: string, overrides?: Record<string, unknown>
     tipo: 'usdt_bs',
     montoOrigenCents: '100000',
     monedaOrigen: 'USDT',
-    comisionCents: '3000',
-    totalCents: '103000',
-    monedaDestino: 'BS',
     beneficiario: {
       nombre: 'María González',
       documento: 'V-12345678',
       banco: 'Banesco',
       cuenta: '0134...4471',
-      metodo: 'pago_movil',
+      metodo: 'transferencia_gyd',
     },
     corredorId: corredorIdTest,
     ...overrides,
@@ -191,34 +187,20 @@ afterAll(async () => {
 beforeEach(async () => {
   await truncateTodo();
   await seedConfig();
-  await seedTasas();
-  // Crear un corredor para que operacionValida tenga un corredorId válido.
+  // Crear una caja física y un servicio (BCV) que la referencia.
+  const caja = await prisma.caja.create({
+    data: { esMadre: false, moneda: 'BS', nombre: 'Bolívares en cuenta', pais: 'VEN', saldoCents: 0n },
+  });
   const c = await prisma.corredor.create({
     data: {
       pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
       formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      servicio: 'bcv', servicioNombre: 'BCV',
+      cajaId: caja.id,
       creadoPorId: 'admin-test',
     },
   });
-  await prisma.caja.create({
-    data: { corredorId: c.id, esMadre: false, moneda: 'BS', saldoCents: 0n },
-  });
   corredorIdTest = c.id;
-
-  // Publicar una tasa para el corredor: pataBase=1, pataDestino=285.4, margen=0
-  // → tasaCotizada = 285.4. Así montoDestino = 100000 × 285.4 = 28540000.
-  const pub = await prisma.publicacionTasas.create({
-    data: { pataBase: new Prisma.Decimal('1'), publicadaPorId: 'admin-test' },
-  });
-  await prisma.publicacionTasaItem.create({
-    data: {
-      publicacionId: pub.id,
-      corredorId: c.id,
-      pataDestino: new Prisma.Decimal('285.4'),
-      margen: new Prisma.Decimal('0'),
-      tasaCotizada: new Prisma.Decimal('285.4'),
-    },
-  });
 });
 
 // ─────────────────────────── CAJEROS ───────────────────────────
@@ -588,9 +570,9 @@ describe('Admin — GET /admin/cierres', () => {
       .send({
         clientUuid: 'cobro-cierre-1',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
+        
       });
 
     const cierreActual = await request(app.getHttpServer())
@@ -600,7 +582,7 @@ describe('Admin — GET /admin/cierres', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
+      .send({ efectivoDeclaradoCents: '30000',  });
 
     // Cierre 2: otro cobrador con cierre abierto (sin cobros aún → sin cierre).
     const cob2 = await crearCobrador({ email: '0414-2000002@tav.test' });
@@ -630,9 +612,9 @@ describe('Admin — GET /admin/cierres', () => {
       .send({
         clientUuid: 'cobro-filtro-1',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
+        
       });
 
     const cierreActual = await request(app.getHttpServer())
@@ -642,7 +624,7 @@ describe('Admin — GET /admin/cierres', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
+      .send({ efectivoDeclaradoCents: '30000',  });
 
     const res = await request(app.getHttpServer())
       .get('/admin/cierres?estado=enviado')
@@ -675,9 +657,9 @@ describe('Admin — GET /admin/cierres/:id', () => {
       .send({
         clientUuid: 'cobro-detalle-1',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
+        
       });
 
     const cierreActual = await request(app.getHttpServer())
@@ -692,7 +674,7 @@ describe('Admin — GET /admin/cierres/:id', () => {
     expect(res.body.id).toBe(cierreActual.body.id);
     expect(res.body.cobros).toHaveLength(1);
     expect(res.body.cobros[0].cajero.usuario.nombre).toBe('Cajero Test');
-    expect(res.body.cobros[0].montoBaseCents).toBe('30000');
+    expect(res.body.cobros[0].montoCents).toBe('30000');
   });
 });
 
@@ -711,9 +693,8 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
       .send({
         clientUuid: 'cobro-verificar-ok',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
       });
 
     const cierreActual = await request(app.getHttpServer())
@@ -723,17 +704,17 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
+      .send({ efectivoDeclaradoCents: '30000' });
 
     const res = await request(app.getHttpServer())
       .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoGydRecibidoCents: '30000', efectivoUsdRecibidoCents: '0' });
+      .send({ efectivoRecibidoCents: '30000' });
 
     expect(res.status).toBe(201);
     expect(res.body.estado).toBe('verificado');
-    expect(res.body.efectivoGydRecibidoCents).toBe('30000');
-    expect(res.body.diferenciaGydCents).toBe('0');
+    expect(res.body.efectivoRecibidoCents).toBe('30000');
+    expect(res.body.diferenciaCents).toBe('0');
     expect(res.body.verificadoPorId).toBe(admin.id);
     expect(res.body.verificadoAt).not.toBeNull();
   });
@@ -752,9 +733,8 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
       .send({
         clientUuid: 'cobro-verificar-dif',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
       });
 
     const cierreActual = await request(app.getHttpServer())
@@ -765,19 +745,19 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
+      .send({ efectivoDeclaradoCents: '30000' });
 
     // El admin cuenta 29.500 → diferencia de -500.
     const res = await request(app.getHttpServer())
       .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoGydRecibidoCents: '29500', efectivoUsdRecibidoCents: '0', nota: 'Faltaron 500 en el cuadre' });
+      .send({ efectivoRecibidoCents: '29500', nota: 'Faltaron 500 en el cuadre' });
 
     expect(res.status).toBe(201);
     expect(res.body.estado).toBe('con_diferencia');
-    expect(res.body.efectivoGydRecibidoCents).toBe('29500');
+    expect(res.body.efectivoRecibidoCents).toBe('29500');
     // diferencia = recibido − declarado = 29500 − 30000 = −500
-    expect(res.body.diferenciaGydCents).toBe('-500');
+    expect(res.body.diferenciaCents).toBe('-500');
     expect(res.body.notaAdmin).toBe('Faltaron 500 en el cuadre');
   });
 
@@ -795,9 +775,8 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
       .send({
         clientUuid: 'cobro-verificar-sinnota',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
       });
 
     const cierreActual = await request(app.getHttpServer())
@@ -807,18 +786,18 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
+      .send({ efectivoDeclaradoCents: '30000' });
 
     // Diferencia (29500 vs 30000) sin nota → 400.
     const res = await request(app.getHttpServer())
       .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoGydRecibidoCents: '29500', efectivoUsdRecibidoCents: '0' });
+      .send({ efectivoRecibidoCents: '29500' });
 
     expect(res.status).toBe(400);
   });
 
-  test('cierre con efectivo en GYD y USD se declara y verifica por separado', async () => {
+  test('cierre con efectivo GYD se declara y verifica como una sola pila', async () => {
     const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
     const token = await login(app, admin.email, admin.password);
 
@@ -826,94 +805,46 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
     const caj = await crearCajero({ email: '0414-1000001@tav.test', saldoCents: 200_000n, deudaDesde: new Date() });
     const cobToken = await login(app, cob.email, cob.password);
 
-    // Un cobro en efectivo GYD (40.000 GYD cents → 40.000 GYD base)
+    // Dos cobros en efectivo GYD: 40.000 + 5.000 = 45.000.
     await request(app.getHttpServer())
       .post('/cobrador/cobros')
       .set('Authorization', `Bearer ${cobToken}`)
       .send({
-        clientUuid: 'cobro-cierre-gyd',
+        clientUuid: 'cobro-cierre-1',
         cajeroId: caj.id,
         metodo: 'efectivo_gyd',
         montoCents: '40000',
-        moneda: 'GYD',
       });
-
-    // Un cobro en efectivo USD (50.00 USD cents → 10.450 GYD base con tasa 209)
-    // La tasa USD_GYD del beforeEach es 1; la reescribimos a 209.
-    await prisma.tasa.updateMany({ where: { par: 'USD_GYD' }, data: { valor: 209.0 } });
     await request(app.getHttpServer())
       .post('/cobrador/cobros')
       .set('Authorization', `Bearer ${cobToken}`)
       .send({
-        clientUuid: 'cobro-cierre-usd',
+        clientUuid: 'cobro-cierre-2',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '5000',
-        moneda: 'USD',
       });
 
     const cierreActual = await request(app.getHttpServer())
       .get('/cobrador/cierre-actual')
       .set('Authorization', `Bearer ${cobToken}`);
 
-    // El cobrador declara 40.000 GYD y 50.00 USD por separado.
+    // El cobrador declara 45.000.
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoGydDeclaradoCents: '40000', efectivoUsdDeclaradoCents: '5000' });
+      .send({ efectivoDeclaradoCents: '45000' });
 
-    // El admin cuenta exactamente eso: 40.000 GYD y 50.00 USD.
+    // El admin cuenta exactamente eso.
     const res = await request(app.getHttpServer())
       .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoGydRecibidoCents: '40000', efectivoUsdRecibidoCents: '5000' });
+      .send({ efectivoRecibidoCents: '45000' });
 
     expect(res.status).toBe(201);
     expect(res.body.estado).toBe('verificado');
-    expect(res.body.efectivoGydRecibidoCents).toBe('40000');
-    expect(res.body.efectivoUsdRecibidoCents).toBe('5000');
-    expect(res.body.diferenciaGydCents).toBe('0');
-    expect(res.body.diferenciaUsdCents).toBe('0');
-  });
-
-  test('cierre con diferencia solo en USD → con_diferencia', async () => {
-    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
-    const token = await login(app, admin.email, admin.password);
-
-    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
-    const caj = await crearCajero({ email: '0414-1000001@tav.test', saldoCents: 200_000n, deudaDesde: new Date() });
-    const cobToken = await login(app, cob.email, cob.password);
-
-    await request(app.getHttpServer())
-      .post('/cobrador/cobros')
-      .set('Authorization', `Bearer ${cobToken}`)
-      .send({
-        clientUuid: 'cobro-cierre-diff-usd',
-        cajeroId: caj.id,
-        metodo: 'efectivo_usd',
-        montoCents: '5000',
-        moneda: 'USD',
-      });
-
-    const cierreActual = await request(app.getHttpServer())
-      .get('/cobrador/cierre-actual')
-      .set('Authorization', `Bearer ${cobToken}`);
-
-    await request(app.getHttpServer())
-      .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
-      .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoGydDeclaradoCents: '0', efectivoUsdDeclaradoCents: '5000' });
-
-    // GYD cuadra (0=0), USD no (4800 vs 5000). Hay diferencia → nota obligatoria.
-    const res = await request(app.getHttpServer())
-      .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoGydRecibidoCents: '0', efectivoUsdRecibidoCents: '4800', nota: 'Faltaron 20 centavos USD' });
-
-    expect(res.status).toBe(201);
-    expect(res.body.estado).toBe('con_diferencia');
-    expect(res.body.diferenciaGydCents).toBe('0');
-    expect(res.body.diferenciaUsdCents).toBe('-200');
+    expect(res.body.efectivoRecibidoCents).toBe('45000');
+    expect(res.body.diferenciaCents).toBe('0');
   });
 
   test('no se puede verificar un cierre no enviado', async () => {
@@ -931,9 +862,9 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
       .send({
         clientUuid: 'cobro-noenviado',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
+        
       });
 
     const cierreActual = await request(app.getHttpServer())
@@ -943,62 +874,9 @@ describe('Admin — POST /admin/cierres/:id/verificar', () => {
     const res = await request(app.getHttpServer())
       .post(`/admin/cierres/${cierreActual.body.id}/verificar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoGydRecibidoCents: '30000', efectivoUsdRecibidoCents: '0' });
+      .send({ efectivoRecibidoCents: '30000',  });
 
     expect(res.status).toBe(400);
-  });
-});
-
-// ─────────────────────────── TASAS ───────────────────────────
-
-describe('Admin — POST /admin/tasas y GET /admin/tasas', () => {
-  test('fija la tasa del día y queda en el historial', async () => {
-    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
-    const token = await login(app, admin.email, admin.password);
-
-    const res = await request(app.getHttpServer())
-      .post('/admin/tasas')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ par: 'USDT_BS', valor: '285.400000' });
-
-    expect(res.status).toBe(201);
-    expect(res.body.par).toBe('USDT_BS');
-    // Prisma.Decimal serializa sin ceros trailing: "285.400000" → "285.4".
-    expect(res.body.valor).toBe('285.4');
-    expect(res.body.creadaPorId).toBe(admin.id);
-
-    // Historial.
-    const hist = await request(app.getHttpServer())
-      .get('/admin/tasas')
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(hist.status).toBe(200);
-    // Hay tasas de conversión sembradas en beforeEach; filtrar por par.
-    const usdtBs = hist.body.filter((t: { par: string }) => t.par === 'USDT_BS');
-    expect(usdtBs).toHaveLength(1);
-    expect(usdtBs[0].par).toBe('USDT_BS');
-  });
-
-  test('historial filtrado por par', async () => {
-    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
-    const token = await login(app, admin.email, admin.password);
-
-    await request(app.getHttpServer())
-      .post('/admin/tasas')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ par: 'USDT_BS', valor: '285.400000' });
-    await request(app.getHttpServer())
-      .post('/admin/tasas')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ par: 'USD_BS', valor: '290.000000' });
-
-    const res = await request(app.getHttpServer())
-      .get('/admin/tasas?par=USDT_BS')
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].par).toBe('USDT_BS');
   });
 });
 
@@ -1022,14 +900,13 @@ describe('Admin — POST /admin/cobros', () => {
       .send({
         clientUuid: 'cobro-admin-001',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
       });
 
     expect(res.status).toBe(201);
     expect(res.body.cobro.folio).toMatch(/^COB-/);
-    expect(res.body.cobro.montoBaseCents).toBe('30000');
+    expect(res.body.cobro.montoCents).toBe('30000');
     expect(res.body.cobro.cobradorId).toBeNull();
     // Sin cobrador → sin cierre.
     expect(res.body.cobro.cierreId).toBeNull();
@@ -1058,9 +935,8 @@ describe('Admin — POST /admin/cobros', () => {
     const body = {
       clientUuid: 'cobro-admin-dup',
       cajeroId: caj.id,
-      metodo: 'efectivo_usd' as const,
+      metodo: 'efectivo_gyd' as const,
       montoCents: '30000',
-      moneda: 'USD',
     };
 
     const r1 = await request(app.getHttpServer())
@@ -1106,9 +982,9 @@ describe('Admin — GET /admin/resumen', () => {
       .send({
         clientUuid: 'cobro-resumen-1',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
+        
       });
 
     // Enviar el cierre → queda esperando verificación.
@@ -1118,7 +994,7 @@ describe('Admin — GET /admin/resumen', () => {
     await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreActual.body.id}/enviar`)
       .set('Authorization', `Bearer ${cobToken}`)
-      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
+      .send({ efectivoDeclaradoCents: '30000',  });
 
     // Una ampliación pendiente (directo en DB para no loguear al cajero,
     // que actualizaría su ultimaVezAt y rompería el conteo de "sin conectarse").
@@ -1168,10 +1044,8 @@ describe('Admin — un cajero y un cobrador reciben 403 en todos los endpoints',
     { method: 'post', path: '/admin/ampliaciones/fake-id/rechazar', body: {} },
     { method: 'get', path: '/admin/cierres' },
     { method: 'get', path: '/admin/cierres/fake-id' },
-    { method: 'post', path: '/admin/cierres/fake-id/verificar', body: { efectivoGydRecibidoCents: '100', efectivoUsdRecibidoCents: '0' } },
-    { method: 'post', path: '/admin/tasas', body: { par: 'USDT_BS', valor: '285.4' } },
-    { method: 'get', path: '/admin/tasas' },
-    { method: 'post', path: '/admin/cobros', body: { clientUuid: 'x', cajeroId: 'x', metodo: 'efectivo_usd', montoCents: '100', moneda: 'USD' } },
+    { method: 'post', path: '/admin/cierres/fake-id/verificar', body: { efectivoRecibidoCents: '100',  } },
+    { method: 'post', path: '/admin/cobros', body: { clientUuid: 'x', cajeroId: 'x', metodo: 'efectivo_gyd', montoCents: '100' } },
     { method: 'get', path: '/admin/resumen' },
   ];
 
@@ -1285,5 +1159,180 @@ describe('Admin — unicidad de email y teléfono', () => {
         },
       }),
     ).rejects.toThrow(/P2002|Unique constraint/);
+  });
+});
+
+// ─────────────────── MOVIMIENTOS DIARIOS ───────────────────
+
+describe('Admin — GET /admin/movimientos-diarios', () => {
+  test('devuelve las operaciones del día con precio de venta, compra, margen y %', async () => {
+    const admin = await crearAdmin({ email: 'admin-movdiarios@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+
+    // Crear una caja madre y un ingreso con precioCompraGyd = 237.
+    const madre = await prisma.caja.create({
+      data: { esMadre: true, moneda: 'USDT', nombre: 'Caja madre USDT', saldoCents: 0n },
+    });
+    const adminUser = await prisma.usuario.create({
+      data: { id: crypto.randomUUID(), rol: 'admin', nombre: 'Admin', email: 'admin-pc-mov@tav.test', passwordHash: 'x' },
+    });
+    await prisma.movimientoCaja.create({
+      data: {
+        cajaId: madre.id,
+        tipo: 'ingreso',
+        montoCents: 1_000_000n,
+        saldoDespues: 1_000_000n,
+        origenTipo: 'ingreso',
+        origenId: crypto.randomUUID(),
+        clientUuid: crypto.randomUUID(),
+        motivo: 'Compra a 237',
+        precioCompraGyd: new Prisma.Decimal('237'),
+        registradoPorId: adminUser.id,
+      },
+    });
+
+    // Crear un cajero y una operación de 100 USD a 240 GYD/USD.
+    const caj = await crearCajero({ email: '0414-2000001@tav.test', limiteCents: 100_000_000n });
+    const op = await prisma.operacion.create({
+      data: {
+        folio: 'TAV-TEST-MOV-1',
+        clientUuid: crypto.randomUUID(),
+        cajeroId: caj.id,
+        tipo: 'usdt_bs',
+        montoOrigenCents: 10_000n, // 100 USD
+        monedaOrigen: 'USDT',
+        tasaAplicada: new Prisma.Decimal('240'),
+        totalCents: 2_400_000n, // 24.000 GYD
+        montoDestinoCents: 0n,
+        monedaDestino: 'BS',
+        precioCompraGyd: new Prisma.Decimal('237'),
+        beneficiario: { nombre: 'María', documento: 'V123', banco: 'Banesco', cuenta: '0123', metodo: 'transferencia_gyd' },
+        corredorId: corredorIdTest,
+        creadaPorId: caj.id,
+      },
+    });
+
+    const res = await request(app.getHttpServer())
+      .get('/admin/movimientos-diarios')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.operaciones).toHaveLength(1);
+
+    const item = res.body.operaciones[0];
+    expect(item.folio).toBe('TAV-TEST-MOV-1');
+    expect(item.cajero).toBe('Cajero Test');
+    expect(item.montoUsdCents).toBe('10000');
+    expect(Number(item.precioVenta)).toBe(240);
+    expect(Number(item.precioCompra)).toBe(237);
+    // Margen = (240 - 237) × 100 USD = 3 × 100 = 300 GYD = 30.000 GYD cents.
+    expect(item.margenGydCents).toBe('30000');
+    // % = 240 / 237 - 1 ≈ 0.01266 (1,27%).
+    const pct = Number(item.pctMargen);
+    expect(pct).toBeCloseTo(240 / 237 - 1, 5);
+
+    // Totales: 100 USD movidos, 300 GYD de ganancia, 1,27% promedio.
+    expect(res.body.totales.operaciones).toBe(1);
+    expect(res.body.totales.usdCents).toBe('10000');
+    expect(res.body.totales.gananciaGydCents).toBe('30000');
+    expect(Number(res.body.totales.pctPromedioPonderado)).toBeCloseTo(240 / 237 - 1, 5);
+  });
+
+  test('operación sin precio de compra se muestra con margen vacío y no entra en totales', async () => {
+    const admin = await crearAdmin({ email: 'admin-movdiarios2@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+
+    const caj = await crearCajero({ email: '0414-2000002@tav.test', limiteCents: 100_000_000n });
+    await prisma.operacion.create({
+      data: {
+        folio: 'TAV-TEST-MOV-2',
+        clientUuid: crypto.randomUUID(),
+        cajeroId: caj.id,
+        tipo: 'usdt_bs',
+        montoOrigenCents: 5_000n, // 50 USD
+        monedaOrigen: 'USDT',
+        tasaAplicada: new Prisma.Decimal('250'),
+        totalCents: 1_250_000n,
+        montoDestinoCents: 0n,
+        monedaDestino: 'BS',
+        precioCompraGyd: null, // sin precio de compra
+        beneficiario: { nombre: 'Juan', documento: 'V456', banco: 'Mercantil', cuenta: '0456', metodo: 'transferencia' },
+        corredorId: corredorIdTest,
+        creadaPorId: caj.id,
+      },
+    });
+
+    const res = await request(app.getHttpServer())
+      .get('/admin/movimientos-diarios')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.operaciones).toHaveLength(1);
+
+    const item = res.body.operaciones[0];
+    expect(item.precioCompra).toBeNull();
+    expect(item.margenGydCents).toBeNull();
+    expect(item.pctMargen).toBeNull();
+
+    // No entra en los totales: ganancia 0, % null.
+    expect(res.body.totales.gananciaGydCents).toBe('0');
+    expect(res.body.totales.pctPromedioPonderado).toBeNull();
+  });
+
+  test('filtra por fecha: solo las operaciones de ese día', async () => {
+    const admin = await crearAdmin({ email: 'admin-movdiarios3@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+
+    const caj = await crearCajero({ email: '0414-2000003@tav.test', limiteCents: 100_000_000n });
+
+    // Operación de hoy.
+    await prisma.operacion.create({
+      data: {
+        folio: 'TAV-TEST-MOV-3',
+        clientUuid: crypto.randomUUID(),
+        cajeroId: caj.id,
+        tipo: 'usdt_bs',
+        montoOrigenCents: 10_000n,
+        monedaOrigen: 'USDT',
+        tasaAplicada: new Prisma.Decimal('240'),
+        totalCents: 2_400_000n,
+        montoDestinoCents: 0n,
+        monedaDestino: 'BS',
+        precioCompraGyd: new Prisma.Decimal('237'),
+        beneficiario: { nombre: 'Hoy', documento: 'V1', banco: 'X', cuenta: '1', metodo: 'efectivo' },
+        corredorId: corredorIdTest,
+        creadaPorId: caj.id,
+      },
+    });
+
+    // Operación de ayer (fuera del rango).
+    const ayer = new Date(Date.now() - 2 * 86_400_000);
+    await prisma.operacion.create({
+      data: {
+        folio: 'TAV-TEST-MOV-4',
+        clientUuid: crypto.randomUUID(),
+        cajeroId: caj.id,
+        tipo: 'usdt_bs',
+        montoOrigenCents: 10_000n,
+        monedaOrigen: 'USDT',
+        tasaAplicada: new Prisma.Decimal('240'),
+        totalCents: 2_400_000n,
+        montoDestinoCents: 0n,
+        monedaDestino: 'BS',
+        precioCompraGyd: new Prisma.Decimal('237'),
+        beneficiario: { nombre: 'Ayer', documento: 'V2', banco: 'X', cuenta: '2', metodo: 'efectivo' },
+        corredorId: corredorIdTest,
+        creadaPorId: caj.id,
+        creadaAt: ayer,
+      },
+    });
+
+    const res = await request(app.getHttpServer())
+      .get('/admin/movimientos-diarios')
+      .set('Authorization', `Bearer ${token}`);
+
+    // Solo la operación de hoy.
+    expect(res.body.operaciones).toHaveLength(1);
+    expect(res.body.operaciones[0].folio).toBe('TAV-TEST-MOV-3');
   });
 });

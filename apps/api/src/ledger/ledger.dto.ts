@@ -24,15 +24,18 @@ export interface RegistrarOperacionDto {
   clientUuid: string; // idempotencia — generado en el dispositivo
   cajeroId: string; // PerfilCajero.usuarioId
   tipo: string; // "usdt_bs" | "usd_efectivo_bs"
-  montoOrigenCents: bigint;
+  montoOrigenCents: bigint; // dólares que el cajero envía
   monedaOrigen: string; // "USDT" | "USD"
-  tasaAplicada: string; // tasa congelada en el registro
-  comisionCents: bigint;
-  totalCents: bigint; // lo que suma a la deuda = montoOrigen + comisión
-  montoDestinoCents: bigint;
-  monedaDestino: string; // "BS"
+  tasaAplicada: string; // precio congelado en el registro (GYD por 1 USD)
+  totalCents: bigint; // deuda en GYD centavos, calculada por el servidor
+  montoDestinoCents: bigint; // 0 al crear; el pagador lo registra al ejecutar
+  monedaDestino: string; // "BS" — derivada del servicio
   beneficiario: BeneficiarioDto;
   comprobanteUrl?: string;
+  /** Precio de compra del USDT congelado al registrar (del ingreso a la caja
+   * madre más reciente hasta la fecha). Nullable: si no hay ingreso antes
+   * de la operación, va null y el reporte la muestra sin margen. */
+  precioCompraGyd?: string | null;
   /** INTERNO — el controlador lo inyecta desde el JWT. Nunca del body. */
   creadaPorId: string;
   /** Fase 9: corredor elegido por el cajero. La operación nace en `pendiente`. */
@@ -44,13 +47,7 @@ export interface RegistrarCobroDto {
   cajeroId: string;
   cobradorId?: string | null; // null si lo registró el admin
   metodo: MetodoCobro;
-  montoCents: bigint; // en la moneda en que se recibió
-  moneda: 'GYD' | 'USD' | 'BS' | 'USDT';
-  // tasaAplicada ya no viene del cliente: el servicio lee la tasa vigente
-  // de la tabla Tasa (par = "{moneda}_GYD") y la congela en el cobro.
-  // Se mantiene en el DTO HTTP como opcional por compatibilidad, pero el
-  // servicio lo ignora.
-  tasaAplicada?: string | null;
+  montoCents: bigint; // en GYD — el cajero siempre paga en guyaneses
   comprobanteUrl?: string;
   nota?: string;
   /** INTERNO — el controlador lo inyecta desde el JWT. Nunca del body. */

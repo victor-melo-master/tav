@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,12 +15,16 @@ import '../../utils/uuid_gen.dart';
 
 /// Pantalla de ejecución de pago del pagador.
 ///
-/// El pagador escribe tres cosas al marcar una operación como pagada:
+/// El pagador escribe al marcar una operación como pagada:
+/// - montoDestinoCents: los bolívares (o la moneda destino) que recibió el
+///   beneficiario. Llena el campo que el paso 3 dejó en 0.
 /// - tasaEjecucion: la tasa real de ese pago (240, 244, 250...). No se
 ///   precarga con la cotizada: si se precarga nadie la cambia y el dato
 ///   pierde valor.
 /// - formaPago: pago móvil, transferencia, efectivo.
 /// - nombreCliente: el nombre del cliente que recibió.
+/// - comprobantePagoUrl: la captura del pago (imagen o PDF, máx 5 MB).
+///   Obligatoria. Se sube antes de pagar.
 ///
 /// La caja de la que sale la plata la determina el corredor, no la forma
 /// de pago. El pagador no elige la caja.
@@ -42,7 +47,11 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
   final _tasaCtrl = TextEditingController();
   final _formaPagoCtrl = TextEditingController(text: 'pago_movil');
   final _nombreCtrl = TextEditingController();
+  final _montoDestinoCtrl = TextEditingController();
   bool _enviando = false;
+  bool _subiendo = false;
+  String? _comprobantePagoUrl;
+  String? _comprobanteNombre;
   String? _clientUuid; // se genera al montar; no cambia entre reintentos
 
   @override
@@ -57,6 +66,7 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
     _tasaCtrl.dispose();
     _formaPagoCtrl.dispose();
     _nombreCtrl.dispose();
+    _montoDestinoCtrl.dispose();
     super.dispose();
   }
 
@@ -91,6 +101,36 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
     }
   }
 
+  Future<void> _seleccionarComprobante() async {
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'],
+      );
+      if (files.isEmpty) return;
+      final file = files.first;
+      final size = file.lengthSync() ?? await file.length();
+      if (size != null && size > 5 * 1024 * 1024) {
+        _toast('El archivo no puede pesar más de 5 MB');
+        return;
+      }
+
+      setState(() => _subiendo = true);
+      final api = ref.read(pagadorApiProvider);
+      final url = await api.subirComprobante(file.path!, file.name);
+      if (!mounted) return;
+      setState(() {
+        _comprobantePagoUrl = url;
+        _comprobanteNombre = file.name;
+        _subiendo = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _toast('No se pudo subir el comprobante: $e');
+      setState(() => _subiendo = false);
+    }
+  }
+
   Future<void> _pagar() async {
     final item = _item;
     if (item == null) return;
@@ -98,7 +138,12 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
     final tasa = _tasaCtrl.text.trim();
     final forma = _formaPagoCtrl.text.trim();
     final nombre = _nombreCtrl.text.trim();
+    final montoDestino = _montoDestinoCtrl.text.trim();
 
+    if (montoDestino.isEmpty) {
+      _toast('Falta cuánto recibió el beneficiario (bolívares)');
+      return;
+    }
     if (tasa.isEmpty) {
       _toast('Falta la tasa de ejecución');
       return;
@@ -111,6 +156,10 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
       _toast('Falta el nombre del cliente que recibió');
       return;
     }
+    if (_comprobantePagoUrl == null) {
+      _toast('Falta la captura del pago');
+      return;
+    }
 
     setState(() => _enviando = true);
     try {
@@ -119,9 +168,11 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
         clientUuid: _clientUuid!,
         operacionId: item.id,
         montoCents: item.montoDestinoCents.toString(),
+        montoDestinoCents: montoDestino,
         tasaEjecucion: tasa.replaceAll(',', '.'),
         formaPago: forma,
         nombreCliente: nombre,
+        comprobantePagoUrl: _comprobantePagoUrl!,
       ));
       if (!mounted) return;
       if (res.yaExistia) {
@@ -203,6 +254,20 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
           ),
           const SizedBox(height: TavSpace.md),
 
+          // Bolívares entregados — lo que el pagador anota
+          TavField(
+            label: 'Bolívares entregados',
+            hint: 'Cuánto recibió el beneficiario',
+            controller: _montoDestinoCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          ),
+          const SizedBox(height: TavSpace.sm),
+          Text(
+            'Los bolívares que anotas llenan el monto destino de la operación.',
+            style: TavText.caption.copyWith(color: TavColors.ink3),
+          ),
+          const SizedBox(height: TavSpace.md),
+
           // Tasa de ejecución — NO se precarga con la cotizada
           TavField(
             label: 'Tasa de ejecución',
@@ -235,6 +300,47 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
             label: 'Nombre del cliente que recibió',
             hint: 'María González',
             controller: _nombreCtrl,
+          ),
+          const SizedBox(height: TavSpace.md),
+
+          // Captura del pago — obligatoria
+          Text('Captura del pago', style: TavText.body.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: TavSpace.xs),
+          Text(
+            'Imagen (JPG, PNG, GIF, WEBP) o PDF, máximo 5 MB. Obligatoria.',
+            style: TavText.caption.copyWith(color: TavColors.ink3),
+          ),
+          const SizedBox(height: TavSpace.sm),
+          if (_comprobanteNombre != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: TavSpace.sm),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: TavColors.green600, size: 18),
+                  const SizedBox(width: TavSpace.xs),
+                  Expanded(
+                    child: Text(
+                      _comprobanteNombre!,
+                      style: TavText.caption.copyWith(color: TavColors.ink2),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _subiendo ? null : _seleccionarComprobante,
+              icon: _subiendo
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.attach_file, size: 18),
+              label: Text(_subiendo ? 'Subiendo…' : 'Subir captura'),
+            ),
           ),
           const SizedBox(height: TavSpace.lg),
 

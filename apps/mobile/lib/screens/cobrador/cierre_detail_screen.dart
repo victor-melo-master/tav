@@ -134,8 +134,7 @@ class _CierreDetailScreenState extends ConsumerState<CierreDetailScreen> {
   Widget _buildContenido(CierreDto c) {
     final chip = _chipEstado(c.estado);
     final tieneDiferencia = c.estado == EstadoCierre.conDiferencia &&
-        ((c.diferenciaGydCents != null && c.diferenciaGydCents != 0) ||
-            (c.diferenciaUsdCents != null && c.diferenciaUsdCents != 0));
+        c.diferenciaCents != null && c.diferenciaCents != 0;
 
     return RefreshIndicator(
       color: TavColors.blue,
@@ -151,39 +150,19 @@ class _CierreDetailScreenState extends ConsumerState<CierreDetailScreen> {
                   TavChip(label: '● ${c.estado.label}', state: chip),
                   const SizedBox(height: 10),
                   if (tieneDiferencia) ...[
-                    if (c.diferenciaGydCents != null && c.diferenciaGydCents != 0) ...[
-                      TavMoneyDisplay(
-                        cents: c.diferenciaGydCents!.abs(),
-                        prefix: c.diferenciaGydCents! < 0 ? '−' : '+',
-                        style: TavText.moneyDisplay
-                            .copyWith(fontSize: 30, color: TavColors.red700),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        c.diferenciaGydCents! < 0
-                            ? 'Entregaste menos GYD de lo declarado'
-                            : 'Entregaste más GYD de lo declarado',
-                        style: TavText.body2.copyWith(color: TavColors.red700),
-                      ),
-                    ],
-                    if (c.diferenciaUsdCents != null && c.diferenciaUsdCents != 0) ...[
-                      if (c.diferenciaGydCents != null && c.diferenciaGydCents != 0)
-                        const SizedBox(height: 8),
-                      TavMoneyDisplay(
-                        cents: c.diferenciaUsdCents!.abs(),
-                        currency: TavMoneyCurrency.usd,
-                        prefix: c.diferenciaUsdCents! < 0 ? '−' : '+',
-                        style: TavText.moneyDisplay
-                            .copyWith(fontSize: 30, color: TavColors.red700),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        c.diferenciaUsdCents! < 0
-                            ? 'Entregaste menos USD de lo declarado'
-                            : 'Entregaste más USD de lo declarado',
-                        style: TavText.body2.copyWith(color: TavColors.red700),
-                      ),
-                    ],
+                    TavMoneyDisplay(
+                      cents: c.diferenciaCents!.abs(),
+                      prefix: c.diferenciaCents! < 0 ? '−' : '+',
+                      style: TavText.moneyDisplay
+                          .copyWith(fontSize: 30, color: TavColors.red700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      c.diferenciaCents! < 0
+                          ? 'Entregaste menos de lo declarado'
+                          : 'Entregaste más de lo declarado',
+                      style: TavText.body2.copyWith(color: TavColors.red700),
+                    ),
                   ] else ...[
                     Text(c.estado.label,
                         style: TavText.h1.copyWith(fontSize: 20)),
@@ -204,12 +183,8 @@ class _CierreDetailScreenState extends ConsumerState<CierreDetailScreen> {
             child: Column(
               children: [
                 TavKvRow(
-                    label: 'Efectivo GYD declarado',
-                    value: formatCents(c.efectivoGydDeclaradoCents)),
-                TavKvRow(
-                    label: 'Efectivo USD declarado',
-                    value: formatCents(c.efectivoUsdDeclaradoCents,
-                        currency: TavMoneyCurrency.usd)),
+                    label: 'Efectivo declarado',
+                    value: formatCents(c.efectivoDeclaradoCents)),
                 TavKvRow(
                     label: 'Digital', value: formatCents(c.digitalCents)),
                 if (c.entregadoA != null)
@@ -278,7 +253,7 @@ class _CierreDetailScreenState extends ConsumerState<CierreDetailScreen> {
               child: Column(
                 children: c.cobros.map((cobro) => TavKvRow(
                   label: '#${cobro.folio}',
-                  value: formatCents(cobro.montoBaseCents),
+                  value: formatCents(cobro.montoCents),
                 )).toList(),
               ),
             ),

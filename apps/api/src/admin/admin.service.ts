@@ -15,7 +15,6 @@ import { ListarCajerosDto } from './dto/listar-cajeros.dto';
 import { CambiarLimiteDto } from './dto/cambiar-limite.dto';
 import { ResolverAmpliacionDto } from './dto/resolver-ampliacion.dto';
 import { VerificarCierreDto } from './dto/verificar-cierre.dto';
-import { CrearTasaDto } from './dto/crear-tasa.dto';
 import { RegistrarCobroAdminDto } from './dto/registrar-cobro-admin.dto';
 import {
   ListarAmpliacionesDto,
@@ -468,11 +467,9 @@ export class AdminService {
       );
     }
 
-    const recibidoGyd = BigInt(dto.efectivoGydRecibidoCents);
-    const recibidoUsd = BigInt(dto.efectivoUsdRecibidoCents);
-    const diferenciaGyd = recibidoGyd - cierre.efectivoGydDeclaradoCents;
-    const diferenciaUsd = recibidoUsd - cierre.efectivoUsdDeclaradoCents;
-    const hayDiferencia = diferenciaGyd !== 0n || diferenciaUsd !== 0n;
+    const recibido = BigInt(dto.efectivoRecibidoCents);
+    const diferencia = recibido - cierre.efectivoDeclaradoCents;
+    const hayDiferencia = diferencia !== 0n;
 
     if (hayDiferencia && (!dto.nota || !dto.nota.trim())) {
       throw new BadRequestException(
@@ -487,10 +484,8 @@ export class AdminService {
           estado: hayDiferencia ? 'con_diferencia' : 'verificado',
           verificadoAt: new Date(),
           verificadoPorId: adminId,
-          efectivoGydRecibidoCents: recibidoGyd,
-          efectivoUsdRecibidoCents: recibidoUsd,
-          diferenciaGydCents: diferenciaGyd,
-          diferenciaUsdCents: diferenciaUsd,
+          efectivoRecibidoCents: recibido,
+          diferenciaCents: diferencia,
           notaAdmin: dto.nota,
         },
         include: {
@@ -506,69 +501,18 @@ export class AdminService {
           entidadId: cierreId,
           antes: {
             estado: cierre.estado,
-            efectivoGydDeclaradoCents: cierre.efectivoGydDeclaradoCents.toString(),
-            efectivoUsdDeclaradoCents: cierre.efectivoUsdDeclaradoCents.toString(),
+            efectivoDeclaradoCents: cierre.efectivoDeclaradoCents.toString(),
           },
           despues: {
             estado: hayDiferencia ? 'con_diferencia' : 'verificado',
-            efectivoGydRecibidoCents: recibidoGyd.toString(),
-            efectivoUsdRecibidoCents: recibidoUsd.toString(),
-            diferenciaGydCents: diferenciaGyd.toString(),
-            diferenciaUsdCents: diferenciaUsd.toString(),
+            efectivoRecibidoCents: recibido.toString(),
+            diferenciaCents: diferencia.toString(),
             notaAdmin: dto.nota ?? null,
           },
         },
       });
 
       return verificado;
-    });
-  }
-
-  // ─────────────────────────── TASAS ───────────────────────────
-
-  /**
-   * Fija la tasa del día para un par. La tasa NO es dinero: viaja como
-   * string decimal y se guarda como Decimal(18,6). Es el único punto
-   * del sistema donde Decimal es correcto.
-   *
-   * La nueva tasa queda vigente desde ahora; las operaciones futuras la
-   * consumen vía GET /tasas/vigentes. Las operaciones pasadas conservan
-   * su `tasaAplicada` congelada (regla 7: el pasado no cambia).
-   */
-  async fijarTasa(adminId: string, dto: CrearTasaDto) {
-    return this.prisma.$transaction(async (tx) => {
-      const tasa = await tx.tasa.create({
-        data: {
-          par: dto.par,
-          valor: new Prisma.Decimal(dto.valor),
-          creadaPorId: adminId,
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          actorId: adminId,
-          accion: 'tasa.fijar',
-          entidad: 'Tasa',
-          entidadId: tasa.id,
-          // antes se omite: no hay valor anterior (es un alta).
-          despues: { par: dto.par, valor: dto.valor },
-        },
-      });
-
-      return tasa;
-    });
-  }
-
-  /**
-   * Historial de tasas por par. Si se pasa `par`, filtra solo ese par.
-   * Ordenadas por vigenteDesde desc (las más recientes primero).
-   */
-  async tasas(par?: string) {
-    const where = par ? { par } : {};
-    return this.prisma.tasa.findMany({
-      where,
-      orderBy: { vigenteDesde: 'desc' },
     });
   }
 
@@ -589,19 +533,121 @@ export class AdminService {
       cobradorId: null,
       metodo: dto.metodo,
       montoCents: BigInt(dto.montoCents),
-      moneda: dto.moneda as 'USD' | 'BS' | 'USDT',
-      tasaAplicada: dto.tasaAplicada ?? null,
       comprobanteUrl: dto.comprobanteUrl,
       nota: dto.nota,
       registradoPorId: adminId,
     });
   }
 
+  // ─────────────────────── MOVIMIENTOS DIARIOS ───────────────────────
+
+  /**
+   * Reporte diario de movimientos: todas las operaciones registradas ese día
+   * calendario de Caracas, con el precio de venta, el precio de compra y el
+   * margen de cada una.
+   *
+   * El margen es `(precioVenta - precioCompra) × montoUsd` en GYD. El
+   * porcentaje es `precioVenta ÷ precioCompra - 1` — como lo piensa el
+   * cliente: comprar a 237 y vender a 250 es un 5,5%.
+   *
+   * Una operación con `precioCompraGyd` nulo se muestra con el margen vacío
+   * y no entra en los totales. Es el caso de una operación registrada antes
+   * de la primera compra de USDT.
+   *
+   * Los totales ponderan por monto, no promedian simples: el porcentaje del
+   * día es `gananciaTotal / costoTotal`, donde `costoTotal = Σ(montoUsd ×
+   * precioCompra)`.
+   */
+  async movimientosDiarios(fechaYmd: string) {
+    const { inicio, fin } = rangoDiaCaracas(fechaYmd);
+
+    const operaciones = await this.prisma.operacion.findMany({
+      where: {
+        anuladaAt: null,
+        creadaAt: { gte: inicio, lt: fin },
+      },
+      include: {
+        cajero: { include: { usuario: true } },
+      },
+      orderBy: { creadaAt: 'asc' },
+    });
+
+    // corredorId es un String? sin relación de Prisma — cargo los corredores
+    // por separado y los indexo por id.
+    const corredorIds = [...new Set(operaciones.map((o) => o.corredorId).filter(Boolean))] as string[];
+    const corredores = await this.prisma.corredor.findMany({
+      where: { id: { in: corredorIds } },
+    });
+    const corredorMap = new Map(corredores.map((c) => [c.id, c]));
+
+    let totalUsdCents = 0n;
+    let totalGananciaCents = 0n;
+    let totalCostoGydCents = 0n;
+
+    const items = operaciones.map((op) => {
+      const montoUsdCents = op.montoOrigenCents;
+      const precioVenta = op.tasaAplicada;
+      const precioCompra = op.precioCompraGyd;
+
+      totalUsdCents += montoUsdCents;
+
+      let margenGydCents: bigint | null = null;
+      let pctMargen: Prisma.Decimal | null = null;
+
+      if (precioCompra !== null) {
+        // Margen = (precioVenta - precioCompra) × montoUsd
+        // montoUsdCents son centavos de USD; (precio × cents) da centavos de GYD.
+        const margenDecimal = precioVenta.sub(precioCompra).mul(montoUsdCents.toString());
+        margenGydCents = BigInt(margenDecimal.toFixed(0));
+
+        // Porcentaje = precioVenta ÷ precioCompra - 1
+        pctMargen = precioVenta.div(precioCompra).sub(1);
+
+        totalGananciaCents += margenGydCents;
+        totalCostoGydCents += BigInt(
+          precioCompra.mul(montoUsdCents.toString()).toFixed(0),
+        );
+      }
+
+      const corredor = op.corredorId ? corredorMap.get(op.corredorId) : undefined;
+
+      return {
+        id: op.id,
+        folio: op.folio,
+        cajero: op.cajero.usuario.nombre,
+        servicio: corredor?.servicioNombre ?? '—',
+        montoUsdCents: montoUsdCents.toString(),
+        precioVenta: precioVenta.toString(),
+        precioCompra: precioCompra?.toString() ?? null,
+        margenGydCents: margenGydCents?.toString() ?? null,
+        pctMargen: pctMargen?.toString() ?? null,
+      };
+    });
+
+    // Porcentaje promedio ponderado por monto: gananciaTotal / costoTotal.
+    // Si no hay operaciones con margen, queda null.
+    const pctPromedioPonderado =
+      totalCostoGydCents > 0n
+        ? new Prisma.Decimal(totalGananciaCents.toString()).div(totalCostoGydCents.toString()).toString()
+        : null;
+
+    return {
+      fecha: fechaYmd,
+      operaciones: items,
+      totales: {
+        operaciones: items.length,
+        usdCents: totalUsdCents.toString(),
+        gananciaGydCents: totalGananciaCents.toString(),
+        pctPromedioPonderado,
+      },
+    };
+  }
+
   // ─────────────────────────── TABLERO ───────────────────────────
 
   /**
    * Totales del día y del mes para el tablero del admin:
-   *   - cobrado (día / mes): suma de montoBaseCents de cobros no anulados
+   *   - cobrado (día / mes): suma de montoCents de cobros no anulados
    *   - operaciones (día / mes): conteo de operaciones no anuladas
    *   - cartera total pendiente: suma de saldoCents de todos los cajeros
    *   - reparto de cajeros por color de semáforo
@@ -627,11 +673,11 @@ export class AdminService {
     ] = await Promise.all([
       this.prisma.cobro.aggregate({
         where: { anuladoAt: null, creadoAt: { gte: inicioHoy, lt: finHoy } },
-        _sum: { montoBaseCents: true },
+        _sum: { montoCents: true },
       }),
       this.prisma.cobro.aggregate({
         where: { anuladoAt: null, creadoAt: { gte: inicioMes, lt: finMes } },
-        _sum: { montoBaseCents: true },
+        _sum: { montoCents: true },
       }),
       this.prisma.operacion.count({
         where: { anuladaAt: null, creadaAt: { gte: inicioHoy, lt: finHoy } },
@@ -660,11 +706,11 @@ export class AdminService {
 
     return {
       hoy: {
-        cobradoCents: cobradoDia._sum.montoBaseCents ?? 0n,
+        cobradoCents: cobradoDia._sum.montoCents ?? 0n,
         operaciones: operacionesDia,
       },
       mes: {
-        cobradoCents: cobradoMes._sum.montoBaseCents ?? 0n,
+        cobradoCents: cobradoMes._sum.montoCents ?? 0n,
         operaciones: operacionesMes,
       },
       carteraPendienteCents: cartera._sum.saldoCents ?? 0n,
@@ -721,4 +767,18 @@ function rangosCaracas(ahora: Date = new Date()): {
   );
 
   return { inicioHoy, finHoy, inicioMes, finMes };
+}
+
+/**
+ * Rango de un día calendario de Caracas en UTC, para filtrar operaciones
+ * por fecha. `fechaYmd` es "YYYY-MM-DD". Medianoche Caracas = 04:00 UTC
+ * (offset fijo −04:00, sin DST desde 2007).
+ *
+ * Devuelve `inicio` (medianoche de ese día, Caracas) y `fin` (medianoche
+ * del día siguiente, Caracas).
+ */
+function rangoDiaCaracas(fechaYmd: string): { inicio: Date; fin: Date } {
+  const inicio = new Date(`${fechaYmd}T00:00:00-04:00`);
+  const fin = new Date(inicio.getTime() + MS_POR_DIA);
+  return { inicio, fin };
 }

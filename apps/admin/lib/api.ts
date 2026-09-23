@@ -6,7 +6,6 @@ import type {
   AmpliacionCredito,
   Cierre,
   PaginaCierres,
-  Tasa,
   Resumen,
   RegistrarCobroAdminPayload,
   CobroAdminRespuesta,
@@ -14,9 +13,8 @@ import type {
   EstadoSemaforo,
   EstadoCierre,
   EstadoAmpliacion,
-  PublicacionTasas,
-  PublicarTasasPayload,
-  AvisoPublicacion,
+  PrecioCajeroServicio,
+  PrecioCajeroHistorial,
   Caja,
   MovimientoCaja,
   PaginaMovimientosCaja,
@@ -27,6 +25,7 @@ import type {
   IngresoCajaMadreRespuesta,
   AperturaCajaRespuesta,
   AnulacionAperturaRespuesta,
+  MovimientosDiarios,
 } from './types';
 
 /**
@@ -272,48 +271,28 @@ export const api = {
     return request<Cierre>(`/admin/cierres/${id}`);
   },
 
-  verificarCierre(id: string, body: { efectivoGydRecibidoCents: string; efectivoUsdRecibidoCents: string; nota?: string }): Promise<Cierre> {
+  verificarCierre(id: string, body: { efectivoRecibidoCents: string; nota?: string }): Promise<Cierre> {
     return request<Cierre>(`/admin/cierres/${id}/verificar`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
   },
 
-  // ─────────────────────────── TASAS ───────────────────────────
+  // ──────────────── PRECIOS POR CAJERO (nuevo modelo) ────────────────
 
-  fijarTasa(par: string, valor: string): Promise<Tasa> {
-    return request<Tasa>('/admin/tasas', {
-      method: 'POST',
-      body: JSON.stringify({ par, valor }),
-    });
+  preciosCajero(id: string): Promise<PrecioCajeroServicio[]> {
+    return request<PrecioCajeroServicio[]>(`/admin/cajeros/${id}/precios`);
   },
 
-  tasas(par?: string): Promise<Tasa[]> {
-    return request<Tasa[]>(`/admin/tasas${qs({ par })}`);
-  },
-
-  // ──────────────── TASAS POR CORREDOR (Fase 9) ────────────────
-
-  tasasCorredorActual(): Promise<PublicacionTasas | null> {
-    return request<PublicacionTasas | null>('/admin/tasas-corredor/actual');
-  },
-
-  tasasCorredorHistorial(): Promise<PublicacionTasas[]> {
-    return request<PublicacionTasas[]>('/admin/tasas-corredor/historial');
-  },
-
-  previsualizarTasasCorredor(body: PublicarTasasPayload): Promise<{ avisos: AvisoPublicacion[] }> {
-    return request<{ avisos: AvisoPublicacion[] }>('/admin/tasas-corredor/previsualizar', {
+  fijarPrecioCajero(id: string, body: { servicioId: string; precioGyd: string }): Promise<unknown> {
+    return request(`/admin/cajeros/${id}/precios`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
   },
 
-  publicarTasasCorredor(body: PublicarTasasPayload): Promise<{ publicacion: { id: string }; avisos: AvisoPublicacion[] }> {
-    return request<{ publicacion: { id: string }; avisos: AvisoPublicacion[] }>('/admin/tasas-corredor/publicar', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
+  historialPreciosCajero(id: string, servicioId?: string): Promise<PrecioCajeroHistorial[]> {
+    return request<PrecioCajeroHistorial[]>(`/admin/cajeros/${id}/precios/historial${qs({ servicioId })}`);
   },
 
   // ─────────────────────────── COBROS ADMIN ───────────────────────────
@@ -350,6 +329,10 @@ export const api = {
 
   resumen(): Promise<Resumen> {
     return request<Resumen>('/admin/resumen');
+  },
+
+  movimientosDiarios(fecha: string): Promise<MovimientosDiarios> {
+    return request<MovimientosDiarios>(`/admin/movimientos-diarios?fecha=${fecha}`);
   },
 
   // ─────────────────────────── CAJAS (Tesorería) ───────────────────────────

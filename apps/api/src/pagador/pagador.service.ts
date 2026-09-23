@@ -60,11 +60,12 @@ export class PagadorService {
     });
 
     // Buscar la caja de cada corredor para decirle al pagador cuál se
-    // va a descontar. El pagador no elige: la caja la determina el corredor.
+    // va a descontar. El pagador no elige: la caja la determina el servicio
+    // (Corredor.cajaId), no al revés.
     const cajas = await this.prisma.caja.findMany({
-      where: { corredorId: { in: corredorIds }, esMadre: false },
+      where: { id: { in: corredores.map((c) => c.cajaId) } },
     });
-    const cajaPorCorredor = new Map(cajas.map((c) => [c.corredorId!, c]));
+    const cajaPorId = new Map(cajas.map((c) => [c.id, c]));
 
     return operaciones.map((o) => {
       const corredor = corredorPorId.get(o.corredorId!)!;
@@ -83,8 +84,11 @@ export class PagadorService {
           monedaNombre: corredor.monedaNombre,
           formaEntrega: corredor.formaEntrega,
           formaEntregaNombre: corredor.formaEntregaNombre,
+          servicio: corredor.servicio,
+          servicioNombre: corredor.servicioNombre,
         },
-        cajaId: cajaPorCorredor.get(o.corredorId!)?.id ?? null,
+        cajaId: corredor.cajaId,
+        cajaNombre: cajaPorId.get(corredor.cajaId)?.nombre ?? null,
       };
     });
   }
@@ -99,12 +103,14 @@ export class PagadorService {
       clientUuid: string;
       operacionId: string;
       montoCents: bigint;
+      montoDestinoCents: bigint;
       tasaEjecucion: string;
       formaPago: string;
       nombreCliente: string;
+      comprobantePagoUrl: string;
     },
   ) {
-    // Buscar la operación para derivar la caja del corredor.
+    // Buscar la operación y su servicio para derivar la caja (Corredor.cajaId).
     const operacion = await this.prisma.operacion.findUnique({
       where: { id: dto.operacionId },
     });
@@ -113,19 +119,22 @@ export class PagadorService {
       throw new Error(`Operación ${dto.operacionId} no tiene corredor`);
     }
 
-    const caja = await this.prisma.caja.findFirst({
-      where: { corredorId: operacion.corredorId, esMadre: false },
+    const corredor = await this.prisma.corredor.findUnique({
+      where: { id: operacion.corredorId },
+      select: { cajaId: true },
     });
-    if (!caja) throw new Error(`No hay caja para el corredor ${operacion.corredorId}`);
+    if (!corredor) throw new Error(`No hay servicio ${operacion.corredorId}`);
 
     return this.cajas.ejecutarPago({
       clientUuid: dto.clientUuid,
       operacionId: dto.operacionId,
-      cajaId: caja.id,
+      cajaId: corredor.cajaId,
       montoCents: dto.montoCents,
+      montoDestinoCents: dto.montoDestinoCents,
       tasaEjecucion: dto.tasaEjecucion,
       formaPago: dto.formaPago,
       nombreCliente: dto.nombreCliente,
+      comprobantePagoUrl: dto.comprobantePagoUrl,
       registradoPorId: pagadorId,
     });
   }
@@ -164,6 +173,7 @@ export class PagadorService {
         tasaEjecucion: o.tasaEjecucion?.toString() ?? null,
         formaPago: o.formaPago,
         nombreCliente: o.nombreCliente,
+        comprobantePagoUrl: o.comprobantePagoUrl,
         pagadaAt: o.pagadaAt,
         corredor: {
           id: corredor.id,

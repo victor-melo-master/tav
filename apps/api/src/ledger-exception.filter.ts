@@ -15,7 +15,6 @@ import {
   MotivoRequeridoException,
   NoEncontradoException,
   SinCupoException,
-  TasaRequeridaException,
   YaAnuladoException,
 } from './ledger/ledger.exceptions';
 
@@ -50,7 +49,6 @@ interface LedgerErrorBody {
  *   SinCupoException          → 409  { code, disponible, requerido, faltante }
  *   YaAnuladoException        → 409  { code, tipo, id }
  *   CierreNoAbiertoException  → 409  { code, cierreId, estado }
- *   TasaRequeridaException    → 422  { code, message }
  *   MotivoRequeridoException  → 422  { code, message }
  *   CajeroNoValidoException   → 422  { code, cajeroId }
  *   CobradorNoValidoException → 422  { code, cobradorId }
@@ -94,10 +92,6 @@ export class LedgerExceptionFilter implements ExceptionFilter {
         status: HttpStatus.CONFLICT,
         body: { code: ex.code, message: ex.message, cierreId: ex.cierreId, estado: ex.estado },
       };
-    }
-
-    if (ex instanceof TasaRequeridaException) {
-      return { status: HttpStatus.UNPROCESSABLE_ENTITY, body: { code: ex.code, message: ex.message } };
     }
 
     if (ex instanceof MotivoRequeridoException) {

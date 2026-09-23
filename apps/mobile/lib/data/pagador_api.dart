@@ -89,6 +89,7 @@ class PagoDelDiaDto {
     required this.tasaEjecucion,
     required this.formaPago,
     required this.nombreCliente,
+    required this.comprobantePagoUrl,
     required this.pagadaAt,
     required this.corredor,
   });
@@ -101,6 +102,7 @@ class PagoDelDiaDto {
   final String? tasaEjecucion;
   final String? formaPago;
   final String? nombreCliente;
+  final String? comprobantePagoUrl;
   final DateTime pagadaAt;
   final CorredorPagoDto corredor;
 
@@ -114,6 +116,7 @@ class PagoDelDiaDto {
       tasaEjecucion: json['tasaEjecucion'] as String?,
       formaPago: json['formaPago'] as String?,
       nombreCliente: json['nombreCliente'] as String?,
+      comprobantePagoUrl: json['comprobantePagoUrl'] as String?,
       pagadaAt: DateTime.parse(json['pagadaAt'] as String),
       corredor: CorredorPagoDto.fromJson(json['corredor'] as Map<String, dynamic>),
     );
@@ -153,25 +156,31 @@ class EjecutarPagoRequest {
     required this.clientUuid,
     required this.operacionId,
     required this.montoCents,
+    required this.montoDestinoCents,
     required this.tasaEjecucion,
     required this.formaPago,
     required this.nombreCliente,
+    required this.comprobantePagoUrl,
   });
 
   final String clientUuid;
   final String operacionId;
   final String montoCents;
+  final String montoDestinoCents;
   final String tasaEjecucion;
   final String formaPago;
   final String nombreCliente;
+  final String comprobantePagoUrl;
 
   Map<String, dynamic> toJson() => {
         'clientUuid': clientUuid,
         'operacionId': operacionId,
         'montoCents': montoCents,
+        'montoDestinoCents': montoDestinoCents,
         'tasaEjecucion': tasaEjecucion,
         'formaPago': formaPago,
         'nombreCliente': nombreCliente,
+        'comprobantePagoUrl': comprobantePagoUrl,
       };
 }
 
@@ -207,6 +216,19 @@ class PagadorApi {
   Future<PagoResultadoDto> pagar(EjecutarPagoRequest req) async {
     final r = await dio.post('/pagador/pagar', data: req.toJson());
     return PagoResultadoDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
+  /// Sube una captura del pago (imagen o PDF, máx 5 MB). Devuelve la ruta
+  /// que se pasa como `comprobantePagoUrl` al pagar. El servidor valida
+  /// el tipo y el tamaño; el nombre lo genera él (UUID).
+  Future<String> subirComprobante(String filePath, String fileName) async {
+    final form = FormData();
+    form.files.add(MapEntry(
+      'file',
+      await MultipartFile.fromFile(filePath, filename: fileName),
+    ));
+    final r = await dio.post('/uploads/comprobante', data: form);
+    return (r.data as Map<String, dynamic>)['url'] as String;
   }
 
   Future<List<PagoDelDiaDto>> pagosDelDia() async {

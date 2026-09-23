@@ -185,14 +185,8 @@ class _CuadreScreenState extends ConsumerState<CuadreScreen> {
                 child: Column(
                   children: [
                     TavKvRow(
-                      label: 'Efectivo GYD que entregas',
-                      value: formatCents(cierre.efectivoGydCents),
-                      valueColor: TavColors.surface,
-                    ),
-                    TavKvRow(
-                      label: 'Efectivo USD que entregas',
-                      value: formatCents(cierre.efectivoUsdCents,
-                          currency: TavMoneyCurrency.usd),
+                      label: 'Efectivo que entregas',
+                      value: formatCents(cierre.efectivoCents),
                       valueColor: TavColors.surface,
                     ),
                     TavKvRow(
@@ -281,7 +275,7 @@ class _CuadreScreenState extends ConsumerState<CuadreScreen> {
               Expanded(
                 child: Text(
                   'Al cerrar, esta lista se envía al administrador. Él compara el efectivo '
-                  'que entregas (GYD y USD por separado) contra lo declarado aquí.',
+                  'que entregas contra lo declarado aquí.',
                   style: TavText.caption.copyWith(
                       color: TavColors.blue600, height: 1.55),
                 ),
@@ -304,31 +298,22 @@ class _CuadreScreenState extends ConsumerState<CuadreScreen> {
     );
   }
 
-  Map<MetodoCobro, ({int monto, int montoBase})> _desglose(
-      List<CobroDto> cobros) {
-    final map = <MetodoCobro, ({int monto, int montoBase})>{};
+  Map<MetodoCobro, int> _desglose(List<CobroDto> cobros) {
+    final map = <MetodoCobro, int>{};
     for (final c in cobros) {
-      final prev = map[c.metodo] ?? (monto: 0, montoBase: 0);
-      map[c.metodo] = (
-        monto: prev.monto + c.montoCents,
-        montoBase: prev.montoBase + c.montoBaseCents,
-      );
+      map[c.metodo] = (map[c.metodo] ?? 0) + c.montoCents;
     }
-    // Asegurar los 4 métodos visibles.
+    // Asegurar los métodos visibles.
     for (final m in MetodoCobro.values) {
-      map.putIfAbsent(m, () => (monto: 0, montoBase: 0));
+      map.putIfAbsent(m, () => 0);
     }
     return map;
   }
 
-  Widget _buildFilaDesglose(
-      MetodoCobro m, ({int monto, int montoBase}) val) {
-    final original = m == MetodoCobro.bolivares || m == MetodoCobro.pagoMovil
-        ? '${formatCents(val.monto, currency: TavMoneyCurrency.bsd)} · '
-        : '';
+  Widget _buildFilaDesglose(MetodoCobro m, int val) {
     return TavKvRow(
       label: m.label,
-      value: '$original${formatCents(val.montoBase)}',
+      value: formatCents(val),
     );
   }
 }

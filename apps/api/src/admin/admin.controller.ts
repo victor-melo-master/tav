@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
@@ -6,8 +6,6 @@ import { ListarCajerosDto } from './dto/listar-cajeros.dto';
 import { CambiarLimiteDto } from './dto/cambiar-limite.dto';
 import { ResolverAmpliacionDto } from './dto/resolver-ampliacion.dto';
 import { VerificarCierreDto } from './dto/verificar-cierre.dto';
-import { CrearTasaDto } from './dto/crear-tasa.dto';
-import { PublicarTasasDto } from './dto/publicar-tasas.dto';
 import { RegistrarCobroAdminDto } from './dto/registrar-cobro-admin.dto';
 import {
   ListarAmpliacionesDto,
@@ -16,7 +14,9 @@ import {
 } from './dto/listar.dto';
 import { Roles } from '../auth/roles.decorator';
 import { AuthenticatedRequest } from '../auth/auth.types';
-import { TasaCorredorService } from '../tasa/tasa-corredor.service';
+import { PrecioCajeroService } from '../precio-cajero/precio-cajero.service';
+import { FijarPrecioCajeroDto } from '../precio-cajero/dto/fijar-precio.dto';
+import { fechaCaracasYmd } from '../ledger/fecha-caracas';
 
 /**
  * Endpoints del rol administrador. Capa fina: adminId sale siempre del JWT
@@ -25,9 +25,9 @@ import { TasaCorredorService } from '../tasa/tasa-corredor.service';
  * La lógica de dinero vive en LedgerService; el semáforo en SemaforoService.
  * Aquí no se recalcula nada: se delega, se filtra y se formatea.
  *
- * El reporte de ganancias NO está implementado: con la comisión dentro de la
- * tasa hace falta guardar `tasaCosto`, y eso está pendiente de una decisión
- * del cliente (ver docs/01-reglas-de-negocio.md, sección 8).
+ * El reporte de ganancias NO está implementado aún: requiere el precio de
+ * compra del USDT (paso 5) y el precio de venta congelado por operación,
+ * que se añaden en los pasos siguientes. Ver docs/07-fase-9-multi-corredor.md.
  */
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -36,7 +36,7 @@ import { TasaCorredorService } from '../tasa/tasa-corredor.service';
 export class AdminController {
   constructor(
     private readonly admin: AdminService,
-    private readonly tasaCorredor: TasaCorredorService,
+    private readonly precioCajero: PrecioCajeroService,
   ) {}
 
   // ─────────────────────────── USUARIOS ───────────────────────────
@@ -154,48 +154,39 @@ export class AdminController {
     return this.admin.verificarCierre(req.user.sub, id, dto);
   }
 
-  // ─────────────────────────── TASAS ───────────────────────────
+  // ──────────────────── PRECIOS POR CAJERO (nuevo modelo) ────────────────────
 
-  @Post('tasas')
-  @ApiOperation({ summary: 'Fija la tasa del día para un par (USDT_BS, USD_BS, ZELLE_BS)' })
-  @ApiResponse({ status: 201, description: 'Tasa creada, vigente desde ahora' })
-  async fijarTasa(@Body() dto: CrearTasaDto, @Req() req: AuthenticatedRequest) {
-    return this.admin.fijarTasa(req.user.sub, dto);
+  @Get('cajeros/:id/precios')
+  @ApiOperation({
+    summary: 'Precios vigentes del cajero por servicio, con los servicios sin precio marcados',
+  })
+  @ApiResponse({ status: 200, description: 'Un precio por servicio activo; null donde falta por fijar' })
+  @ApiResponse({ status: 404, description: 'Cajero no encontrado' })
+  async preciosCajero(@Param('id') id: string) {
+    return this.precioCajero.preciosCajero(id);
   }
 
-  @Get('tasas')
-  @ApiOperation({ summary: 'Historial de tasas, opcionalmente filtrado por par' })
-  @ApiResponse({ status: 200, description: 'Tasas ordenadas por vigenteDesde desc' })
-  async tasas(@Query('par') par?: string) {
-    return this.admin.tasas(par);
+  @Post('cajeros/:id/precios')
+  @ApiOperation({ summary: 'Fija el precio de un servicio para un cajero (queda en el historial)' })
+  @ApiResponse({ status: 201, description: 'Precio fijado — inserta una fila nueva en el historial' })
+  @ApiResponse({ status: 400, description: 'Precio inválido o servicio desactivado' })
+  @ApiResponse({ status: 404, description: 'Cajero o servicio no encontrado' })
+  async fijarPrecioCajero(
+    @Param('id') id: string,
+    @Body() dto: FijarPrecioCajeroDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.precioCajero.fijarPrecio(id, dto.servicioId, dto.precioGyd, req.user.sub);
   }
 
-  // ──────────────────── TASAS POR CORREDOR (Fase 9) ────────────────────
-
-  @Post('tasas-corredor/previsualizar')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Previsualiza avisos de una publicación sin escribir' })
-  async previsualizarTasas(@Body() dto: PublicarTasasDto) {
-    return this.tasaCorredor.previsualizar(dto);
-  }
-
-  @Post('tasas-corredor/publicar')
-  @ApiOperation({ summary: 'Publica una tanda atómica de tasas por corredor' })
-  @ApiResponse({ status: 201, description: 'Publicación creada con su pata base e items' })
-  async publicarTasas(@Body() dto: PublicarTasasDto, @Req() req: AuthenticatedRequest) {
-    return this.tasaCorredor.publicar(req.user.sub, dto);
-  }
-
-  @Get('tasas-corredor/actual')
-  @ApiOperation({ summary: 'Última publicación con sus items (para precargar la pantalla)' })
-  async tasasCorredorActual() {
-    return this.tasaCorredor.ultimaPublicacion();
-  }
-
-  @Get('tasas-corredor/historial')
-  @ApiOperation({ summary: 'Historial de publicaciones de tasas por corredor' })
-  async tasasCorredorHistorial() {
-    return this.tasaCorredor.historial();
+  @Get('cajeros/:id/precios/historial')
+  @ApiOperation({ summary: 'Historial de cambios de precio del cajero, opcionalmente por servicio' })
+  @ApiResponse({ status: 200, description: 'Cambios ordenados del más reciente al más viejo' })
+  async historialPreciosCajero(
+    @Param('id') id: string,
+    @Query('servicioId') servicioId?: string,
+  ) {
+    return this.precioCajero.historial(id, servicioId);
   }
 
   // ─────────────────────────── COBROS DEL ADMIN ───────────────────────────
@@ -209,6 +200,20 @@ export class AdminController {
   async registrarCobro(@Body() dto: RegistrarCobroAdminDto, @Req() req: AuthenticatedRequest) {
     const { cobro, yaExistia } = await this.admin.registrarCobro(req.user.sub, dto);
     return { cobro, yaExistia };
+  }
+
+  // ─────────────────────── MOVIMIENTOS DIARIOS ───────────────────────
+
+  @Get('movimientos-diarios')
+  @ApiOperation({
+    summary: 'Reporte diario de movimientos: operaciones del día con precio de venta, compra y margen',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Operaciones del día con margen y totales ponderados por monto',
+  })
+  async movimientosDiarios(@Query('fecha') fecha?: string) {
+    return this.admin.movimientosDiarios(fecha ?? fechaCaracasYmd());
   }
 
   // ─────────────────────────── TABLERO ───────────────────────────

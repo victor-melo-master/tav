@@ -33,7 +33,7 @@ const TEST_URL = 'postgresql://tav:tav@localhost:5432/tav_test?schema=public';
 const prisma = new PrismaClient({ datasources: { db: { url: TEST_URL } } });
 
 const TABLAS = [
-  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Tasa', 'Operacion', 'Cobro',
+  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Operacion', 'Cobro',
   'Movimiento', 'AmpliacionCredito', 'Cierre', 'Atencion', 'Aviso', 'AuditLog',
   'Config',
 ];
@@ -54,19 +54,6 @@ async function seedConfig() {
       { clave: 'semaforo.pct_ambar', valor: '0.75' },
     ],
     skipDuplicates: true,
-  });
-}
-
-/** Tasas de conversión a GYD. USD_GYD = 1 para que los tests se concentren
- *  en mecánica, no en conversión. */
-async function seedTasas() {
-  await prisma.tasa.createMany({
-    data: [
-      { id: randomUUID(), par: 'GYD_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
-      { id: randomUUID(), par: 'USD_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
-      { id: randomUUID(), par: 'USDT_GYD', valor: 1.0, creadaPorId: 'admin-test', vigenteDesde: new Date() },
-      { id: randomUUID(), par: 'BS_GYD', valor: 0.732314, creadaPorId: 'admin-test', vigenteDesde: new Date() },
-    ],
   });
 }
 
@@ -149,7 +136,6 @@ afterAll(async () => {
 beforeEach(async () => {
   await truncateTodo();
   await seedConfig();
-  await seedTasas();
 });
 
 // ─────────────────────────── CAJEROS ───────────────────────────
@@ -251,14 +237,13 @@ describe('Cobrador — POST /cobrador/cobros', () => {
       .send({
         clientUuid: 'cobro-uuid-001',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
       });
 
     expect(res.status).toBe(201);
     expect(res.body.cobro.folio).toMatch(/^COB-/);
-    expect(res.body.cobro.montoBaseCents).toBe('30000');
+    expect(res.body.cobro.montoCents).toBe('30000');
     expect(res.body.cobro.esEfectivo).toBe(true);
     expect(res.body.yaExistia).toBe(false);
 
@@ -281,9 +266,8 @@ describe('Cobrador — POST /cobrador/cobros', () => {
     const body = {
       clientUuid: 'cobro-uuid-dup',
       cajeroId: caj.id,
-      metodo: 'efectivo_usd' as const,
+      metodo: 'efectivo_gyd' as const,
       montoCents: '30000',
-      moneda: 'USD',
     };
 
     const r1 = await request(app.getHttpServer())
@@ -306,7 +290,7 @@ describe('Cobrador — POST /cobrador/cobros', () => {
     expect(perfil!.saldoCents).toBe(30_000n);
   });
 
-  test('registra un cobro en bolívares con tasa', async () => {
+  test('registra un cobro por transferencia GYD', async () => {
     const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
     const token = await login(app, cob.email, cob.password);
 
@@ -317,50 +301,19 @@ describe('Cobrador — POST /cobrador/cobros', () => {
       deudaDesde: new Date(),
     });
 
-    // 2.854.000 centavos de BS × tasa BS_GYD 0.732314 = 2.090.024 centavos GYD (half-up).
-    // La tasa la lee el servicio de la base; tasaAplicada en el DTO se ignora.
     const res = await request(app.getHttpServer())
       .post('/cobrador/cobros')
       .set('Authorization', `Bearer ${token}`)
       .send({
-        clientUuid: 'cobro-bs-001',
+        clientUuid: 'cobro-transfer-001',
         cajeroId: caj.id,
-        metodo: 'bolivares',
-        montoCents: '2854000',
-        moneda: 'BS',
+        metodo: 'transferencia_gyd',
+        montoCents: '20000',
       });
 
     expect(res.status).toBe(201);
-    expect(res.body.cobro.montoBaseCents).toBe('2090024');
+    expect(res.body.cobro.montoCents).toBe('20000');
     expect(res.body.cobro.esEfectivo).toBe(false);
-  });
-
-  test('rechaza cobro en BS cuando no hay tasa vigente en la base', async () => {
-    const cob = await crearCobrador({ email: '0414-2000001@tav.test' });
-    const token = await login(app, cob.email, cob.password);
-
-    const caj = await crearCajero({
-      email: '0414-1000001@tav.test',
-      limiteCents: 100_000n,
-      saldoCents: 60_000n,
-    });
-
-    // Borrar la tasa BS_GYD sembrada en beforeEach para forzar el rechazo.
-    await prisma.tasa.deleteMany({ where: { par: 'BS_GYD' } });
-
-    const res = await request(app.getHttpServer())
-      .post('/cobrador/cobros')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        clientUuid: 'cobro-bs-notasa',
-        cajeroId: caj.id,
-        metodo: 'bolivares',
-        montoCents: '2854000',
-        moneda: 'BS',
-      });
-
-    expect(res.status).toBe(422);
-    expect(res.body.code).toBe('TASA_REQUERIDA');
   });
 });
 
@@ -384,9 +337,9 @@ describe('Cobrador — POST /cobrador/cobros/:id/anular', () => {
       .send({
         clientUuid: 'cobro-anular-001',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
+        
       });
 
     const res = await request(app.getHttpServer())
@@ -423,9 +376,9 @@ describe('Cobrador — POST /cobrador/cobros/:id/anular', () => {
       .send({
         clientUuid: 'cobro-cross-001',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
+        
       });
 
     // Cob2 intenta anularlo.
@@ -454,9 +407,8 @@ describe('Cobrador — POST /cobrador/cobros/:id/anular', () => {
       .send({
         clientUuid: 'cobro-motivo-001',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
       });
 
     const res = await request(app.getHttpServer())
@@ -502,9 +454,8 @@ describe('Cobrador — Cierres', () => {
       .send({
         clientUuid: 'cobro-cierre-001',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
       });
 
     const res = await request(app.getHttpServer())
@@ -535,21 +486,19 @@ describe('Cobrador — Cierres', () => {
       .send({
         clientUuid: 'cobro-enviar-001',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
       });
 
-    // Cobro digital.
+    // Cobro por transferencia.
     await request(app.getHttpServer())
       .post('/cobrador/cobros')
       .set('Authorization', `Bearer ${token}`)
       .send({
         clientUuid: 'cobro-enviar-002',
         cajeroId: caj.id,
-        metodo: 'pago_movil',
+        metodo: 'transferencia_gyd',
         montoCents: '20000',
-        moneda: 'USD',
       });
 
     const cierreRes = await request(app.getHttpServer())
@@ -559,11 +508,11 @@ describe('Cobrador — Cierres', () => {
     const res = await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreRes.body.id}/enviar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
+      .send({ efectivoDeclaradoCents: '30000' });
 
     expect(res.status).toBe(200);
     expect(res.body.estado).toBe('enviado');
-    expect(res.body.efectivoGydDeclaradoCents).toBe('30000');
+    expect(res.body.efectivoDeclaradoCents).toBe('30000');
     expect(res.body.digitalCents).toBe('20000');
     expect(res.body.totalRegistradoCents).toBe('50000');
     expect(res.body.enviadoAt).not.toBeNull();
@@ -586,9 +535,8 @@ describe('Cobrador — Cierres', () => {
       .send({
         clientUuid: 'cobro-pendiente-001',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
       });
 
     // Marcar el cobro como sin sincronizar (simular offline).
@@ -604,7 +552,7 @@ describe('Cobrador — Cierres', () => {
     const res = await request(app.getHttpServer())
       .post(`/cobrador/cierres/${cierreRes.body.id}/enviar`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoGydDeclaradoCents: '30000', efectivoUsdDeclaradoCents: '0' });
+      .send({ efectivoDeclaradoCents: '30000' });
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('CIERRE_NO_ABIERTO');
@@ -627,9 +575,8 @@ describe('Cobrador — Cierres', () => {
       .send({
         clientUuid: 'cobro-historial-001',
         cajeroId: caj.id,
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '30000',
-        moneda: 'USD',
       });
 
     const res = await request(app.getHttpServer())
@@ -767,9 +714,9 @@ describe('Cobrador — un cajero recibe 403 en todos los endpoints', () => {
       .send({
         clientUuid: 'x',
         cajeroId: 'x',
-        metodo: 'efectivo_usd',
+        metodo: 'efectivo_gyd',
         montoCents: '1000',
-        moneda: 'USD',
+        
       });
 
     expect(res.status).toBe(403);
@@ -805,7 +752,7 @@ describe('Cobrador — un cajero recibe 403 en todos los endpoints', () => {
     const res = await request(app.getHttpServer())
       .post('/cobrador/cierres/fake-id/enviar')
       .set('Authorization', `Bearer ${token}`)
-      .send({ efectivoGydDeclaradoCents: '1000', efectivoUsdDeclaradoCents: '0' });
+      .send({ efectivoDeclaradoCents: '1000',  });
 
     expect(res.status).toBe(403);
   });

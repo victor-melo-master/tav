@@ -23,6 +23,11 @@ export class IngresarCajaMadreHttpDto {
   @Matches(/^\d+$/, { message: 'montoCents debe ser un entero de centavos no negativo' })
   montoCents!: string;
 
+  @ApiProperty({ description: 'Precio al que se compró el USDT (GYD por 1 USD). Obligatorio, > 0.', example: '237' })
+  @IsString()
+  @Matches(/^\d+(\.\d+)?$/, { message: 'precioCompraGyd debe ser un número decimal positivo' })
+  precioCompraGyd!: string;
+
   @ApiProperty({ description: 'Motivo del ingreso (obligatorio)', example: 'Recarga de capital' })
   @IsString()
   @IsNotEmpty()

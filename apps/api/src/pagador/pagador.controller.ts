@@ -32,9 +32,11 @@ export class PagadorController {
       clientUuid: dto.clientUuid,
       operacionId: dto.operacionId,
       montoCents: BigInt(dto.montoCents),
+      montoDestinoCents: BigInt(dto.montoDestinoCents),
       tasaEjecucion: dto.tasaEjecucion,
       formaPago: dto.formaPago,
       nombreCliente: dto.nombreCliente,
+      comprobantePagoUrl: dto.comprobantePagoUrl,
     });
   }
 

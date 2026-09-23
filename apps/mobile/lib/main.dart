@@ -54,7 +54,7 @@ class _TavAppState extends ConsumerState<TavApp>
     // no está visible, el trabajo se hace en segundo plano; si está visible,
     // el widget la recibe cuando vuelve a renderizar.
     ref.read(resumenProvider.notifier).cargar();
-    ref.read(tasasProvider.notifier).cargar();
+    ref.read(corredoresProvider.notifier).cargar();
     ref.read(operacionesProvider.notifier).cargar();
     ref.read(movimientosProvider.notifier).cargar();
     ref.read(ampliacionesProvider.notifier).cargar();

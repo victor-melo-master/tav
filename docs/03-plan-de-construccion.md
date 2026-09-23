@@ -172,7 +172,7 @@ Ese es el momento de parar y arreglar, no dentro de tres semanas con datos reale
 > `GET /cajero/movimientos` → el estado de cuenta paginado.
 > `POST /cajero/ampliaciones` → solicita ampliación con monto y motivo.
 > `GET /cajero/ampliaciones` → estado de sus solicitudes.
-> `GET /tasas/vigentes`
+> `GET /cajero/corredores` → servicios disponibles con precio GYD/USD de este cajero.
 > `POST /uploads/comprobante` → multipart, guarda en disco, devuelve la ruta.
 >
 > Valida todo con DTOs de class-validator. Documenta con Swagger en `/docs`.

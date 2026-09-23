@@ -16,16 +16,17 @@ import '../../theme/tav_colors.dart';
 import '../../theme/tav_radius.dart';
 import '../../theme/tav_space.dart';
 import '../../theme/tav_text.dart';
+import '../../utils/format.dart';
 import '../../utils/labels.dart';
 
 /// Pantalla de inicio del cajero.
 ///
 /// Muestra: crédito disponible (no deuda), deuda y porcentaje usado,
 /// semáforo de dos ejes, barra de progreso, tarjeta roja de bloqueo
-/// cuando disponible llega a cero, tasa del día, accesos rápidos y
+/// cuando disponible llega a cero, precios por servicio, accesos rápidos y
 /// últimas operaciones.
 ///
-/// Datos de GET /cajero/resumen + GET /tasas/vigentes + GET /cajero/operaciones.
+/// Datos de GET /cajero/resumen + GET /cajero/corredores + GET /cajero/operaciones.
 class CajeroInicioScreen extends ConsumerStatefulWidget {
   const CajeroInicioScreen({super.key});
 
@@ -40,14 +41,14 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(resumenProvider.notifier).cargar();
-      ref.read(tasasProvider.notifier).cargar();
+      ref.read(corredoresProvider.notifier).cargar();
       ref.read(operacionesProvider.notifier).cargar();
     });
   }
 
   void _recargar() {
     ref.read(resumenProvider.notifier).cargar();
-    ref.read(tasasProvider.notifier).cargar();
+    ref.read(corredoresProvider.notifier).cargar();
     ref.read(operacionesProvider.notifier).cargar();
   }
 
@@ -58,7 +59,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
         ? authState.usuario.nombre
         : '';
     final resumenState = ref.watch(resumenProvider);
-    final tasasState = ref.watch(tasasProvider);
+    final preciosState = ref.watch(corredoresProvider);
     final opsState = ref.watch(operacionesProvider);
 
     return Scaffold(
@@ -81,7 +82,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
                   child: _buildResumen(resumenState),
                 ),
               ),
-              SliverToBoxAdapter(child: _buildTasa(tasasState)),
+              SliverToBoxAdapter(child: _buildPrecios(preciosState)),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
@@ -334,25 +335,20 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
     );
   }
 
-  Widget _buildTasa(CajeroDataState state) {
-    TasaDto? usdtBs;
-    if (state is CajeroDataLoaded<List<TasaDto>>) {
-      for (final t in state.data) {
-        if (t.par == 'USDT_BS') {
-          usdtBs = t;
-          break;
-        }
-      }
-    }
+  Widget _buildPrecios(CajeroDataState state) {
+    final corredores = state is CajeroDataLoaded<List<CorredorDto>>
+        ? state.data.where((c) => c.precioGyd.isNotEmpty).toList()
+        : <CorredorDto>[];
+    final primero = corredores.isNotEmpty ? corredores.first : null;
+    final segundo = corredores.length > 1 ? corredores[1] : null;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           TavSpace.xl, TavSpace.md, TavSpace.xl, TavSpace.sm),
       child: TavCard(
-        onTap: () => context.push('/cajero/tasas'),
+        onTap: () => context.push('/cajero/precios'),
         child: Row(
           children: [
-            // Icono de moneda genérica (no Bitcoin).
             Container(
               width: 38,
               height: 38,
@@ -369,71 +365,34 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Tasa de hoy · USDT → Bs',
+                    r'Tus precios · G$ por dólar',
                     style: TavText.caption.copyWith(color: TavColors.ink3),
                   ),
-                  if (usdtBs != null)
-                    // "Bs" pegado al número, no suelto a la derecha.
-                    RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: _formatTasa(usdtBs.valor),
-                            style: TavText.h2.copyWith(
-                              fontSize: 18,
-                              color: TavColors.ink,
-                            ),
-                          ),
-                          TextSpan(
-                            text: ' Bs',
-                            style: TavText.caption.copyWith(
-                              fontSize: 12,
-                              color: TavColors.ink3,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+                  if (primero != null)
+                    Text(
+                      '${primero.servicioNombre}: ${formatGydDecimal(primero.precioGyd)}'
+                          '${segundo != null ? ' · ${segundo.servicioNombre}: ${formatGydDecimal(segundo.precioGyd)}' : ''}',
+                      style: TavText.h2.copyWith(
+                        fontSize: 16,
+                        color: TavColors.ink,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     )
                   else
                     Text(
                       state is CajeroDataLoading ? '...' : '—',
-                      style: TavText.h2.copyWith(fontSize: 18, color: TavColors.ink3),
+                      style: TavText.h2
+                          .copyWith(fontSize: 18, color: TavColors.ink3),
                     ),
                 ],
               ),
             ),
-            // Columna derecha: variación y "hace X min".
-            if (usdtBs != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  // PENDIENTE DE DEFINIR: el servidor no expone la variación
-                  // porcentual de la tasa. Cuando /tasas/vigentes incluya el
-                  // cambio respecto a la tasa anterior, mostrar aquí un chip
-                  // verde "↑ 0,8%" o rojo "↓ 0,3%" según el signo.
-                  Text(
-                    _haceTexto(usdtBs.vigenteDesde),
-                    style: TavText.caption.copyWith(
-                      color: TavColors.ink3,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
+            const Icon(Icons.chevron_right, color: TavColors.ink3, size: 20),
           ],
         ),
       ),
     );
-  }
-
-  /// "hace X min" / "hace X h" / "hace X d" desde la fecha dada.
-  String _haceTexto(DateTime desde) {
-    final diff = DateTime.now().difference(desde);
-    if (diff.inMinutes < 1) return 'ahora';
-    if (diff.inMinutes < 60) return 'hace ${diff.inMinutes} min';
-    if (diff.inHours < 24) return 'hace ${diff.inHours} h';
-    return 'hace ${diff.inDays} d';
   }
 
   Widget _buildAccesos(BuildContext context) {
@@ -623,19 +582,6 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
         'anulada' => Icons.block_outlined,
         _ => Icons.circle_outlined,
       };
-
-  String _formatTasa(String valor) {
-    final d = double.tryParse(valor);
-    if (d == null) return valor;
-    final s = d.toStringAsFixed(2);
-    // Formato es_VE: coma decimal, punto miles
-    final parts = s.split('.');
-    final entero = parts[0].replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]}.',
-    );
-    return '$entero,${parts[1]}';
-  }
 
   String _fechaCorta(DateTime d) {
     const meses = [

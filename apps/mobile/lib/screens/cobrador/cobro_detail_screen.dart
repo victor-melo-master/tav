@@ -130,7 +130,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
   Widget _buildContenido(CobroDto cobro) {
     final nombreCajero = _nombreCajero();
-    final currency = cobro.moneda == 'BS' ? TavMoneyCurrency.bsd : TavMoneyCurrency.usd;
+
     final cajerosState = ref.watch(cajerosCobradorProvider);
     String zonaText = 'Sin zona';
     if (cajerosState is CobradorDataLoaded<List<CajeroCobradorDto>>) {
@@ -173,14 +173,14 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   ),
                   const SizedBox(height: 10),
                   TavMoneyDisplay(
-                    cents: cobro.montoBaseCents,
+                    cents: cobro.montoCents,
                     color: cobro.anulado ? TavColors.ink4 : TavColors.ink,
                     style: TavText.moneyDisplay.copyWith(fontSize: 30),
                     fitted: true,
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${cobro.metodo.label}${cobro.moneda == 'BS' ? ' · ${formatCents(cobro.montoCents, currency: currency)}' : ''}',
+                    cobro.metodo.label,
                     style: TavText.body2.copyWith(color: TavColors.ink3),
                   ),
                 ],
@@ -296,7 +296,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   int _deudaAntes(CobroDto cobro, List<CajeroCobradorDto> cajeros) {
     final cajero = cajeros.where((c) => c.id == cobro.cajeroId).firstOrNull;
     if (cajero == null) return 0;
-    return cajero.saldoCents + cobro.montoBaseCents;
+    return cajero.saldoCents + cobro.montoCents;
   }
 
   int _deudaDespues(CobroDto cobro, List<CajeroCobradorDto> cajeros) {

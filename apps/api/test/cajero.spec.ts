@@ -12,7 +12,6 @@
  *   - GET /cajero/movimientos paginado ordenado por seq
  *   - POST /cajero/ampliaciones solicita ampliación
  *   - GET /cajero/ampliaciones lista sus solicitudes
- *   - GET /tasas/vigentes devuelve la más reciente de cada par
  *   - POST /uploads/comprobante guarda en disco y devuelve la ruta
  *   - Aislamiento: un cajero no puede leer ni operar sobre datos de otro
  *   - El DTO rechaza montos incoherentes (totalCents != montoOrigen + comisión)
@@ -34,8 +33,8 @@ const TEST_URL = 'postgresql://tav:tav@localhost:5432/tav_test?schema=public';
 const prisma = new PrismaClient({ datasources: { db: { url: TEST_URL } } });
 
 const TABLAS = [
-  'MovimientoCaja', 'Caja', 'PublicacionTasaItem', 'PublicacionTasas',
-  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Tasa', 'Operacion', 'Cobro',
+  'MovimientoCaja', 'Caja', 'PrecioCajeroServicio',
+  'Usuario', 'PerfilCajero', 'PerfilCobrador', 'Operacion', 'Cobro',
   'Movimiento', 'AmpliacionCredito', 'Cierre', 'Atencion', 'Aviso', 'AuditLog',
   'Config', 'Corredor',
 ];
@@ -86,6 +85,19 @@ async function crearCajero(opts: {
     },
   };
   const u = await prisma.usuario.create({ data });
+  // Fijar precio del corredor de test para este cajero. Reemplaza la
+  // publicación de tasa global del modelo viejo: ahora el precio es por
+  // cajero, y sin precio el cajero no ve el servicio (serviciosOfrecibles).
+  if (corredorIdTest) {
+    await prisma.precioCajeroServicio.create({
+      data: {
+        cajeroId: u.id,
+        servicioId: corredorIdTest,
+        precioGyd: new Prisma.Decimal('1.03'),
+        fijadoPorId: 'admin-test',
+      },
+    });
+  }
   return { id: u.id, email: opts.email, password };
 }
 
@@ -104,9 +116,6 @@ function operacionValida(clientUuid: string, overrides?: Record<string, unknown>
     tipo: 'usdt_bs',
     montoOrigenCents: '100000',
     monedaOrigen: 'USDT',
-    comisionCents: '3000',
-    totalCents: '103000',
-    monedaDestino: 'BS',
     beneficiario: {
       nombre: 'María González',
       documento: 'V-12345678',
@@ -145,33 +154,21 @@ afterAll(async () => {
 beforeEach(async () => {
   await truncateTodo();
   await seedConfig();
-  // Crear un corredor para que operacionValida tenga un corredorId válido.
+  // Crear una caja física y un servicio (BCV) que la referencia. El cajero
+  // opera sobre el servicio; la caja la determina el servicio (cajaId).
+  const caja = await prisma.caja.create({
+    data: { esMadre: false, moneda: 'BS', nombre: 'Bolívares en cuenta', pais: 'VEN', saldoCents: 0n },
+  });
   const c = await prisma.corredor.create({
     data: {
       pais: 'VEN', paisNombre: 'Venezuela', moneda: 'BS', monedaNombre: 'Bolívares',
       formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia',
+      servicio: 'bcv', servicioNombre: 'BCV',
+      cajaId: caja.id,
       creadoPorId: 'admin-test',
     },
   });
-  await prisma.caja.create({
-    data: { corredorId: c.id, esMadre: false, moneda: 'BS', saldoCents: 0n },
-  });
   corredorIdTest = c.id;
-
-  // Publicar una tasa para el corredor: pataBase=1, pataDestino=285.4, margen=0
-  // → tasaCotizada = 285.4. Así montoDestino = 100000 × 285.4 = 28540000.
-  const pub = await prisma.publicacionTasas.create({
-    data: { pataBase: new Prisma.Decimal('1'), publicadaPorId: 'admin-test' },
-  });
-  await prisma.publicacionTasaItem.create({
-    data: {
-      publicacionId: pub.id,
-      corredorId: c.id,
-      pataDestino: new Prisma.Decimal('285.4'),
-      margen: new Prisma.Decimal('0'),
-      tasaCotizada: new Prisma.Decimal('285.4'),
-    },
-  });
 });
 
 // ─────────────────────────── RESUMEN ───────────────────────────
@@ -282,15 +279,21 @@ describe('Cajero — POST /cajero/operaciones', () => {
     expect(movCount).toBe(0);
   });
 
-  test('el DTO rechaza montos incoherentes (totalCents != montoOrigen + comisión)', async () => {
+  test('el DTO rechaza totalCents/comisionCents/monedaDestino (forbidNonWhitelisted)', async () => {
     const c = await crearCajero({ email: '0414-2000004@tav.test', limiteCents: 100_000n });
     const token = await login(app, c.email, c.password);
 
-    // totalCents debería ser 103000 (100000 + 3000) pero mandamos 99999
+    // El servidor calcula la deuda; el cliente no puede mandar totalCents,
+    // comisionCents ni monedaDestino. Si los manda, forbidNonWhitelisted los
+    // rechaza con 400.
     const res = await request(app.getHttpServer())
       .post('/cajero/operaciones')
       .set('Authorization', `Bearer ${token}`)
-      .send(operacionValida('op-uuid-incoherente', { totalCents: '99999' }));
+      .send(operacionValida('op-uuid-incoherente', {
+        totalCents: '99999',
+        comisionCents: '3000',
+        monedaDestino: 'BS',
+      }));
 
     expect(res.status).toBe(400);
     // No se creó nada
@@ -420,41 +423,6 @@ describe('Cajero — ampliaciones', () => {
     expect(res.body.length).toBe(2);
     // Ordenadas por solicitadaAt desc: la segunda primero
     expect(res.body[0].motivo).toBe('Segunda solicitud');
-  });
-});
-
-// ─────────────────────────── TASAS ───────────────────────────
-
-describe('Tasas — GET /tasas/vigentes', () => {
-  test('devuelve la tasa más reciente de cada par', async () => {
-    const admin = await prisma.usuario.create({
-      data: { rol: 'admin', nombre: 'Admin', email: 'admin-1@tav.test', passwordHash: 'x' },
-    });
-
-    await prisma.tasa.createMany({
-      data: [
-        { par: 'USDT_BS', valor: '280.000000', creadaPorId: admin.id, vigenteDesde: new Date('2026-01-01') },
-        { par: 'USDT_BS', valor: '285.400000', creadaPorId: admin.id, vigenteDesde: new Date('2026-02-01') },
-        { par: 'USD_BS', valor: '290.000000', creadaPorId: admin.id, vigenteDesde: new Date('2026-02-01') },
-      ],
-    });
-
-    const c = await crearCajero({ email: '0414-6000001@tav.test' });
-    const token = await login(app, c.email, c.password);
-
-    const res = await request(app.getHttpServer())
-      .get('/tasas/vigentes')
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(res.status).toBe(200);
-    // 2 pares: USDT_BS (la más reciente: 285.4) y USD_BS (290)
-    expect(res.body.length).toBe(2);
-    const tasas: { par: string; valor: string }[] = res.body;
-    const usdt = tasas.find((t) => t.par === 'USDT_BS');
-    // Prisma serializa Decimal sin ceros trailing: "285.400000" → "285.4"
-    expect(Number(usdt!.valor)).toBe(285.4);
-    const usd = tasas.find((t) => t.par === 'USD_BS');
-    expect(Number(usd!.valor)).toBe(290);
   });
 });
 
@@ -618,5 +586,78 @@ describe('Cajero — autorización', () => {
   test('sin token, /cajero/resumen devuelve 401', async () => {
     const res = await request(app.getHttpServer()).get('/cajero/resumen');
     expect(res.status).toBe(401);
+  });
+});
+
+// ─────────────────── PRECIO DE COMPRA CONGELADO ───────────────────
+
+describe('Cajero — crear operación congela precioCompraGyd', () => {
+  test('la operación congela el precio de compra del ingreso más reciente', async () => {
+    // Crear una caja madre y un ingreso con precioCompraGyd = 237.
+    const madre = await prisma.caja.create({
+      data: { esMadre: true, moneda: 'USDT', nombre: 'Caja madre USDT', saldoCents: 0n },
+    });
+    const admin = await prisma.usuario.create({
+      data: { id: crypto.randomUUID(), rol: 'admin', nombre: 'Admin', email: 'admin-pc@tav.test', passwordHash: 'x' },
+    });
+    await prisma.movimientoCaja.create({
+      data: {
+        cajaId: madre.id,
+        tipo: 'ingreso',
+        montoCents: 1_000_000n,
+        saldoDespues: 1_000_000n,
+        origenTipo: 'ingreso',
+        origenId: crypto.randomUUID(),
+        clientUuid: crypto.randomUUID(),
+        motivo: 'Compra a 237',
+        precioCompraGyd: new Prisma.Decimal('237'),
+        registradoPorId: admin.id,
+      },
+    });
+
+    // Crear un cajero y una operación. El cajero envía 100 USD a 240 GYD/USD.
+    const c = await crearCajero({ email: '0414-1000050@tav.test', limiteCents: 100_000_000n });
+    const token = await login(app, c.email, c.password);
+
+    const res = await request(app.getHttpServer())
+      .post('/cajero/operaciones')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        tipo: 'usdt_bs',
+        montoOrigenCents: '10000', // 100 USD
+        monedaOrigen: 'USDT',
+        beneficiario: { nombre: 'María', documento: 'V123', banco: 'Banesco', cuenta: '0123', metodo: 'pago_movil' },
+        corredorId: corredorIdTest,
+      });
+    expect(res.status).toBe(201);
+
+    // La operación congela el precio de compra (237) y el precio de venta (240).
+    const op = await prisma.operacion.findUnique({ where: { id: res.body.operacion.id } });
+    expect(op!.tasaAplicada.toString()).toBe('1.03'); // precio del helper crearCajero
+    expect(op!.precioCompraGyd?.toString()).toBe('237');
+  });
+
+  test('sin ingreso previo, la operación se registra con precioCompraGyd null', async () => {
+    // No crear caja madre ni ingreso. La operación debe registrarse con
+    // precioCompraGyd = null — el reporte la muestra sin margen.
+    const c = await crearCajero({ email: '0414-1000051@tav.test', limiteCents: 100_000_000n });
+    const token = await login(app, c.email, c.password);
+
+    const res = await request(app.getHttpServer())
+      .post('/cajero/operaciones')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        tipo: 'usdt_bs',
+        montoOrigenCents: '10000',
+        monedaOrigen: 'USDT',
+        beneficiario: { nombre: 'María', documento: 'V123', banco: 'Banesco', cuenta: '0123', metodo: 'pago_movil' },
+        corredorId: corredorIdTest,
+      });
+    expect(res.status).toBe(201);
+
+    const op = await prisma.operacion.findUnique({ where: { id: res.body.operacion.id } });
+    expect(op!.precioCompraGyd).toBeNull();
   });
 });

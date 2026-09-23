@@ -64,47 +64,6 @@ final resumenProvider =
   return ResumenNotifier(api);
 });
 
-// ─────────────────────────── Tasas ───────────────────────────
-
-class TasasNotifier extends StateNotifier<CajeroDataState> {
-  TasasNotifier(this.api) : super(const CajeroDataLoading());
-
-  final CajeroApi api;
-
-  Future<void> cargar() async {
-    final anterior = state is CajeroDataLoaded
-        ? (state as CajeroDataLoaded).data
-        : null;
-    if (anterior != null) {
-      state = CajeroDataLoaded<List<TasaDto>>(anterior as List<TasaDto>, isRefreshing: true);
-    } else {
-      state = const CajeroDataLoading();
-    }
-    try {
-      final tasas = await api.tasasVigentes();
-      state = CajeroDataLoaded<List<TasaDto>>(tasas);
-    } on DioException catch (e) {
-      if (anterior != null) {
-        state = CajeroDataLoaded<List<TasaDto>>(anterior as List<TasaDto>, isRefreshing: false);
-      } else {
-        state = CajeroDataError(e.message ?? 'No pudimos cargar las tasas.');
-      }
-    } catch (e) {
-      if (anterior != null) {
-        state = CajeroDataLoaded<List<TasaDto>>(anterior as List<TasaDto>, isRefreshing: false);
-      } else {
-        state = const CajeroDataError('No pudimos cargar las tasas.');
-      }
-    }
-  }
-}
-
-final tasasProvider =
-    StateNotifierProvider<TasasNotifier, CajeroDataState>((ref) {
-  final api = ref.read(cajeroApiProvider);
-  return TasasNotifier(api);
-});
-
 // ─────────────────────────── Corredores (Fase 9) ───────────────────────────
 
 class CorredoresNotifier extends StateNotifier<CajeroDataState> {

@@ -36,11 +36,10 @@ const NAV: { grupo: string; items: NavItem[] }[] = [
   {
     grupo: 'Gestión',
     items: [
-      { href: '/tasas', label: 'Tasas', icon: TrendingUp },
-      { href: '/tasas-corredor', label: 'Tasas por corredor', icon: TrendingUp },
       { href: '/cajas', label: 'Cajas', icon: Wallet },
       { href: '/usuarios', label: 'Usuarios', icon: UserPlus },
       { href: '/cobros', label: 'Registrar pago', icon: Wallet },
+      { href: '/movimientos-diarios', label: 'Movimientos diarios', icon: TrendingUp },
     ],
   },
 ];

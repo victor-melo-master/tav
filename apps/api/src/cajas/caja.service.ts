@@ -24,7 +24,6 @@ import {
   CajaMadreInvalidaException,
   CajaNoEncontradaException,
   CampoRequeridoException,
-  CorredorInactivoException,
   MontoInvalidoException,
   MotivoRequeridoException,
   MovimientoNoAnulableException,
@@ -41,7 +40,6 @@ type Tx = Prisma.TransactionClient;
 interface CajaLock {
   id: string;
   esMadre: boolean;
-  corredorId: string | null;
   moneda: string;
   saldoCents: bigint;
 }
@@ -80,6 +78,10 @@ export class CajaService {
     if (previo) return this.resultadoExistente(previo);
 
     if (dto.montoCents <= 0n) throw new MontoInvalidoException('montoCents', dto.montoCents);
+    // El precio de compra del USDT es obligatorio y debe ser > 0. Es el
+    // marcador del día: cada operación congela el precio de compra vigente
+    // (el del ingreso más reciente hasta la fecha de la operación).
+    this.validarTasa(dto.precioCompraGyd);
     if (!dto.motivo?.trim()) throw new MotivoRequeridoException();
 
     const caja = await this.prisma.caja.findUnique({ where: { id: dto.cajaMadreId } });
@@ -112,6 +114,7 @@ export class CajaService {
             origenId: movimientoId,
             clientUuid: dto.clientUuid,
             motivo: dto.motivo.trim(),
+            precioCompraGyd: new Prisma.Decimal(dto.precioCompraGyd),
             registradoPorId: dto.registradoPorId,
           },
         });
@@ -129,6 +132,31 @@ export class CajaService {
       if (existente) return this.resultadoExistente(existente);
       throw e;
     }
+  }
+
+  /**
+   * Precio de compra del USDT vigente en una fecha dada: el del ingreso a
+   * la caja madre más reciente hasta esa fecha (inclusive). Determinista:
+   * si hay dos ingresos el mismo instante, el de mayor `seq` manda (el
+   * último insertado). Devuelve null si no hay ningún ingreso antes de la
+   * fecha — la operación se registra sin precio de compra y el reporte la
+   * muestra sin margen.
+   *
+   * Solo busca en cajas madre (`esMadre = true`), porque el precio de compra
+   * solo se registra al ingresar USDT a la caja madre.
+   */
+  async precioCompraVigente(fecha: Date): Promise<Prisma.Decimal | null> {
+    const fila = await this.prisma.movimientoCaja.findFirst({
+      where: {
+        tipo: TipoMovimientoCaja.ingreso,
+        creadoAt: { lte: fecha },
+        caja: { esMadre: true },
+        precioCompraGyd: { not: null },
+      },
+      orderBy: [{ creadoAt: 'desc' }, { seq: 'desc' }],
+      select: { precioCompraGyd: true },
+    });
+    return fila?.precioCompraGyd ?? null;
   }
 
   // ──────────────────────── APERTURA / RECARGA ────────────────────────
@@ -167,17 +195,12 @@ export class CajaService {
 
     const destino = await this.prisma.caja.findUnique({
       where: { id: dto.cajaId },
-      include: { corredor: true },
     });
     if (!destino) throw new CajaNoEncontradaException(dto.cajaId);
     if (destino.esMadre) throw new CajaMadreInvalidaException(dto.cajaId);
 
     const madre = await this.prisma.caja.findUnique({ where: { id: dto.cajaMadreId } });
     if (!madre || !madre.esMadre) throw new CajaMadreInvalidaException(dto.cajaMadreId);
-
-    if (!destino.corredor?.activo) {
-      throw new CorredorInactivoException(destino.corredorId ?? dto.cajaId);
-    }
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -284,17 +307,27 @@ export class CajaService {
     const caja = await this.prisma.caja.findUnique({ where: { id: dto.cajaId } });
     if (!caja) throw new CajaNoEncontradaException(dto.cajaId);
     if (caja.esMadre) throw new CajaMadreInvalidaException(dto.cajaId);
-    if (
-      operacion.corredorId === null ||
-      caja.corredorId !== operacion.corredorId
-    ) {
+
+    // La caja la determina el servicio (Corredor.cajaId), no el pagador.
+    // Validamos que la caja pasada sea la que el servicio de la operación
+    // referencia: caja.id === corredor.cajaId.
+    if (operacion.corredorId === null) {
+      throw new CajaCorredorMismatchException(dto.cajaId, dto.operacionId);
+    }
+    const corredor = await this.prisma.corredor.findUnique({
+      where: { id: operacion.corredorId },
+      select: { cajaId: true },
+    });
+    if (!corredor || corredor.cajaId !== caja.id) {
       throw new CajaCorredorMismatchException(dto.cajaId, dto.operacionId);
     }
 
     if (dto.montoCents <= 0n) throw new MontoInvalidoException('montoCents', dto.montoCents);
+    if (dto.montoDestinoCents < 0n) throw new MontoInvalidoException('montoDestinoCents', dto.montoDestinoCents);
     this.validarTasa(dto.tasaEjecucion);
     if (!dto.formaPago?.trim()) throw new CampoRequeridoException('formaPago');
     if (!dto.nombreCliente?.trim()) throw new CampoRequeridoException('nombreCliente');
+    if (!dto.comprobantePagoUrl?.trim()) throw new CampoRequeridoException('comprobantePagoUrl');
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -348,6 +381,8 @@ export class CajaService {
             tasaEjecucion: new Prisma.Decimal(dto.tasaEjecucion),
             formaPago: dto.formaPago.trim(),
             nombreCliente: dto.nombreCliente.trim(),
+            montoDestinoCents: dto.montoDestinoCents,
+            comprobantePagoUrl: dto.comprobantePagoUrl.trim(),
             pagadaPorId: dto.registradoPorId,
           },
         });
@@ -519,16 +554,11 @@ export class CajaService {
    */
   async alertasCaja(): Promise<AlertaCaja[]> {
     const cajas = await this.prisma.caja.findMany({
-      include: { corredor: true },
       orderBy: { creadaAt: 'asc' },
     });
 
     const alertas: AlertaCaja[] = [];
     for (const caja of cajas) {
-      const descripcion = caja.esMadre
-        ? `Caja madre ${caja.moneda}`
-        : `${caja.corredor!.paisNombre} — ${caja.corredor!.monedaNombre} (${caja.corredor!.formaEntregaNombre})`;
-
       if (caja.saldoCents < 0n) {
         alertas.push({
           cajaId: caja.id,
@@ -536,7 +566,7 @@ export class CajaService {
           saldoCents: caja.saldoCents,
           umbralAlertaCents: caja.umbralAlertaCents,
           moneda: caja.moneda,
-          corredorDescripcion: descripcion,
+          cajaNombre: caja.nombre,
         });
       } else if (
         caja.umbralAlertaCents !== null &&
@@ -549,7 +579,7 @@ export class CajaService {
           saldoCents: caja.saldoCents,
           umbralAlertaCents: caja.umbralAlertaCents,
           moneda: caja.moneda,
-          corredorDescripcion: descripcion,
+          cajaNombre: caja.nombre,
         });
       }
     }
@@ -564,7 +594,7 @@ export class CajaService {
    */
   private async lockCaja(tx: Tx, cajaId: string): Promise<CajaLock> {
     const rows = await tx.$queryRaw<CajaLock[]>`
-      SELECT "id", "esMadre", "corredorId", "moneda", "saldoCents"
+      SELECT "id", "esMadre", "moneda", "saldoCents"
       FROM "Caja"
       WHERE "id" = ${cajaId}
       FOR UPDATE

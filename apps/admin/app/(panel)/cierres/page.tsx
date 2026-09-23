@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Search, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
-import { gyd, usd, formatFecha } from '@/lib/format';
+import { gyd, formatFecha } from '@/lib/format';
 import type { EstadoCierre } from '@/lib/types';
 import { PageHeader, PageContent } from '@/components/page-header';
 import { Input } from '@/components/ui/input';
@@ -138,17 +138,11 @@ export default function CierresPage() {
               )}
               {!cargando && !error && items.map((c) => {
                 const est = ESTILO_ESTADO[c.estado];
-                const diffGyd =
-                  c.diferenciaGydCents !== undefined && c.diferenciaGydCents !== null
-                    ? BigInt(c.diferenciaGydCents)
+                const diff =
+                  c.diferenciaCents !== undefined && c.diferenciaCents !== null
+                    ? BigInt(c.diferenciaCents)
                     : null;
-                const diffUsd =
-                  c.diferenciaUsdCents !== undefined && c.diferenciaUsdCents !== null
-                    ? BigInt(c.diferenciaUsdCents)
-                    : null;
-                const hayDiff =
-                  (diffGyd !== null && diffGyd !== 0n) ||
-                  (diffUsd !== null && diffUsd !== 0n);
+                const hayDiff = diff !== null && diff !== 0n;
                 return (
                   <TableRow key={c.id} className="cursor-pointer">
                     <TableCell className="font-mono text-[12px] text-tav-ink-2">
@@ -165,22 +159,19 @@ export default function CierresPage() {
                       {gyd(c.totalRegistradoCents)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-tav-ink-2">
-                      {gyd(c.efectivoGydDeclaradoCents)}
-                      <span className="ml-1 text-[11px] text-tav-ink-4">
-                        · {usd(c.efectivoUsdDeclaradoCents)}
-                      </span>
+                      {gyd(c.efectivoDeclaradoCents)}
                     </TableCell>
                     <TableCell
                       className={cn(
                         'text-right tabular-nums',
-                        diffGyd === null && diffUsd === null
+                        diff === null
                           ? 'text-tav-ink-4'
                           : hayDiff
                             ? 'text-tav-red-700'
                             : 'text-tav-green-600',
                       )}
                     >
-                      {diffGyd === null && diffUsd === null
+                      {diff === null
                         ? '—'
                         : hayDiff
                           ? 'Con diff'

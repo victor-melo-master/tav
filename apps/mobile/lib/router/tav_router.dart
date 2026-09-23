@@ -13,7 +13,7 @@ import '../screens/cajero/operacion_detail_screen.dart';
 import '../screens/cajero/perfil_screen.dart';
 import '../screens/cajero/seguridad_screen.dart';
 import '../screens/cajero/soporte_screen.dart';
-import '../screens/cajero/tasas_screen.dart';
+import '../screens/cajero/precios_screen.dart';
 import '../screens/cobrador/anular_cobro_screen.dart';
 import '../screens/cobrador/cajero_detail_screen.dart';
 import '../screens/cobrador/cajeros_screen.dart';
@@ -168,8 +168,8 @@ final tavRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AmpliacionScreen(),
       ),
       GoRoute(
-        path: '/cajero/tasas',
-        builder: (context, state) => const TasasScreen(),
+        path: '/cajero/precios',
+        builder: (context, state) => const PreciosScreen(),
       ),
       GoRoute(
         path: '/cajero/notificaciones',

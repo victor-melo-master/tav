@@ -5,21 +5,15 @@ import { Type } from 'class-transformer';
 /**
  * DTO para POST /cobrador/cierres/:id/enviar.
  *
- * El cobrador declara el efectivo que lleva en mano, **por moneda física**:
- * billetes guyaneses (GYD) y billetes americanos (USD) son dos pilas
- * distintas que el admin cuenta por separado. No se convierten ni se suman.
+ * El cobrador declara el efectivo que lleva en mano. El cajero siempre paga
+ * en guyaneses: hay una sola pila de billetes que el admin cuenta.
  * El resto (digital, total) ya está calculado por el ledger.
  */
 export class EnviarCierreDto {
   @ApiProperty({ description: 'Efectivo en billetes guyaneses que declara llevar (centavos de GYD, string)', example: '30000' })
   @IsString()
-  @Matches(/^\d+$/, { message: 'efectivoGydDeclaradoCents debe ser un entero de centavos no negativo' })
-  efectivoGydDeclaradoCents!: string;
-
-  @ApiProperty({ description: 'Efectivo en billetes americanos que declara llevar (centavos de USD, string)', example: '5000' })
-  @IsString()
-  @Matches(/^\d+$/, { message: 'efectivoUsdDeclaradoCents debe ser un entero de centavos no negativo' })
-  efectivoUsdDeclaradoCents!: string;
+  @Matches(/^\d+$/, { message: 'efectivoDeclaradoCents debe ser un entero de centavos no negativo' })
+  efectivoDeclaradoCents!: string;
 
   @ApiPropertyOptional({ description: 'Nota del cobrador para el admin' })
   @IsOptional()

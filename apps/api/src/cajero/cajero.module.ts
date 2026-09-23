@@ -3,10 +3,11 @@ import { CajeroController } from './cajero.controller';
 import { CajeroService } from './cajero.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { LedgerModule } from '../ledger/ledger.module';
-import { TasaModule } from '../tasa/tasa.module';
+import { PrecioCajeroModule } from '../precio-cajero/precio-cajero.module';
+import { CajasModule } from '../cajas/cajas.module';
 
 @Module({
-  imports: [PrismaModule, LedgerModule, TasaModule],
+  imports: [PrismaModule, LedgerModule, PrecioCajeroModule, CajasModule],
   controllers: [CajeroController],
   providers: [CajeroService],
 })
