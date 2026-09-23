@@ -14,10 +14,7 @@ import { MetodoCobro } from '@prisma/client';
 
 export interface BeneficiarioDto {
   nombre: string;
-  documento: string;
-  banco: string;
-  cuenta: string;
-  metodo: string;
+  datos: string;
 }
 
 export interface RegistrarOperacionDto {

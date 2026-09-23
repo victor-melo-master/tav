@@ -457,7 +457,10 @@ async function main() {
         totalCents,
         montoDestinoCents: 0n, // el pagador lo registra al ejecutar
         monedaDestino: MONEDA_SEED,
-        beneficiario: { nombre: 'Cliente genérico', documento: 'V12345678', banco: 'Banesco', cuenta: '0134123456789012', metodo: 'pago_movil' },
+        beneficiario: {
+          nombre: 'Cliente genérico',
+          datos: 'Banco: Banesco\nCuenta: 0134123456789012\nCédula: V12345678\nMétodo: pago_movil',
+        },
         estado: EstadoOperacion.completada,
         creadaPorId: creadoPorId,
         creadaAt: fecha,

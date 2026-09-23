@@ -151,10 +151,7 @@ function opDto(opts: {
     monedaDestino: 'BS',
     beneficiario: {
       nombre: 'Ben Test',
-      documento: 'V12345678',
-      banco: 'Banesco',
-      cuenta: '01234567890',
-      metodo: 'transferencia_gyd',
+      datos: 'Banco: Banesco\nCuenta: 01234567890\nCédula: V12345678\nMétodo: transferencia_gyd'
     },
     creadaPorId: opts.creadaPorId ?? ACTOR,
   };

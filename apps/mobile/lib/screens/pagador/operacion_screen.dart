@@ -244,12 +244,26 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
           const SizedBox(height: TavSpace.xs),
           TavCard(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _filaCopiable('Nombre', item.beneficiario['nombre']?.toString() ?? '—'),
-                _filaCopiable('Documento', item.beneficiario['documento']?.toString() ?? '—'),
-                _filaCopiable('Banco', item.beneficiario['banco']?.toString() ?? '—'),
-                _filaCopiable('Cuenta', item.beneficiario['cuenta']?.toString() ?? '—'),
-                _filaCopiable('Método', item.beneficiario['metodo']?.toString() ?? '—'),
+                Text(
+                  item.beneficiario['nombre']?.toString() ?? '—',
+                  style: TavText.body.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: TavSpace.sm),
+                Text(
+                  item.beneficiario['datos']?.toString() ?? '—',
+                  style: TavText.body2,
+                ),
+                const SizedBox(height: TavSpace.sm),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _copiarDatosBeneficiario(item.beneficiario),
+                    icon: const Icon(Icons.copy, size: 18),
+                    label: const Text('Copiar datos'),
+                  ),
+                ),
               ],
             ),
           ),
@@ -354,31 +368,12 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
     );
   }
 
-  Widget _filaCopiable(String label, String value) {
-    return InkWell(
-      onTap: () {
-        Clipboard.setData(ClipboardData(text: value));
-        _toast('$label copiado');
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: TavText.caption.copyWith(color: TavColors.ink3)),
-                  const SizedBox(height: 2),
-                  Text(value, style: TavText.body),
-                ],
-              ),
-            ),
-            const Icon(Icons.copy, size: 18, color: TavColors.ink3),
-          ],
-        ),
-      ),
-    );
+  void _copiarDatosBeneficiario(Map<String, dynamic> b) {
+    final nombre = b['nombre']?.toString() ?? '';
+    final datos = b['datos']?.toString() ?? '';
+    final texto = [if (nombre.isNotEmpty) nombre, if (datos.isNotEmpty) datos].join('\n');
+    Clipboard.setData(ClipboardData(text: texto));
+    _toast('Datos copiados');
   }
 
   double _parseBolivares(String texto) {

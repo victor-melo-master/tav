@@ -142,7 +142,7 @@ class _PagadorColaScreenState extends ConsumerState<PagadorColaScreen> {
             ),
             const SizedBox(height: TavSpace.xs),
             Text(
-              '${item.beneficiario['nombre'] ?? '—'} · ${item.beneficiario['banco'] ?? '—'} · ${item.beneficiario['cuenta'] ?? '—'}',
+              item.beneficiario['nombre']?.toString() ?? '—',
               style: TavText.caption.copyWith(color: TavColors.ink2),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

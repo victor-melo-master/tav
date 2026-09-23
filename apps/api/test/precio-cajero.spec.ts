@@ -108,10 +108,7 @@ function operacionValida(clientUuid: string, corredorId: string) {
     monedaOrigen: 'USDT',
     beneficiario: {
       nombre: 'María González',
-      documento: 'V-12345678',
-      banco: 'Banesco',
-      cuenta: '0134...4471',
-      metodo: 'pago_movil',
+      datos: 'Banco: Banesco\nCuenta: 0134...4471\nCédula: V-12345678\nMétodo: pago_movil'
     },
     corredorId,
   };

@@ -75,34 +75,22 @@ class ResumenDto {
 class BeneficiarioOperacionDto {
   const BeneficiarioOperacionDto({
     required this.nombre,
-    required this.documento,
-    required this.banco,
-    required this.cuenta,
-    required this.metodo,
+    required this.datos,
   });
 
   final String nombre;
-  final String documento;
-  final String banco;
-  final String cuenta;
-  final String metodo;
+  final String datos;
 
   factory BeneficiarioOperacionDto.fromJson(Map<String, dynamic> json) {
     return BeneficiarioOperacionDto(
       nombre: json['nombre'] as String,
-      documento: json['documento'] as String,
-      banco: json['banco'] as String,
-      cuenta: json['cuenta'] as String,
-      metodo: json['metodo'] as String,
+      datos: json['datos'] as String,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'nombre': nombre,
-        'documento': documento,
-        'banco': banco,
-        'cuenta': cuenta,
-        'metodo': metodo,
+        'datos': datos,
       };
 }
 

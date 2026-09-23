@@ -123,7 +123,7 @@ async function crearOperacionPendiente(
       totalCents: 103_000n,
       montoDestinoCents,
       monedaDestino: 'BS',
-      beneficiario: { nombre: 'María', documento: 'V123', banco: 'Banesco', cuenta: '0123', metodo: 'pago_movil' },
+      beneficiario: { nombre: 'María', datos: 'Banco: Banesco\nCuenta: 0123\nCédula: V123\nMétodo: pago_movil' },
       estado: 'pendiente',
       creadaPorId: cajeroId,
       corredorId,

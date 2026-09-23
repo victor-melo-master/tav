@@ -118,10 +118,7 @@ function operacionValida(clientUuid: string, overrides?: Record<string, unknown>
     monedaOrigen: 'USDT',
     beneficiario: {
       nombre: 'María González',
-      documento: 'V-12345678',
-      banco: 'Banesco',
-      cuenta: '0134...4471',
-      metodo: 'pago_movil',
+      datos: 'Banco: Banesco\nCuenta: 0134...4471\nCédula: V-12345678\nMétodo: pago_movil'
     },
     corredorId: corredorIdTest,
     ...overrides,
@@ -627,7 +624,7 @@ describe('Cajero — crear operación congela precioCompraGyd', () => {
         tipo: 'usdt_bs',
         montoOrigenCents: '10000', // 100 USD
         monedaOrigen: 'USDT',
-        beneficiario: { nombre: 'María', documento: 'V123', banco: 'Banesco', cuenta: '0123', metodo: 'pago_movil' },
+        beneficiario: { nombre: 'María', datos: 'Banco: Banesco\nCuenta: 0123\nCédula: V123\nMétodo: pago_movil' },
         corredorId: corredorIdTest,
       });
     expect(res.status).toBe(201);
@@ -652,7 +649,7 @@ describe('Cajero — crear operación congela precioCompraGyd', () => {
         tipo: 'usdt_bs',
         montoOrigenCents: '10000',
         monedaOrigen: 'USDT',
-        beneficiario: { nombre: 'María', documento: 'V123', banco: 'Banesco', cuenta: '0123', metodo: 'pago_movil' },
+        beneficiario: { nombre: 'María', datos: 'Banco: Banesco\nCuenta: 0123\nCédula: V123\nMétodo: pago_movil' },
         corredorId: corredorIdTest,
       });
     expect(res.status).toBe(201);

@@ -15,8 +15,6 @@ import '../../theme/tav_colors.dart';
 import '../../theme/tav_radius.dart';
 import '../../theme/tav_space.dart';
 import '../../theme/tav_text.dart';
-import '../../utils/format.dart';
-import '../../utils/labels.dart';
 
 /// Flujo de nueva operación: destino → monto → beneficiario → resumen → pago → confirmación.
 ///
@@ -48,13 +46,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
   String get _tipo => 'usdt_${_corredor?.moneda.toLowerCase() ?? 'bs'}';
 
   final _benefNombreController = TextEditingController();
-  final _benefDocController = TextEditingController();
-  final _benefBancoController = TextEditingController();
-  final _benefCuentaController = TextEditingController();
-  final _pegarController = TextEditingController();
-  String _benefMetodo = 'transferencia';
-  bool _guardarBeneficiario = false;
-  String? _avisoReconocimiento;
+  final _benefDatosController = TextEditingController();
   bool _loading = false;
   String? _errorCupo;
   CupoInsuficienteException? _cupoEx;
@@ -107,10 +99,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
   @override
   void dispose() {
     _benefNombreController.dispose();
-    _benefDocController.dispose();
-    _benefBancoController.dispose();
-    _benefCuentaController.dispose();
-    _pegarController.dispose();
+    _benefDatosController.dispose();
     super.dispose();
   }
 
@@ -168,10 +157,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
           monedaOrigen: _monedaOrigen,
           beneficiario: BeneficiarioOperacionDto(
             nombre: _benefNombreController.text.trim(),
-            documento: _benefDocController.text.trim(),
-            banco: _benefBancoController.text.trim(),
-            cuenta: _benefCuentaController.text.trim(),
-            metodo: _benefMetodo,
+            datos: _benefDatosController.text,
           ),
           corredorId: _corredor!.id,
         ),
@@ -447,100 +433,34 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
     );
   }
 
-  // ── Paso 2: Beneficiario (pegado rápido) ──
+  // ── Paso 2: Beneficiario ──
   Widget _pasoBeneficiario() {
-    final opsState = ref.watch(operacionesProvider);
-    final recientes = _extraerRecientes(opsState);
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(TavSpace.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Método de entrega primero — determina qué campos siguen.
-          Text('Método de entrega', style: TavText.label.copyWith(color: TavColors.ink2)),
-          const SizedBox(height: 6),
-          _MetodoSegmented(
-            value: _benefMetodo,
-            onChanged: (v) => setState(() => _benefMetodo = v),
-          ),
-          const SizedBox(height: TavSpace.lg),
-
-          // 2. Campo grande de pegado desde el portapapeles.
-          Text('Pega aquí los datos del destinatario',
-              style: TavText.label.copyWith(color: TavColors.ink2)),
-          const SizedBox(height: 6),
-          _buildCampoPegado(),
-          const SizedBox(height: TavSpace.lg),
-
-          // 3. Cuentas recientes (si las hay).
-          if (recientes.isNotEmpty) ...[
-            Text('Cuentas recientes',
-                style: TavText.overline.copyWith(color: TavColors.ink3)),
-            const SizedBox(height: TavSpace.sm),
-            ...recientes.map((r) => _buildRecentRow(r)),
-            const SizedBox(height: TavSpace.lg),
-          ],
-
-          // 4. Campos rellenos y editables para verificar.
-          Text('Verifica los datos', style: TavText.overline.copyWith(color: TavColors.ink3)),
-          const SizedBox(height: TavSpace.sm),
           TavField(
-            label: 'Nombre y apellido',
+            label: 'Nombre del beneficiario',
+            hint: 'Nombre y apellido que identifica la operación',
             controller: _benefNombreController,
-            placeholder: 'Ej. Carmen Silva',
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: TavSpace.lg),
-          TavField(
-            label: 'Cédula',
-            controller: _benefDocController,
-            placeholder: 'V-00.000.000',
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: TavSpace.lg),
-          TavField(
-            label: 'Banco',
-            controller: _benefBancoController,
-            placeholder: 'Banesco',
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: TavSpace.lg),
-          TavField(
-            label: _benefMetodo == 'efectivo' ? 'Referencia / nota' : 'Número de cuenta / Pago móvil',
-            controller: _benefCuentaController,
-            placeholder: '0134 0000 0000 0000 0000',
-            keyboardType: TextInputType.number,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: TavSpace.lg),
-
-          // 5. Checkbox guardar para próximas operaciones.
-          InkWell(
-            onTap: () => setState(() => _guardarBeneficiario = !_guardarBeneficiario),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: Checkbox(
-                    value: _guardarBeneficiario,
-                    onChanged: (v) => setState(() => _guardarBeneficiario = v ?? false),
-                    activeColor: TavColors.blue,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Guardar para próximas operaciones',
-                    style: TavText.body2.copyWith(color: TavColors.ink2),
-                  ),
-                ),
-              ],
+          TextField(
+            controller: _benefDatosController,
+            maxLines: 6,
+            decoration: InputDecoration(
+              labelText: 'Datos para el pago',
+              hintText: 'Pega aquí los datos tal como te los enviaron',
+              alignLabelWithHint: true,
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.paste),
+                onPressed: _pegarDatos,
+              ),
             ),
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: TavSpace.lg),
           Text(
@@ -557,310 +477,19 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
     );
   }
 
-  /// Campo grande de pegado con un solo botón "Pegar datos".
-  /// Al tocar, lee el portapapeles, reconoce y rellena en un paso.
-  Widget _buildCampoPegado() {
-    return Column(
-      children: [
-        SizedBox(
-          height: 80,
-          child: TextField(
-            controller: _pegarController,
-            maxLines: 3,
-            style: TavText.body.copyWith(fontSize: 13),
-            decoration: InputDecoration(
-              hintText: 'Pega aquí el mensaje de WhatsApp con los datos del destinatario…',
-              hintStyle: TavText.body.copyWith(color: TavColors.ink3, fontSize: 13),
-              filled: true,
-              fillColor: TavColors.surface,
-              contentPadding: const EdgeInsets.all(TavSpace.md),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(TavRadius.field),
-                borderSide: const BorderSide(color: TavColors.line),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(TavRadius.field),
-                borderSide: const BorderSide(color: TavColors.line),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(TavRadius.field),
-                borderSide: const BorderSide(color: TavColors.blue),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: TavButton(
-            label: 'Pegar datos',
-            variant: TavButtonVariant.outline,
-            small: true,
-            icon: const Icon(Icons.content_paste_outlined, size: 16),
-            onPressed: _pegarDatos,
-          ),
-        ),
-        if (_avisoReconocimiento != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            _avisoReconocimiento!,
-            style: TavText.caption.copyWith(color: TavColors.gold700),
-          ),
-        ],
-      ],
-    );
-  }
-
-  /// Un solo paso: lee el portapapeles, reconoce y rellena los campos.
+  /// Pega el contenido del portapapeles en el campo de datos del beneficiario.
   Future<void> _pegarDatos() async {
     final data = await Clipboard.getData('text/plain');
     if (data?.text != null && data!.text!.isNotEmpty) {
-      _pegarController.text = data.text!;
+      _benefDatosController.text = data.text!;
+      setState(() {});
     }
-    _reconocerPegado();
   }
 
-  /// Reconoce nombre, cédula, banco y número de cuenta del texto pegado.
-  ///
-  /// PATRONES QUE DETECTA (afinar cuando el cliente pase ejemplos reales):
-  ///
-  /// 1. CÉDULA — Letra V/E/J/G/C (mayúscula o minúscula) seguida de
-  ///    números con puntos, guiones o espacios opcionales.
-  ///    Acepta: V-12.345.678, V12345678, v-12.345.678, J-001.234.567
-  ///    También acepta cédula sin letra: 12.345.678, 12345678
-  ///    (asume V si no hay letra).
-  ///
-  /// 2. BANCO — Lista de ~35 bancos venezolanos por nombre o sigla.
-  ///    Acepta con o sin prefijo "Banco:": Banesco, BDV, Mercantil, etc.
-  ///    Normaliza a Title Case al rellenar.
-  ///
-  /// 3. CUENTA — 12 a 20 dígitos consecutivos, o separados por espacios/guiones.
-  ///    Acepta: 0134 0000 0000 0000 0000, 01340000000000000000
-  ///    También acepta teléfono como pago móvil: 0414-1234567
-  ///
-  /// 4. NOMBRE — La primera línea con texto alfabético (no números, no banco,
-  ///    no cédula) que tenga al menos 2 palabras. Acepta acentos y ñ.
-  ///    Si no encuentra una línea "limpia", toma la primera línea con texto.
-  ///
-  /// TOLERANCIA:
-  /// - Funciona con o sin saltos de línea.
-  /// - Funciona con etiquetas ("Banco:", "Cédula:", "Cuenta:") o sin ellas.
-  /// - No distingue mayúsculas de minúsculas.
-  /// - Si no reconoce un campo, lo deja vacío para que el cajero lo complete.
-  void _reconocerPegado() {
-    final texto = _pegarController.text.trim();
-    if (texto.isEmpty) return;
-
-    String? nombre;
-    String? cedula;
-    String? banco;
-    String? cuenta;
-    int camposDetectados = 0;
-
-    // ── 1. CÉDULA ──
-    // Formato con letra: V-12.345.678, V12345678, v 12.345.678, etc.
-    final cedulaConLetra = RegExp(
-      r'\b[VEJGCvejgc][-.\s]?(\d{1,3}[-.\s]?)?\d{3,4}[-.\s]?\d{3,4}\b',
-    );
-    // Formato sin letra: 12.345.678, 12345678 (8 dígitos con o sin separadores).
-    final cedulaSinLetra = RegExp(r'\b\d{1,2}[.\s]?\d{3}[.\s]?\d{3,4}\b');
-
-    var cedulaMatch = cedulaConLetra.firstMatch(texto);
-    if (cedulaMatch != null) {
-      cedula = cedulaMatch.group(0)!.toUpperCase();
-      camposDetectados++;
-    } else {
-      cedulaMatch = cedulaSinLetra.firstMatch(texto);
-      if (cedulaMatch != null) {
-        // Asumir V si no hay letra.
-        cedula = 'V-${cedulaMatch.group(0)}';
-        camposDetectados++;
-      }
-    }
-
-    // ── 2. BANCO ──
-    // Lista de bancos venezolanos por nombre o sigla.
-    final bancosConocidos = [
-      'banesco', 'banco provincial', 'bbva', 'mercantil', 'banco de venezuela',
-      'bdv', 'banco nacional de crédito', 'bnc', 'banesco banco universal',
-      'banco caroní', 'banco exterior', 'banco mercantil',
-      'banco del tesoro', 'banco bicentenario', 'banco venezolano de crédito',
-      'bvc', 'banco activo', 'bancaribe', 'banplus', 'bancamiga',
-      'banco fondo común', 'bfc', '100% banco', 'cien por ciento banco',
-      'del sur', 'banco del sur', 'bansur', 'banco plaza',
-      'banco venezolano', 'credit card center', 'ccc',
-      'banco internacional de desarrollo', 'bid',
-      'banco de la mujer', 'banco exportador de comercio',
-    ];
-    final textoLower = texto.toLowerCase();
-    for (final b in bancosConocidos) {
-      if (textoLower.contains(b)) {
-        banco = b.split(' ').map((w) {
-          if (w == '100%') return '100%';
-          if (w == 'bbva') return 'BBVA';
-          if (w == 'bnc') return 'BNC';
-          if (w == 'bdv') return 'BDV';
-          if (w == 'bvc') return 'BVC';
-          if (w == 'bfc') return 'BFC';
-          if (w == 'ccc') return 'CCC';
-          if (w == 'bid') return 'BID';
-          return w[0].toUpperCase() + w.substring(1);
-        }).join(' ');
-        camposDetectados++;
-        break;
-      }
-    }
-
-    // ── 3. CUENTA ──
-    // 12-20 dígitos consecutivos o separados por espacios/guiones.
-    final cuentaRe = RegExp(r'\b\d{4}[\s-]?\d{4}[\s-]?\d{2,4}[\s-]?\d{2,4}[\s-]?\d{0,4}\b');
-    final cuentaMatch = cuentaRe.firstMatch(texto);
-    if (cuentaMatch != null) {
-      cuenta = cuentaMatch.group(0)!.replaceAll(RegExp(r'[\s-]'), '');
-      camposDetectados++;
-    } else {
-      // 12+ dígitos consecutivos.
-      final largoRe = RegExp(r'\b\d{12,20}\b');
-      final largoMatch = largoRe.firstMatch(texto);
-      if (largoMatch != null) {
-        cuenta = largoMatch.group(0);
-        camposDetectados++;
-      } else {
-        // Pago móvil: teléfono 04XX-XXXXXXX (11 dígitos).
-        final pagoMovilRe = RegExp(r'\b0\d{3}[-.\s]?\d{7}\b');
-        final pmMatch = pagoMovilRe.firstMatch(texto);
-        if (pmMatch != null) {
-          cuenta = pmMatch.group(0)!.replaceAll(RegExp(r'[-.\s]'), '');
-          camposDetectados++;
-        }
-      }
-    }
-
-    // ── 4. NOMBRE ──
-    // Primera línea con texto alfabético (no números, no banco, no cédula)
-    // que tenga al menos 2 palabras. Acepta acentos y ñ.
-    final lineas = texto.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
-    for (final linea in lineas) {
-      // Quitar etiquetas tipo "Nombre:", "Beneficiario:" del inicio.
-      final limpia = linea.replaceFirst(RegExp(r'^[a-zA-ZáéíóúñÁÉÍÓÚÑ]+:\s*'), '');
-      if (cedulaConLetra.hasMatch(limpia) || cedulaSinLetra.hasMatch(limpia)) continue;
-      if (cuentaRe.hasMatch(limpia)) continue;
-      if (RegExp(r'^\d{12,20}$').hasMatch(limpia)) continue;
-      final lineaLower = limpia.toLowerCase();
-      if (bancosConocidos.any((b) => lineaLower.contains(b))) continue;
-      if (RegExp(r'^[\d\s.-]+$').hasMatch(limpia)) continue;
-      if (limpia.length < 3) continue;
-      // Línea con palabras alfabéticas y al menos un espacio.
-      if (RegExp(r'^[a-zA-ZáéíóúñÁÉÍÓÚÑ\s]+$').hasMatch(limpia) && limpia.contains(' ')) {
-        nombre = limpia;
-        break;
-      }
-    }
-    // Fallback: primera línea con texto no numérico.
-    if (nombre == null) {
-      for (final linea in lineas) {
-        final limpia = linea.replaceFirst(RegExp(r'^[a-zA-ZáéíóúñÁÉÍÓÚÑ]+:\s*'), '');
-        if (!RegExp(r'^[\d\s.-]+$').hasMatch(limpia) && limpia.length >= 3) {
-          nombre = limpia;
-          break;
-        }
-      }
-    }
-    if (nombre != null) camposDetectados++;
-
-    // ── RELLENAR Y AVISAR ──
-    setState(() {
-      if (nombre != null) _benefNombreController.text = nombre;
-      if (cedula != null) _benefDocController.text = cedula;
-      if (banco != null) _benefBancoController.text = banco;
-      if (cuenta != null) _benefCuentaController.text = cuenta;
-      // Aviso discreto si no se detectaron todos los campos.
-      if (camposDetectados < 4 && camposDetectados > 0) {
-        _avisoReconocimiento = 'Revisa los datos, no pudimos leer todo.';
-      } else if (camposDetectados == 0) {
-        _avisoReconocimiento = 'No pudimos reconocer los datos. Ingrésalos manualmente.';
-      } else {
-        _avisoReconocimiento = null;
-      }
-    });
-  }
-
-  /// Extrae destinatarios únicos de las operaciones recientes para mostrarlos.
-  List<BeneficiarioOperacionDto> _extraerRecientes(CajeroDataState state) {
-    if (state is! CajeroDataLoaded) return [];
-    final data = state.data as ({List<OperacionDto> items, int total, bool hasMore});
-    final vistos = <String>{};
-    final resultado = <BeneficiarioOperacionDto>[];
-    for (final op in data.items) {
-      final key = '${op.beneficiario.nombre}|${op.beneficiario.cuenta}';
-      if (vistos.add(key)) {
-        resultado.add(op.beneficiario);
-      }
-      if (resultado.length >= 3) break;
-    }
-    return resultado;
-  }
-
-  Widget _buildRecentRow(BeneficiarioOperacionDto r) {
-    final iniciales = inicialesNombre(r.nombre);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _benefNombreController.text = r.nombre;
-            _benefDocController.text = r.documento;
-            _benefBancoController.text = r.banco;
-            _benefCuentaController.text = r.cuenta;
-            _benefMetodo = r.metodo;
-          });
-        },
-        child: TavCard(
-          elevation: TavCardElevation.flat,
-          padding: const EdgeInsets.symmetric(horizontal: TavSpace.md, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: TavColors.navy,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Center(
-                  child: Text(
-                    iniciales,
-                    style: TavText.label.copyWith(color: TavColors.surface, fontSize: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(r.nombre, style: TavText.label.copyWith(fontSize: 13)),
-                    Text(
-                      '${r.banco} · ${enmascararCuenta(r.cuenta)}',
-                      style: TavText.caption.copyWith(color: TavColors.ink3),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.north_west_outlined, color: TavColors.ink3, size: 18),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Mínimo para despachar: nombre + cuenta. No exige cédula ni banco.
+  /// Mínimo para continuar: nombre + datos de pago.
   bool _beneficiarioValido() {
     return _benefNombreController.text.trim().isNotEmpty &&
-        _benefCuentaController.text.trim().isNotEmpty;
+        _benefDatosController.text.trim().isNotEmpty;
   }
 
   // ── Paso 3: Resumen ──
@@ -916,12 +545,16 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
           const SizedBox(height: TavSpace.sm),
           TavCard(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _kvRow('Nombre', _benefNombreController.text),
-                _kvRow('Cédula', _benefDocController.text),
-                _kvRow('Banco', _benefBancoController.text),
-                _kvRow('Cuenta', _benefCuentaController.text),
-                _kvRow('Método', _benefMetodo),
+                const SizedBox(height: TavSpace.sm),
+                Text('Datos para el pago', style: TavText.caption.copyWith(color: TavColors.ink3)),
+                const SizedBox(height: TavSpace.xs),
+                Text(
+                  _benefDatosController.text,
+                  style: TavText.body2,
+                ),
               ],
             ),
           ),
@@ -1197,52 +830,4 @@ class _CorredorCard extends StatelessWidget {
   }
 }
 
-class _MetodoSegmented extends StatelessWidget {
-  const _MetodoSegmented({required this.value, required this.onChanged});
 
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final opciones = [
-      ('transferencia', 'Transferencia'),
-      ('movil', 'Pago móvil'),
-      ('efectivo', 'Efectivo'),
-    ];
-    return Container(
-      decoration: BoxDecoration(
-        color: TavColors.bg,
-        borderRadius: BorderRadius.circular(TavRadius.field),
-      ),
-      child: Row(
-        children: opciones.map((o) {
-          final isOn = value == o.$1;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onChanged(o.$1),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: isOn ? TavColors.surface : Colors.transparent,
-                  borderRadius: BorderRadius.circular(TavRadius.field),
-                  boxShadow: isOn
-                      ? [const BoxShadow(color: Color(0x1A101828), blurRadius: 4, offset: Offset(0, 1))]
-                      : null,
-                ),
-                child: Text(
-                  o.$2,
-                  style: TavText.label.copyWith(
-                    color: isOn ? TavColors.ink : TavColors.ink3,
-                    fontSize: 13,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}

@@ -2,9 +2,10 @@ import { IsString, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 /**
- * Datos del beneficiario de una operación. Las cuentas destino cambian casi
- * siempre, así que no se guardan en una libreta: viajan embebidas en cada
- * operación (schema: campo `beneficiario` Json).
+ * Datos del beneficiario de una operación. El cliente decidió mantenerlos
+ * como texto libre: los países tienen formatos distintos y un formulario
+ * fijo solo sirve para Venezuela. Se guardan embebidos en cada operación
+ * (schema: campo `beneficiario` Json).
  */
 export class BeneficiarioDto {
   @ApiProperty({ example: 'María González' })
@@ -12,23 +13,10 @@ export class BeneficiarioDto {
   @IsNotEmpty()
   nombre!: string;
 
-  @ApiProperty({ example: 'V-12345678' })
+  @ApiProperty({
+    example: 'Pago móvil Banesco 0412-5551212\nCédula V-12345678',
+    description: 'Texto libre con los datos que el pagador necesita',
+  })
   @IsString()
-  @IsNotEmpty()
-  documento!: string;
-
-  @ApiProperty({ example: 'Banesco' })
-  @IsString()
-  @IsNotEmpty()
-  banco!: string;
-
-  @ApiProperty({ example: '0134...4471' })
-  @IsString()
-  @IsNotEmpty()
-  cuenta!: string;
-
-  @ApiProperty({ example: 'pago_movil' })
-  @IsString()
-  @IsNotEmpty()
-  metodo!: string;
+  datos!: string;
 }
