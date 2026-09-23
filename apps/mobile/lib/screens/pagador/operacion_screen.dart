@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -7,28 +8,18 @@ import 'package:intl/intl.dart';
 import '../../components/tav_button.dart';
 import '../../components/tav_card.dart';
 import '../../components/tav_field.dart';
+import '../../components/tav_money_display.dart';
 import '../../data/pagador_api.dart';
 import '../../theme/tav_colors.dart';
 import '../../theme/tav_space.dart';
 import '../../theme/tav_text.dart';
-import '../../utils/labels.dart';
 import '../../utils/uuid_gen.dart';
 
 /// Pantalla de ejecución de pago del pagador.
 ///
-/// El pagador escribe al marcar una operación como pagada:
-/// - montoDestinoCents: los bolívares (o la moneda destino) que recibió el
-///   beneficiario. Llena el campo que el paso 3 dejó en 0.
-/// - tasaEjecucion: la tasa real de ese pago (240, 244, 250...). No se
-///   precarga con la cotizada: si se precarga nadie la cambia y el dato
-///   pierde valor.
-/// - formaPago: pago móvil, transferencia, efectivo.
-/// - nombreCliente: el nombre del cliente que recibió.
-/// - comprobantePagoUrl: la captura del pago (imagen o PDF, máx 5 MB).
-///   Obligatoria. Se sube antes de pagar.
-///
-/// La caja de la que sale la plata la determina el corredor, no la forma
-/// de pago. El pagador no elige la caja.
+/// El pagador ve el pedido (monto en dólares, datos del beneficiario) y
+/// anota cuántos bolívares entregó, a qué tasa y de qué forma. La captura
+/// del pago es obligatoria.
 class PagadorOperacionScreen extends ConsumerStatefulWidget {
   const PagadorOperacionScreen({super.key, required this.operacionId});
 
@@ -46,9 +37,9 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
 
   // Campos del formulario de pago.
   final _tasaCtrl = TextEditingController();
-  final _formaPagoCtrl = TextEditingController(text: 'pago_movil');
   final _nombreCtrl = TextEditingController();
   final _montoDestinoCtrl = TextEditingController();
+  String _formaPago = 'pago_movil';
   bool _enviando = false;
   bool _subiendo = false;
   String? _comprobantePagoUrl;
@@ -65,7 +56,6 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
   @override
   void dispose() {
     _tasaCtrl.dispose();
-    _formaPagoCtrl.dispose();
     _nombreCtrl.dispose();
     _montoDestinoCtrl.dispose();
     super.dispose();
@@ -137,7 +127,6 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
     if (item == null) return;
 
     final tasa = _tasaCtrl.text.trim();
-    final forma = _formaPagoCtrl.text.trim();
     final nombre = _nombreCtrl.text.trim();
     final montoDestino = _montoDestinoCtrl.text.trim();
 
@@ -147,10 +136,6 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
     }
     if (tasa.isEmpty) {
       _toast('Falta la tasa de ejecución');
-      return;
-    }
-    if (forma.isEmpty) {
-      _toast('Falta la forma de pago');
       return;
     }
     if (nombre.isEmpty) {
@@ -177,7 +162,7 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
         montoCents: montoDestinoCents.toString(),
         montoDestinoCents: montoDestinoCents.toString(),
         tasaEjecucion: tasa.replaceAll(',', '.'),
-        formaPago: forma,
+        formaPago: _formaPago,
         nombreCliente: nombre,
         comprobantePagoUrl: _comprobantePagoUrl!,
       ));
@@ -232,80 +217,84 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Resumen de la operación
+          // Resumen del pedido
           TavCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(item.folio, style: TavText.h2),
                 const SizedBox(height: TavSpace.xs),
-                Text(
-                  simboloMoneda(item.monedaDestino) +
-                      (item.montoDestinoCents / 100).toStringAsFixed(2),
-                  style: TavText.h2.copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+                TavMoneyDisplay(
+                  cents: item.montoOrigenCents,
+                  currency: TavMoneyCurrency.usd,
+                  style: TavText.h2,
                 ),
                 const SizedBox(height: TavSpace.xs),
                 Text(
                   '${item.corredor.paisNombre} · ${item.corredor.monedaNombre} · ${item.corredor.formaEntregaNombre}',
                   style: TavText.caption.copyWith(color: TavColors.ink3),
                 ),
-                const SizedBox(height: TavSpace.xs),
-                Text(
-                  'Beneficiario: ${(item.beneficiario['nombre'] as String?) ?? '—'}',
-                  style: TavText.caption.copyWith(color: TavColors.ink2),
-                ),
               ],
             ),
           ),
           const SizedBox(height: TavSpace.md),
 
-          // Bolívares entregados — lo que el pagador anota
+          // Datos del beneficiario
+          Text('Datos del beneficiario', style: TavText.body.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: TavSpace.xs),
+          TavCard(
+            child: Column(
+              children: [
+                _filaCopiable('Nombre', item.beneficiario['nombre']?.toString() ?? '—'),
+                _filaCopiable('Documento', item.beneficiario['documento']?.toString() ?? '—'),
+                _filaCopiable('Banco', item.beneficiario['banco']?.toString() ?? '—'),
+                _filaCopiable('Cuenta', item.beneficiario['cuenta']?.toString() ?? '—'),
+                _filaCopiable('Método', item.beneficiario['metodo']?.toString() ?? '—'),
+              ],
+            ),
+          ),
+          const SizedBox(height: TavSpace.md),
+
+          // Bolívares entregados
           TavField(
             label: 'Bolívares entregados',
             hint: 'Cuánto recibió el beneficiario',
             controller: _montoDestinoCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
-          const SizedBox(height: TavSpace.sm),
-          Text(
-            'Los bolívares que anotas llenan el monto destino de la operación.',
-            style: TavText.caption.copyWith(color: TavColors.ink3),
-          ),
           const SizedBox(height: TavSpace.md),
 
-          // Tasa de ejecución — NO se precarga con la cotizada
+          // Tasa de ejecución
           TavField(
             label: 'Tasa de ejecución',
             hint: 'A cómo se ejecutó el cambio (240, 244, 250...)',
             controller: _tasaCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
-          const SizedBox(height: TavSpace.sm),
-          Text(
-            'No se precarga con la tasa cotizada: si se precarga nadie la cambia.',
-            style: TavText.caption.copyWith(color: TavColors.ink3),
-          ),
           const SizedBox(height: TavSpace.md),
 
           // Forma de pago
-          TavField(
-            label: 'Forma de pago',
-            hint: 'pago_movil, transferencia, efectivo',
-            controller: _formaPagoCtrl,
-          ),
-          const SizedBox(height: TavSpace.sm),
-          Text(
-            'La caja la determina el corredor, no la forma de pago.',
-            style: TavText.caption.copyWith(color: TavColors.ink3),
+          DropdownButtonFormField<String>(
+            initialValue: _formaPago,
+            decoration: const InputDecoration(
+              labelText: 'Forma de pago',
+              border: OutlineInputBorder(),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'pago_movil', child: Text('Pago móvil')),
+              DropdownMenuItem(value: 'transferencia', child: Text('Transferencia')),
+              DropdownMenuItem(value: 'efectivo', child: Text('Efectivo')),
+            ],
+            onChanged: (v) {
+              if (v != null) setState(() => _formaPago = v);
+            },
           ),
           const SizedBox(height: TavSpace.md),
 
           // Nombre del cliente que recibió
           TavField(
             label: 'Nombre del cliente que recibió',
-            hint: 'María González',
+            hint: 'Nombre y apellido de quien recibió',
             controller: _nombreCtrl,
           ),
           const SizedBox(height: TavSpace.md),
@@ -314,7 +303,7 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
           Text('Captura del pago', style: TavText.body.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: TavSpace.xs),
           Text(
-            'Imagen (JPG, PNG, GIF, WEBP) o PDF, máximo 5 MB. Obligatoria.',
+            'Imagen (JPG, PNG, GIF, WEBP) o PDF, máximo 5 MB.',
             style: TavText.caption.copyWith(color: TavColors.ink3),
           ),
           const SizedBox(height: TavSpace.sm),
@@ -361,6 +350,33 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _filaCopiable(String label, String value) {
+    return InkWell(
+      onTap: () {
+        Clipboard.setData(ClipboardData(text: value));
+        _toast('$label copiado');
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TavText.caption.copyWith(color: TavColors.ink3)),
+                  const SizedBox(height: 2),
+                  Text(value, style: TavText.body),
+                ],
+              ),
+            ),
+            const Icon(Icons.copy, size: 18, color: TavColors.ink3),
+          ],
+        ),
       ),
     );
   }

@@ -70,3 +70,11 @@ String tiempoRelativo(DateTime fecha) {
   final m = fecha.month.toString().padLeft(2, '0');
   return '$d/$m';
 }
+
+/// Forma de pago legible para el pagador.
+String formaPagoLabel(String forma) => switch (forma) {
+      'pago_movil' => 'Pago móvil',
+      'transferencia' => 'Transferencia',
+      'efectivo' => 'Efectivo',
+      _ => forma,
+    };

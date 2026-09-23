@@ -4,11 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../components/tav_card.dart';
 import '../../components/tav_load_state.dart';
+import '../../components/tav_money_display.dart';
 import '../../data/pagador_api.dart';
 import '../../theme/tav_colors.dart';
 import '../../theme/tav_space.dart';
 import '../../theme/tav_text.dart';
-import '../../utils/labels.dart';
 
 /// Cola de pagos pendientes del pagador.
 ///
@@ -124,16 +124,16 @@ class _PagadorColaScreenState extends ConsumerState<PagadorColaScreen> {
               children: [
                 Text(item.folio, style: TavText.h2),
                 Text(
-                  tiempoRelativo(item.creadaAt),
+                  _fechaCorta(item.creadaAt),
                   style: TavText.caption.copyWith(color: TavColors.ink3),
                 ),
               ],
             ),
             const SizedBox(height: TavSpace.xs),
-            Text(
-              simboloMoneda(item.monedaDestino) +
-                  (item.montoDestinoCents / 100).toStringAsFixed(2),
-              style: TavText.h2.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+            TavMoneyDisplay(
+              cents: item.montoOrigenCents,
+              currency: TavMoneyCurrency.usd,
+              style: TavText.h2,
             ),
             const SizedBox(height: TavSpace.xs),
             Text(
@@ -142,12 +142,19 @@ class _PagadorColaScreenState extends ConsumerState<PagadorColaScreen> {
             ),
             const SizedBox(height: TavSpace.xs),
             Text(
-              'Beneficiario: ${(item.beneficiario['nombre'] as String?) ?? '—'}',
+              '${item.beneficiario['nombre'] ?? '—'} · ${item.beneficiario['banco'] ?? '—'} · ${item.beneficiario['cuenta'] ?? '—'}',
               style: TavText.caption.copyWith(color: TavColors.ink2),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
       ),
     );
+  }
+
+  String _fechaCorta(DateTime d) {
+    const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    return '${d.day} ${meses[d.month - 1]} · ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 }

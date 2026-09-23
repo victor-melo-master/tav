@@ -139,7 +139,7 @@ class _PagadorHoyScreenState extends ConsumerState<PagadorHoyScreen> {
             ),
             const SizedBox(height: TavSpace.xs),
             _fila('Tasa ejecución', p.tasaEjecucion ?? '—'),
-            _fila('Forma de pago', p.formaPago ?? '—'),
+            _fila('Forma de pago', formaPagoLabel(p.formaPago ?? '')),
             _fila('Cliente', p.nombreCliente ?? '—'),
           ],
         ),
