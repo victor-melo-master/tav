@@ -107,7 +107,7 @@ export class PagadorService {
       montoCents: bigint;
       montoDestinoCents: bigint;
       tasaEjecucion: string;
-      formaPago: string;
+      formaPago?: string;
       nombreCliente: string;
       comprobantePagoUrl: string;
     },
