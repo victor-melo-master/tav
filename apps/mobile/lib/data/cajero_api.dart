@@ -83,8 +83,8 @@ class BeneficiarioOperacionDto {
 
   factory BeneficiarioOperacionDto.fromJson(Map<String, dynamic> json) {
     return BeneficiarioOperacionDto(
-      nombre: json['nombre'] as String,
-      datos: json['datos'] as String,
+      nombre: (json['nombre'] as String?) ?? '',
+      datos: (json['datos'] as String?) ?? '',
     );
   }
 
