@@ -39,7 +39,7 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
   final _tasaCtrl = TextEditingController();
   final _nombreCtrl = TextEditingController();
   final _montoDestinoCtrl = TextEditingController();
-  String _formaPago = 'pago_movil';
+  final _formaPagoCtrl = TextEditingController();
   bool _enviando = false;
   bool _subiendo = false;
   String? _comprobantePagoUrl;
@@ -58,6 +58,7 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
     _tasaCtrl.dispose();
     _nombreCtrl.dispose();
     _montoDestinoCtrl.dispose();
+    _formaPagoCtrl.dispose();
     super.dispose();
   }
 
@@ -162,7 +163,7 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
         montoCents: montoDestinoCents.toString(),
         montoDestinoCents: montoDestinoCents.toString(),
         tasaEjecucion: tasa.replaceAll(',', '.'),
-        formaPago: _formaPago,
+        formaPago: _formaPagoCtrl.text.trim().isEmpty ? null : _formaPagoCtrl.text.trim(),
         nombreCliente: nombre,
         comprobantePagoUrl: _comprobantePagoUrl!,
       ));
@@ -287,21 +288,14 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
           ),
           const SizedBox(height: TavSpace.md),
 
-          // Forma de pago
-          DropdownButtonFormField<String>(
-            initialValue: _formaPago,
+          // Forma de pago (libre, opcional)
+          TextFormField(
+            controller: _formaPagoCtrl,
             decoration: const InputDecoration(
-              labelText: 'Forma de pago',
+              labelText: 'Forma de pago (opcional)',
               border: OutlineInputBorder(),
+              hintText: 'Ej: Pix, SPEI, Nequi...',
             ),
-            items: const [
-              DropdownMenuItem(value: 'pago_movil', child: Text('Pago móvil')),
-              DropdownMenuItem(value: 'transferencia', child: Text('Transferencia')),
-              DropdownMenuItem(value: 'efectivo', child: Text('Efectivo')),
-            ],
-            onChanged: (v) {
-              if (v != null) setState(() => _formaPago = v);
-            },
           ),
           const SizedBox(height: TavSpace.md),
 

@@ -164,7 +164,7 @@ class EjecutarPagoRequest {
     required this.montoCents,
     required this.montoDestinoCents,
     required this.tasaEjecucion,
-    required this.formaPago,
+    this.formaPago,
     required this.nombreCliente,
     required this.comprobantePagoUrl,
   });
@@ -174,7 +174,7 @@ class EjecutarPagoRequest {
   final String montoCents;
   final String montoDestinoCents;
   final String tasaEjecucion;
-  final String formaPago;
+  final String? formaPago;
   final String nombreCliente;
   final String comprobantePagoUrl;
 
@@ -184,7 +184,7 @@ class EjecutarPagoRequest {
         'montoCents': montoCents,
         'montoDestinoCents': montoDestinoCents,
         'tasaEjecucion': tasaEjecucion,
-        'formaPago': formaPago,
+        if (formaPago != null && formaPago!.isNotEmpty) 'formaPago': formaPago,
         'nombreCliente': nombreCliente,
         'comprobantePagoUrl': comprobantePagoUrl,
       };

@@ -325,7 +325,6 @@ export class CajaService {
     if (dto.montoCents <= 0n) throw new MontoInvalidoException('montoCents', dto.montoCents);
     if (dto.montoDestinoCents < 0n) throw new MontoInvalidoException('montoDestinoCents', dto.montoDestinoCents);
     this.validarTasa(dto.tasaEjecucion);
-    if (!dto.formaPago?.trim()) throw new CampoRequeridoException('formaPago');
     if (!dto.nombreCliente?.trim()) throw new CampoRequeridoException('nombreCliente');
     if (!dto.comprobantePagoUrl?.trim()) throw new CampoRequeridoException('comprobantePagoUrl');
 
@@ -379,7 +378,7 @@ export class CajaService {
             estado: EstadoOperacion.pagada,
             pagadaAt: new Date(),
             tasaEjecucion: new Prisma.Decimal(dto.tasaEjecucion),
-            formaPago: dto.formaPago.trim(),
+            formaPago: dto.formaPago?.trim() ?? null,
             nombreCliente: dto.nombreCliente.trim(),
             montoDestinoCents: dto.montoDestinoCents,
             comprobantePagoUrl: dto.comprobantePagoUrl.trim(),

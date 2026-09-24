@@ -1,5 +1,5 @@
-import { IsString, IsNotEmpty, Matches } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, Matches, IsOptional } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
  * DTO HTTP para que el pagador ejecute un pago.
@@ -48,10 +48,10 @@ export class EjecutarPagoHttpDto {
   @Matches(/^\d+(\.\d+)?$/, { message: 'tasaEjecucion debe ser un número decimal positivo' })
   tasaEjecucion!: string;
 
-  @ApiProperty({ description: 'Forma de pago: pago_movil, transferencia, efectivo, ...', example: 'pago_movil' })
+  @ApiPropertyOptional({ description: 'Nota libre del pagador sobre la forma de pago (Pix, SPEI, Nequi, ...)', example: 'Pix' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  formaPago!: string;
+  formaPago?: string;
 
   @ApiProperty({ description: 'Nombre del cliente que recibió', example: 'María González' })
   @IsString()

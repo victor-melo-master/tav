@@ -37,7 +37,7 @@ export interface EjecutarPagoDto {
   montoCents: bigint; // cuánto se descuenta de la caja (centavos de la moneda del corredor)
   montoDestinoCents: bigint; // cuánto recibió el beneficiario (centavos de la moneda destino). Llena el campo que dejó en 0 el paso 3.
   tasaEjecucion: string; // a cómo se ejecutó el cambio (240, 244, 250...). Se congela.
-  formaPago: string; // "pago_movil" | "transferencia" | "efectivo" | ...
+  formaPago?: string; // nota libre: Pix, SPEI, Nequi, pago móvil...
   nombreCliente: string; // el nombre del cliente que recibió
   comprobantePagoUrl: string; // captura del pago (subida antes, ruta devuelta por /uploads/comprobante)
   registradoPorId: string; // el pagador
