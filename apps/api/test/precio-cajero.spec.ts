@@ -104,7 +104,6 @@ function operacionValida(clientUuid: string, corredorId: string) {
   return {
     clientUuid,
     montoOrigenCents: '1000',
-    monedaOrigen: 'USD',
     beneficiario: {
       nombre: 'María González',
       datos: 'Banco: Banesco\nCuenta: 0134...4471\nCédula: V-12345678\nMétodo: pago_movil'
