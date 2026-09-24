@@ -595,7 +595,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
     if (op.corredorPaisNombre != null && op.corredorServicioNombre != null) {
       return '${op.corredorPaisNombre} · ${op.corredorServicioNombre}';
     }
-    return op.tipo;
+    return 'Operación';
   }
 }
 

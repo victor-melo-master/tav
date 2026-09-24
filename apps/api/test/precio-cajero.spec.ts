@@ -103,9 +103,8 @@ let corredorDesactivadoId: string;
 function operacionValida(clientUuid: string, corredorId: string) {
   return {
     clientUuid,
-    tipo: 'usdt_bs',
     montoOrigenCents: '1000',
-    monedaOrigen: 'USDT',
+    monedaOrigen: 'USD',
     beneficiario: {
       nombre: 'María González',
       datos: 'Banco: Banesco\nCuenta: 0134...4471\nCédula: V-12345678\nMétodo: pago_movil'

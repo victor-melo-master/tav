@@ -20,9 +20,8 @@ export interface BeneficiarioDto {
 export interface RegistrarOperacionDto {
   clientUuid: string; // idempotencia — generado en el dispositivo
   cajeroId: string; // PerfilCajero.usuarioId
-  tipo: string; // "usdt_bs" | "usd_efectivo_bs"
   montoOrigenCents: bigint; // dólares que el cajero envía
-  monedaOrigen: string; // "USDT" | "USD"
+  monedaOrigen: string; // "USD"
   tasaAplicada: string; // precio congelado en el registro (GYD por 1 USD)
   totalCents: bigint; // deuda en GYD centavos, calculada por el servidor
   montoDestinoCents: bigint; // 0 al crear; el pagador lo registra al ejecutar

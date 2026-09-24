@@ -113,7 +113,6 @@ export class LedgerService {
             folio,
             clientUuid: dto.clientUuid,
             cajeroId: dto.cajeroId,
-            tipo: dto.tipo,
             montoOrigenCents: dto.montoOrigenCents,
             monedaOrigen: dto.monedaOrigen,
             tasaAplicada: new Prisma.Decimal(dto.tasaAplicada), // precio congelado

@@ -98,9 +98,7 @@ class OperacionDto {
   const OperacionDto({
     required this.id,
     required this.folio,
-    required this.tipo,
     required this.montoOrigenCents,
-    required this.monedaOrigen,
     required this.tasaAplicada,
     required this.totalCents,
     required this.montoDestinoCents,
@@ -118,9 +116,7 @@ class OperacionDto {
 
   final String id;
   final String folio;
-  final String tipo;
   final int montoOrigenCents;
-  final String monedaOrigen;
   final String tasaAplicada;
   final int totalCents;
   final int montoDestinoCents;
@@ -139,9 +135,7 @@ class OperacionDto {
     return OperacionDto(
       id: json['id'] as String,
       folio: json['folio'] as String,
-      tipo: json['tipo'] as String,
       montoOrigenCents: int.parse(json['montoOrigenCents'] as String),
-      monedaOrigen: json['monedaOrigen'] as String,
       tasaAplicada: json['tasaAplicada'] as String,
       totalCents: int.parse(json['totalCents'] as String),
       montoDestinoCents: int.parse(json['montoDestinoCents'] as String),
@@ -294,27 +288,21 @@ class AmpliacionDto {
 class CrearOperacionRequest {
   const CrearOperacionRequest({
     required this.clientUuid,
-    required this.tipo,
     required this.montoOrigenCents,
-    required this.monedaOrigen,
     required this.beneficiario,
     this.comprobanteUrl,
     this.corredorId,
   });
 
   final String clientUuid;
-  final String tipo;
   final String montoOrigenCents;
-  final String monedaOrigen;
   final BeneficiarioOperacionDto beneficiario;
   final String? comprobanteUrl;
   final String? corredorId;
 
   Map<String, dynamic> toJson() => {
         'clientUuid': clientUuid,
-        'tipo': tipo,
         'montoOrigenCents': montoOrigenCents,
-        'monedaOrigen': monedaOrigen,
         'beneficiario': beneficiario.toJson(),
         if (comprobanteUrl != null) 'comprobanteUrl': comprobanteUrl,
         if (corredorId != null) 'corredorId': corredorId,

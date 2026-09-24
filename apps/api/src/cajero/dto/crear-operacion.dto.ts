@@ -1,7 +1,6 @@
 import {
   IsString,
   IsNotEmpty,
-  IsIn,
   IsOptional,
   Matches,
   ValidateNested,
@@ -10,8 +9,6 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BeneficiarioDto } from './beneficiario.dto';
 
-const MONEDA_ORIGEN = ['USDT', 'USD'] as const;
-const TIPO_OPERACION = ['usdt_bs', 'usd_efectivo_bs'] as const;
 
 /**
  * DTO para POST /cajero/operaciones.
@@ -40,18 +37,10 @@ export class CrearOperacionDto {
   @IsNotEmpty()
   clientUuid!: string;
 
-  @ApiProperty({ enum: TIPO_OPERACION, example: 'usdt_bs' })
-  @IsIn(TIPO_OPERACION)
-  tipo!: string;
-
   @ApiProperty({ description: 'Monto en dólares que el cajero envía, en centavos (string)', example: '100000' })
   @IsString()
   @Matches(/^\d+$/, { message: 'montoOrigenCents debe ser un entero de centavos no negativo' })
   montoOrigenCents!: string;
-
-  @ApiProperty({ enum: MONEDA_ORIGEN, example: 'USDT' })
-  @IsIn(MONEDA_ORIGEN)
-  monedaOrigen!: string;
 
   @ApiProperty({ type: BeneficiarioDto })
   @ValidateNested()

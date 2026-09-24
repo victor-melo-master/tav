@@ -239,6 +239,6 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
     if (op.corredorPaisNombre != null && op.corredorServicioNombre != null) {
       return '${op.corredorPaisNombre} · ${op.corredorServicioNombre}';
     }
-    return op.tipo;
+    return 'Operación';
   }
 }

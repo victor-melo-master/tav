@@ -142,9 +142,8 @@ function opDto(opts: {
   return {
     clientUuid: opts.clientUuid ?? uuid(),
     cajeroId: opts.cajeroId,
-    tipo: 'usdt_bs',
     montoOrigenCents: opts.montoOrigenCents ?? opts.totalCents,
-    monedaOrigen: 'USDT',
+    monedaOrigen: 'USD',
     tasaAplicada: opts.tasaAplicada ?? '285.4',
     totalCents: opts.totalCents,
     montoDestinoCents: 0n,

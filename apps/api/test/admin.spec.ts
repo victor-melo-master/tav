@@ -154,9 +154,8 @@ let corredorIdTest: string;
 function operacionValida(clientUuid: string, overrides?: Record<string, unknown>) {
   return {
     clientUuid,
-    tipo: 'usdt_bs',
     montoOrigenCents: '100000',
-    monedaOrigen: 'USDT',
+    monedaOrigen: 'USD',
     beneficiario: {
       nombre: 'María González',
       datos: 'Banco: Banesco\nCuenta: 0134...4471\nCédula: V-12345678\nMétodo: transferencia_gyd'
@@ -1195,9 +1194,8 @@ describe('Admin — GET /admin/movimientos-diarios', () => {
         folio: 'TAV-TEST-MOV-1',
         clientUuid: crypto.randomUUID(),
         cajeroId: caj.id,
-        tipo: 'usdt_bs',
         montoOrigenCents: 10_000n, // 100 USD
-        monedaOrigen: 'USDT',
+        monedaOrigen: 'USD',
         tasaAplicada: new Prisma.Decimal('240'),
         totalCents: 2_400_000n, // 24.000 GYD
         montoDestinoCents: 0n,
@@ -1245,9 +1243,8 @@ describe('Admin — GET /admin/movimientos-diarios', () => {
         folio: 'TAV-TEST-MOV-2',
         clientUuid: crypto.randomUUID(),
         cajeroId: caj.id,
-        tipo: 'usdt_bs',
         montoOrigenCents: 5_000n, // 50 USD
-        monedaOrigen: 'USDT',
+        monedaOrigen: 'USD',
         tasaAplicada: new Prisma.Decimal('250'),
         totalCents: 1_250_000n,
         montoDestinoCents: 0n,
@@ -1288,9 +1285,8 @@ describe('Admin — GET /admin/movimientos-diarios', () => {
         folio: 'TAV-TEST-MOV-3',
         clientUuid: crypto.randomUUID(),
         cajeroId: caj.id,
-        tipo: 'usdt_bs',
         montoOrigenCents: 10_000n,
-        monedaOrigen: 'USDT',
+        monedaOrigen: 'USD',
         tasaAplicada: new Prisma.Decimal('240'),
         totalCents: 2_400_000n,
         montoDestinoCents: 0n,
@@ -1309,9 +1305,8 @@ describe('Admin — GET /admin/movimientos-diarios', () => {
         folio: 'TAV-TEST-MOV-4',
         clientUuid: crypto.randomUUID(),
         cajeroId: caj.id,
-        tipo: 'usdt_bs',
         montoOrigenCents: 10_000n,
-        monedaOrigen: 'USDT',
+        monedaOrigen: 'USD',
         tasaAplicada: new Prisma.Decimal('240'),
         totalCents: 2_400_000n,
         montoDestinoCents: 0n,

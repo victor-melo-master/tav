@@ -42,8 +42,6 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
   // El precio del servicio elegido (GYD por dólar), fijado por el admin para
   // este cajero. Es string decimal. La deuda la calcula el servidor.
   String get _precioGyd => _corredor?.precioGyd ?? '';
-  String get _monedaOrigen => 'USD'; // Fase 9: el cajero envía dólares
-  String get _tipo => 'usdt_${_corredor?.moneda.toLowerCase() ?? 'bs'}';
 
   final _benefNombreController = TextEditingController();
   final _benefDatosController = TextEditingController();
@@ -152,9 +150,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
       final op = await api.crearOperacion(
         CrearOperacionRequest(
           clientUuid: uuid,
-          tipo: _tipo,
           montoOrigenCents: _montoCents.toString(),
-          monedaOrigen: _monedaOrigen,
           beneficiario: BeneficiarioOperacionDto(
             nombre: _benefNombreController.text.trim(),
             datos: _benefDatosController.text,
@@ -321,7 +317,7 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
             style: TavText.moneyDisplay.copyWith(fontSize: 38, color: TavColors.ink3),
           );
 
-    final monedaLabel = _monedaOrigen;
+    const monedaLabel = 'USD';
 
     return Column(
       children: [

@@ -450,9 +450,8 @@ async function main() {
         folio,
         clientUuid: randomUUID(),
         cajeroId: cajero.perfilId,
-        tipo: 'usdt_bs',
         montoOrigenCents: montoUsdCents,
-        monedaOrigen: 'USDT',
+        monedaOrigen: 'USD',
         tasaAplicada: precioGyd.precioGyd.toString(),
         totalCents,
         montoDestinoCents: 0n, // el pagador lo registra al ejecutar

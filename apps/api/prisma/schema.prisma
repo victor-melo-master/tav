@@ -153,9 +153,8 @@ model Operacion {
   cajeroId   String
   cajero     PerfilCajero @relation(fields: [cajeroId], references: [usuarioId])
 
-  tipo              String // "usdt_bs" | "usd_efectivo_bs"
-  montoOrigenCents  BigInt // en la moneda de origen (USDT, USD, ...) — lo que el cajero envía
-  monedaOrigen      String // "USDT" | "USD" — moneda que envía el cajero
+  montoOrigenCents  BigInt // dólares que envía el cajero (centavos de USD)
+  monedaOrigen      String // "USD" — moneda que envía el cajero
   tasaAplicada      Decimal @db.Decimal(18, 6) // precio congelado en el registro (GYD por 1 USD)
   totalCents        BigInt // deuda en GYD centavos, calculada por el servidor = round(montoOrigenCents × tasaAplicada)
   montoDestinoCents BigInt // en la moneda de destino (BS, BRL, ...) — lo registra el pagador al ejecutar; 0 al crear

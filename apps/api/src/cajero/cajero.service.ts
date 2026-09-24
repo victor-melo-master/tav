@@ -145,9 +145,8 @@ export class CajeroService {
     return this.ledger.registrarOperacion({
       clientUuid: dto.clientUuid,
       cajeroId,
-      tipo: dto.tipo,
       montoOrigenCents,
-      monedaOrigen: dto.monedaOrigen,
+      monedaOrigen: 'USD',
       tasaAplicada,
       totalCents,
       montoDestinoCents,

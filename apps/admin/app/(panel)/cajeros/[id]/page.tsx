@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
-import { gyd, bs, formatFecha, formatTasa, haceTexto } from '@/lib/format';
+import { gyd, usd, formatoMoneda, formatFecha, formatTasa, haceTexto } from '@/lib/format';
 import type { TipoMovimiento, EstadoOperacion } from '@/lib/types';
 import { PageHeader, PageContent } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -248,7 +248,6 @@ export default function FichaCajeroPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Folio</TableHead>
-                  <TableHead>Tipo</TableHead>
                   <TableHead className="text-right">Origen</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead className="text-right">Destino</TableHead>
@@ -259,7 +258,7 @@ export default function FichaCajeroPage() {
               <TableBody>
                 {data.operaciones.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="p-0">
+                    <TableCell colSpan={6} className="p-0">
                       <VacioTabla mensaje="Sin operaciones" />
                     </TableCell>
                   </TableRow>
@@ -269,15 +268,14 @@ export default function FichaCajeroPage() {
                     <TableCell className="font-mono text-[12px] font-medium text-tav-ink">
                       {o.folio}
                     </TableCell>
-                    <TableCell className="text-tav-ink-2">{o.tipo}</TableCell>
                     <TableCell className="text-right tabular-nums text-tav-ink-2">
-                      {o.monedaOrigen === 'BS' ? bs(o.montoOrigenCents) : gyd(o.montoOrigenCents)}
+                      {usd(o.montoOrigenCents)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
                       {gyd(o.totalCents)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-tav-ink-2">
-                      {bs(o.montoDestinoCents)}
+                      {formatoMoneda(o.montoDestinoCents, o.monedaDestino)}
                       <span className="ml-1 text-[11px] text-tav-ink-4">
                         @ {formatTasa(o.tasaAplicada)}
                       </span>

@@ -113,9 +113,8 @@ let corredorIdTest: string;
 function operacionValida(clientUuid: string, overrides?: Record<string, unknown>) {
   return {
     clientUuid,
-    tipo: 'usdt_bs',
     montoOrigenCents: '100000',
-    monedaOrigen: 'USDT',
+    monedaOrigen: 'USD',
     beneficiario: {
       nombre: 'María González',
       datos: 'Banco: Banesco\nCuenta: 0134...4471\nCédula: V-12345678\nMétodo: pago_movil'
@@ -310,6 +309,63 @@ describe('Cajero — POST /cajero/operaciones', () => {
       }));
 
     expect(res.status).toBe(400);
+  });
+
+  test('crea operaciones para todos los países/servicios activos', async () => {
+    const c = await crearCajero({ email: '0414-2000006@tav.test', limiteCents: 10_000_000_000n });
+    const token = await login(app, c.email, c.password);
+
+    const servicios = [
+      { pais: 'VEN', moneda: 'VES', monedaNombre: 'Bolívares', formaEntrega: 'transferencia', formaEntregaNombre: 'Tasa especial', servicio: 'tasa_especial', servicioNombre: 'Tasa especial', cajaNombre: 'Caja Tasa especial VES' },
+      { pais: 'BRA', moneda: 'BRL', monedaNombre: 'Reales', formaEntrega: 'pix', formaEntregaNombre: 'Pix', servicio: 'pix', servicioNombre: 'Pix', cajaNombre: 'Caja Pix BRL' },
+      { pais: 'COL', moneda: 'COP', monedaNombre: 'Pesos colombianos', formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia', servicio: 'colombia', servicioNombre: 'Colombia', cajaNombre: 'Caja Colombia COP' },
+      { pais: 'DOM', moneda: 'DOP', monedaNombre: 'Pesos dominicanos', formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia', servicio: 'rd', servicioNombre: 'República Dominicana', cajaNombre: 'Caja RD DOP' },
+      { pais: 'PAN', moneda: 'PAB', monedaNombre: 'Balboas', formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia', servicio: 'panama', servicioNombre: 'Panamá', cajaNombre: 'Caja Panamá PAB' },
+      { pais: 'VEN', moneda: 'VES', monedaNombre: 'Bolívares', formaEntrega: 'efectivo', formaEntregaNombre: 'Efectivo en mano', servicio: 'efectivo', servicioNombre: 'Efectivo en mano', cajaNombre: 'Caja Efectivo VES' },
+      { pais: 'MEX', moneda: 'MXN', monedaNombre: 'Pesos mexicanos', formaEntrega: 'transferencia', formaEntregaNombre: 'Transferencia', servicio: 'mexico', servicioNombre: 'México', cajaNombre: 'Caja México MXN' },
+    ];
+
+    for (let i = 0; i < servicios.length; i++) {
+      const s = servicios[i];
+      const caja = await prisma.caja.create({
+        data: { esMadre: false, moneda: s.moneda, nombre: s.cajaNombre, pais: s.pais, saldoCents: 0n },
+      });
+      const corredor = await prisma.corredor.create({
+        data: {
+          pais: s.pais,
+          paisNombre: s.pais,
+          moneda: s.moneda,
+          monedaNombre: s.monedaNombre,
+          formaEntrega: s.formaEntrega,
+          formaEntregaNombre: s.formaEntregaNombre,
+          servicio: s.servicio,
+          servicioNombre: s.servicioNombre,
+          cajaId: caja.id,
+          activo: true,
+          creadoPorId: 'admin-test',
+        },
+      });
+      await prisma.precioCajeroServicio.create({
+        data: { cajeroId: c.id, servicioId: corredor.id, precioGyd: new Prisma.Decimal('250'), fijadoPorId: 'admin-test' },
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/cajero/operaciones')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          clientUuid: `op-pais-${i}`,
+          montoOrigenCents: '10000',
+          monedaOrigen: 'USD',
+          beneficiario: { nombre: `Beneficiario ${s.pais}`, datos: 'Datos de prueba' },
+          corredorId: corredor.id,
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.operacion.monedaDestino).toBe(s.moneda);
+      expect(res.body.operacion.totalCents).toBe('2500000');
+    }
+
+    expect(await prisma.operacion.count({ where: { cajeroId: c.id } })).toBe(servicios.length);
   });
 });
 
@@ -621,9 +677,8 @@ describe('Cajero — crear operación congela precioCompraGyd', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({
         clientUuid: crypto.randomUUID(),
-        tipo: 'usdt_bs',
         montoOrigenCents: '10000', // 100 USD
-        monedaOrigen: 'USDT',
+        monedaOrigen: 'USD',
         beneficiario: { nombre: 'María', datos: 'Banco: Banesco\nCuenta: 0123\nCédula: V123\nMétodo: pago_movil' },
         corredorId: corredorIdTest,
       });
@@ -646,9 +701,8 @@ describe('Cajero — crear operación congela precioCompraGyd', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({
         clientUuid: crypto.randomUUID(),
-        tipo: 'usdt_bs',
         montoOrigenCents: '10000',
-        monedaOrigen: 'USDT',
+        monedaOrigen: 'USD',
         beneficiario: { nombre: 'María', datos: 'Banco: Banesco\nCuenta: 0123\nCédula: V123\nMétodo: pago_movil' },
         corredorId: corredorIdTest,
       });

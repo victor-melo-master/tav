@@ -103,9 +103,7 @@ export interface Operacion {
   folio: string;
   clientUuid: string;
   cajeroId: string;
-  tipo: string;
   montoOrigenCents: string;
-  monedaOrigen: string;
   tasaAplicada: string;
   totalCents: string;
   montoDestinoCents: string;
