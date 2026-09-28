@@ -134,6 +134,7 @@ class CajeroCobradorRow extends StatelessWidget {
 
   bool get _tieneBandera {
     if (!mostrarBanderaAtencion) return false;
+    if (cajero.avisoAbono != null) return true;
     if (cajero.atendidoPor != null) return true;
     final d = cajero.diasSinConectarse;
     return d != null && d >= 3;
@@ -141,6 +142,16 @@ class CajeroCobradorRow extends StatelessWidget {
 
   List<Widget> _banderas(TavChipState chip) {
     final flags = <Widget>[];
+    if (cajero.avisoAbono != null) {
+      final a = cajero.avisoAbono!;
+      final texto = a.nota != null && a.nota!.isNotEmpty
+          ? 'Avisó ${formatCents(a.montoCents)} · ${a.nota}'
+          : 'Avisó ${formatCents(a.montoCents)}';
+      flags.add(TavChip(
+        label: texto,
+        state: TavChipState.verde,
+      ));
+    }
     if (cajero.atendidoPor != null) {
       flags.add(TavChip(
         label: 'Lo atiende ${cajero.atendidoPor!.nombre.split(' ').first}',

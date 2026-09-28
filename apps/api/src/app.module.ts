@@ -12,6 +12,7 @@ import { UploadsModule } from './uploads/uploads.module';
 import { CajasModule } from './cajas/cajas.module';
 import { CorredoresModule } from './corredores/corredores.module';
 import { PagadorModule } from './pagador/pagador.module';
+import { AvisosAbonoModule } from './avisos-abono/avisos-abono.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PagadorModule } from './pagador/pagador.module';
     CajasModule,
     CorredoresModule,
     PagadorModule,
+    AvisosAbonoModule,
   ],
   controllers: [AppController],
   providers: [AppService],

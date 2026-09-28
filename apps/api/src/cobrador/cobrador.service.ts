@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { SemaforoService } from '../ledger/semaforo.service';
+import { AvisosAbonoService } from '../avisos-abono/avisos-abono.service';
 import { fechaCaracasHoy } from '../ledger/fecha-caracas';
 import {
   NoEncontradoException,
@@ -25,6 +26,7 @@ export class CobradorService {
     private readonly prisma: PrismaService,
     private readonly ledger: LedgerService,
     private readonly semaforo: SemaforoService,
+    private readonly avisosAbono: AvisosAbonoService,
   ) {}
 
   // ─────────────────────────── CAJEROS ───────────────────────────
@@ -83,18 +85,42 @@ export class CobradorService {
       }),
     );
 
-    // Ordenar por urgencia.
+    // Traer avisos de abono activos y caducar los mayores a 24h.
+    const activos = await this.avisosAbono.caducarYListarActivos(
+      conSemaforo.map((c) => c.id),
+    );
+    const avisoPorCajero = new Map(activos.map((a) => [a.cajeroId, a]));
+
+    const conAviso = conSemaforo.map((c) => {
+      const aviso = avisoPorCajero.get(c.id) ?? null;
+      return {
+        ...c,
+        aviso: aviso
+          ? {
+              id: aviso.id,
+              montoCents: aviso.montoCents.toString(),
+              nota: aviso.nota,
+              creadoAt: aviso.creadoAt,
+            }
+          : null,
+      };
+    });
+
+    // Ordenar por urgencia. Dentro del mismo grupo, los que tienen aviso primero.
     const orden = { rojo: 2, ambar: 1, verde: 0 };
-    conSemaforo.sort((a, b) => {
+    conAviso.sort((a, b) => {
       // 1. Bloqueados primero.
       if (a.bloqueado !== b.bloqueado) return a.bloqueado ? -1 : 1;
       // 2. Estado del semáforo.
       const sa = orden[a.semaforo as keyof typeof orden];
       const sb = orden[b.semaforo as keyof typeof orden];
       if (sa !== sb) return sb - sa;
-      // 3. Días de deuda (más días primero).
+      // 3. Con aviso de abono antes que sin aviso (misma prioridad).
+      if (a.aviso && !b.aviso) return -1;
+      if (!a.aviso && b.aviso) return 1;
+      // 4. Días de deuda (más días primero).
       if (b.dias !== a.dias) return b.dias - a.dias;
-      // 4. Monto de deuda (más deuda primero).
+      // 5. Monto de deuda (más deuda primero).
       const ba = BigInt(a.saldoCents);
       const bb = BigInt(b.saldoCents);
       if (bb > ba) return 1;
@@ -102,7 +128,7 @@ export class CobradorService {
       return 0;
     });
 
-    return conSemaforo;
+    return conAviso;
   }
 
   // ─────────────────────────── COBROS ───────────────────────────
@@ -112,7 +138,7 @@ export class CobradorService {
    * cobradorId y registradoPorId salen del JWT, no del body.
    */
   async registrarCobro(cobradorId: string, dto: RegistrarCobroDto) {
-    return this.ledger.registrarCobro({
+    const resultado = await this.ledger.registrarCobro({
       clientUuid: dto.clientUuid,
       cajeroId: dto.cajeroId,
       cobradorId,
@@ -122,6 +148,11 @@ export class CobradorService {
       nota: dto.nota,
       registradoPorId: cobradorId,
     });
+
+    // Al cobrarle realmente, cerrar cualquier aviso de abono pendiente.
+    await this.avisosAbono.cerrarPorCobro(dto.cajeroId);
+
+    return resultado;
   }
 
   /**

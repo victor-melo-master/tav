@@ -151,6 +151,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           disponibleCents: 0,
           diasSinConectarse: null,
           atendidoPor: null,
+          avisoAbono: null,
         ),
       );
       zonaText = c.zona ?? 'Sin zona';

@@ -33,6 +33,31 @@ class AtendidoPorDto {
   }
 }
 
+/// Aviso de abono activo de un cajero ("tengo plata lista").
+/// null cuando no tiene un aviso enviado.
+class AvisoAbonoCobradorDto {
+  const AvisoAbonoCobradorDto({
+    required this.id,
+    required this.montoCents,
+    required this.nota,
+    required this.creadoAt,
+  });
+
+  final String id;
+  final int montoCents;
+  final String? nota;
+  final DateTime creadoAt;
+
+  factory AvisoAbonoCobradorDto.fromJson(Map<String, dynamic> json) {
+    return AvisoAbonoCobradorDto(
+      id: json['id'] as String,
+      montoCents: int.parse(json['montoCents'] as String),
+      nota: json['nota'] as String?,
+      creadoAt: DateTime.parse(json['creadoAt'] as String),
+    );
+  }
+}
+
 /// Cajero visto por el cobrador. La lista la devuelve el servidor ya
 /// ordenada por urgencia: no se reordena en la app.
 class CajeroCobradorDto {
@@ -51,6 +76,7 @@ class CajeroCobradorDto {
     required this.disponibleCents,
     required this.diasSinConectarse,
     required this.atendidoPor,
+    required this.avisoAbono,
   });
 
   final String id;
@@ -67,6 +93,7 @@ class CajeroCobradorDto {
   final int disponibleCents;
   final int? diasSinConectarse;
   final AtendidoPorDto? atendidoPor;
+  final AvisoAbonoCobradorDto? avisoAbono;
 
   factory CajeroCobradorDto.fromJson(Map<String, dynamic> json) {
     return CajeroCobradorDto(
@@ -89,6 +116,11 @@ class CajeroCobradorDto {
           ? null
           : AtendidoPorDto.fromJson(
               json['atendidoPor'] as Map<String, dynamic>,
+            ),
+      avisoAbono: json['aviso'] == null
+          ? null
+          : AvisoAbonoCobradorDto.fromJson(
+              json['aviso'] as Map<String, dynamic>,
             ),
     );
   }

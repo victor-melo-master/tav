@@ -169,6 +169,30 @@ export default function FichaCajeroPage() {
           </CardContent>
         </Card>
 
+        {/* Aviso de abono abierto */}
+        {data.avisoAbono && data.avisoAbono.estado === 'enviado' && (
+          <Card className="border-tav-green-600/20 bg-tav-green-50">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-[12px] font-medium text-tav-ink-3">
+                    Aviso de abono
+                  </div>
+                  <div className="mt-1 text-[18px] font-semibold tabular-nums text-tav-green-700">
+                    {gyd(data.avisoAbono.montoCents)}
+                  </div>
+                  {data.avisoAbono.nota && (
+                    <p className="mt-1 text-[13px] text-tav-ink-2">
+                      {data.avisoAbono.nota}
+                    </p>
+                  )}
+                </div>
+                <Badge variant="verde">Enviado</Badge>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Datos del perfil */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Dato label="Zona" valor={data.zona || '—'} />

@@ -252,6 +252,47 @@ class PaginaMovimientosDto {
 
 // ─────────────────────────── Ampliaciones ───────────────────────────
 
+class AvisoAbonoDto {
+  const AvisoAbonoDto({
+    required this.id,
+    required this.cajeroId,
+    required this.montoCents,
+    required this.nota,
+    required this.estado,
+    required this.creadoAt,
+  });
+
+  final String id;
+  final String cajeroId;
+  final int montoCents;
+  final String? nota;
+  final String estado;
+  final DateTime creadoAt;
+
+  factory AvisoAbonoDto.fromJson(Map<String, dynamic> json) {
+    return AvisoAbonoDto(
+      id: json['id'] as String,
+      cajeroId: json['cajeroId'] as String,
+      montoCents: int.parse(json['montoCents'] as String),
+      nota: json['nota'] as String?,
+      estado: json['estado'] as String,
+      creadoAt: DateTime.parse(json['creadoAt'] as String),
+    );
+  }
+}
+
+class CrearAvisoAbonoRequest {
+  const CrearAvisoAbonoRequest({required this.montoCents, this.nota});
+
+  final int montoCents;
+  final String? nota;
+
+  Map<String, dynamic> toJson() => {
+        'montoCents': montoCents.toString(),
+        if (nota != null && nota!.trim().isNotEmpty) 'nota': nota!.trim(),
+      };
+}
+
 class AmpliacionDto {
   const AmpliacionDto({
     required this.id,
@@ -489,6 +530,23 @@ class CajeroApi {
     return (r.data as List<dynamic>)
         .map((e) => AmpliacionDto.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<AvisoAbonoDto> crearAvisoAbono(CrearAvisoAbonoRequest req) async {
+    final r = await dio.post('/cajero/avisos-abono', data: req.toJson());
+    return AvisoAbonoDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
+  Future<List<AvisoAbonoDto>> listarAvisosAbono() async {
+    final r = await dio.get('/cajero/avisos-abono');
+    return (r.data as List<dynamic>)
+        .map((e) => AvisoAbonoDto.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<AvisoAbonoDto> cancelarAvisoAbono(String id) async {
+    final r = await dio.post('/cajero/avisos-abono/$id/cancelar', data: {});
+    return AvisoAbonoDto.fromJson(r.data as Map<String, dynamic>);
   }
 }
 

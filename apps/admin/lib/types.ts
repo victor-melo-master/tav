@@ -140,6 +140,15 @@ export interface AmpliacionCredito {
   operacion?: { id: string; folio: string } | null;
 }
 
+export interface AvisoAbono {
+  id: string;
+  cajeroId: string;
+  montoCents: string;
+  nota?: string | null;
+  estado: 'enviado' | 'atendido' | 'cancelado' | 'caducado';
+  creadoAt: string;
+}
+
 export interface FichaCajero {
   id: string;
   nombre: string;
@@ -158,6 +167,7 @@ export interface FichaCajero {
   movimientos: Movimiento[];
   operaciones: Operacion[];
   ampliaciones: AmpliacionCredito[];
+  avisoAbono: AvisoAbono | null;
 }
 
 // ─────────────────────────── CIERRES ───────────────────────────

@@ -4,9 +4,10 @@ import { AdminService } from './admin.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { LedgerModule } from '../ledger/ledger.module';
 import { PrecioCajeroModule } from '../precio-cajero/precio-cajero.module';
+import { AvisosAbonoModule } from '../avisos-abono/avisos-abono.module';
 
 @Module({
-  imports: [PrismaModule, LedgerModule, PrecioCajeroModule],
+  imports: [PrismaModule, LedgerModule, PrecioCajeroModule, AvisosAbonoModule],
   controllers: [AdminController],
   providers: [AdminService],
 })
