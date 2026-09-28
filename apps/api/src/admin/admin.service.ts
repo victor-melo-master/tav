@@ -11,6 +11,7 @@ import { AvisosAbonoService } from '../avisos-abono/avisos-abono.service';
 import { AvisosService } from '../avisos/avisos.service';
 import { fechaCaracasHoy } from '../ledger/fecha-caracas';
 import { NoEncontradoException } from '../ledger/ledger.exceptions';
+import { AuditService } from '../audit/audit.service';
 import argon2 from 'argon2';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
 import { EditarUsuarioDto } from './dto/editar-usuario.dto';
@@ -27,6 +28,7 @@ import {
   ListarCierresDto,
   PaginacionAdminDto,
 } from './dto/listar.dto';
+import { ListarAuditoriaDto } from './dto/listar-auditoria.dto';
 
 const MS_POR_DIA = 86_400_000;
 
@@ -47,6 +49,7 @@ export class AdminService {
     private readonly semaforo: SemaforoService,
     private readonly avisosAbono: AvisosAbonoService,
     private readonly avisos: AvisosService,
+    private readonly audit: AuditService,
   ) {}
 
   // ─────────────────────────── USUARIOS ───────────────────────────
@@ -106,10 +109,20 @@ export class AdminService {
           };
         }
 
-        return tx.usuario.create({
+        const creado = await tx.usuario.create({
           data,
           include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
         });
+
+        await this.audit.crear(tx, {
+          actorId: creadoPorId,
+          accion: 'usuario.crear',
+          entidad: 'Usuario',
+          entidadId: creado.id,
+          despues: { rol: creado.rol, email: creado.email, nombre: creado.nombre },
+        });
+
+        return creado;
       });
 
       const { passwordHash: _ph, ...sinPassword } = usuario;
@@ -184,7 +197,7 @@ export class AdminService {
     return sinPassword;
   }
 
-  async editarUsuario(id: string, dto: EditarUsuarioDto) {
+  async editarUsuario(adminId: string, id: string, dto: EditarUsuarioDto) {
     const usuario = await this.prisma.usuario.findUnique({
       where: { id },
       include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
@@ -204,6 +217,17 @@ export class AdminService {
       email,
       telefono: dto.telefono?.trim() || null,
       documento: dto.documento?.trim() || null,
+    };
+
+    const antes = {
+      nombre: dto.nombre !== undefined ? usuario.nombre : undefined,
+      email: dto.email !== undefined ? usuario.email : undefined,
+      telefono: dto.telefono !== undefined ? usuario.telefono : undefined,
+      documento: dto.documento !== undefined ? usuario.documento : undefined,
+      zona: dto.zona !== undefined ? (usuario.perfilCajero?.zona ?? usuario.perfilCobrador?.zona ?? null) : undefined,
+      direccion: dto.direccion !== undefined ? (usuario.perfilCajero?.direccion ?? null) : undefined,
+      pais: dto.pais !== undefined ? (usuario.perfilPagador?.pais ?? null) : undefined,
+      notas: dto.notas !== undefined ? (usuario.perfilCajero?.notas ?? usuario.perfilPagador?.notas ?? null) : undefined,
     };
 
     const actualizado = await this.prisma.$transaction(async (tx) => {
@@ -233,17 +257,37 @@ export class AdminService {
         await tx.perfilPagador.update({ where: { usuarioId: id }, data });
       }
 
-      return tx.usuario.findUnique({
+      const u = await tx.usuario.findUnique({
         where: { id },
         include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
       });
+
+      await this.audit.crear(tx, {
+        actorId: adminId,
+        accion: 'usuario.editar',
+        entidad: 'Usuario',
+        entidadId: id,
+        antes,
+        despues: {
+          nombre: u?.nombre,
+          email: u?.email,
+          telefono: u?.telefono,
+          documento: u?.documento,
+          zona: u?.perfilCajero?.zona ?? u?.perfilCobrador?.zona ?? undefined,
+          direccion: u?.perfilCajero?.direccion ?? undefined,
+          pais: u?.perfilPagador?.pais ?? undefined,
+          notas: u?.perfilCajero?.notas ?? u?.perfilPagador?.notas ?? undefined,
+        },
+      });
+
+      return u;
     });
 
     const { passwordHash: _ph, ...sinPassword } = actualizado!;
     return sinPassword;
   }
 
-  async cambiarEstadoUsuario(id: string, dto: CambiarEstadoUsuarioDto) {
+  async cambiarEstadoUsuario(adminId: string, id: string, dto: CambiarEstadoUsuarioDto) {
     const usuario = await this.prisma.usuario.findUnique({ where: { id } });
     if (!usuario) throw new NoEncontradoException('usuario', id);
 
@@ -256,33 +300,108 @@ export class AdminService {
       }
     }
 
-    const actualizado = await this.prisma.usuario.update({
-      where: { id },
-      data: { activo: dto.activo },
-      include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
-    });
+    const [actualizado] = await this.prisma.$transaction([
+      this.prisma.usuario.update({
+        where: { id },
+        data: { activo: dto.activo },
+        include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          actorId: adminId,
+          accion: dto.activo ? 'usuario.activar' : 'usuario.suspender',
+          entidad: 'Usuario',
+          entidadId: id,
+          antes: { activo: usuario.activo },
+          despues: { activo: dto.activo },
+        },
+      }),
+    ]);
 
     const { passwordHash: _ph, ...sinPassword } = actualizado;
     return sinPassword;
   }
 
-  async cambiarContrasenaAdmin(id: string, dto: CambiarContrasenaAdminDto) {
+  async cambiarContrasenaAdmin(adminId: string, id: string, dto: CambiarContrasenaAdminDto) {
     const usuario = await this.prisma.usuario.findUnique({ where: { id } });
     if (!usuario) throw new NoEncontradoException('usuario', id);
 
     const passwordHash = await argon2.hash(dto.nuevaContrasena);
 
-    const actualizado = await this.prisma.usuario.update({
-      where: { id },
-      data: {
-        passwordHash,
-        tokenVersion: { increment: 1 },
-      },
-      include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
-    });
+    const [actualizado] = await this.prisma.$transaction([
+      this.prisma.usuario.update({
+        where: { id },
+        data: {
+          passwordHash,
+          tokenVersion: { increment: 1 },
+        },
+        include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          actorId: adminId,
+          accion: 'usuario.cambiar_contrasena',
+          entidad: 'Usuario',
+          entidadId: id,
+        },
+      }),
+    ]);
 
     const { passwordHash: _ph, ...sinPassword } = actualizado;
     return sinPassword;
+  }
+
+  async listarAuditoria(filtros: ListarAuditoriaDto) {
+    const page = Math.max(1, filtros.page ?? 1);
+    const limit = Math.max(1, Math.min(200, filtros.limit ?? 50));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.AuditLogWhereInput = {};
+    if (filtros.actorId) where.actorId = filtros.actorId;
+    if (filtros.entidad) where.entidad = filtros.entidad;
+    if (filtros.entidadId) where.entidadId = filtros.entidadId;
+    if (filtros.accion) where.accion = filtros.accion;
+    if (filtros.cajeroId) {
+      where.OR = [
+        { entidadId: filtros.cajeroId },
+        { despues: { path: ['cajeroId'], equals: filtros.cajeroId } },
+      ];
+    }
+    if (filtros.fechaDesde || filtros.fechaHasta) {
+      where.creadoAt = {};
+      if (filtros.fechaDesde) where.creadoAt.gte = new Date(filtros.fechaDesde);
+      if (filtros.fechaHasta) where.creadoAt.lte = new Date(filtros.fechaHasta);
+    }
+
+    const orderBy: Prisma.AuditLogOrderByWithRelationInput =
+      filtros.orden === 'creadoAt_asc' ? { creadoAt: 'asc' } : { creadoAt: 'desc' };
+
+    const [items, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy,
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+
+    const actorIds = Array.from(new Set(items.map((i) => i.actorId)));
+    const actores = await this.prisma.usuario.findMany({
+      where: { id: { in: actorIds } },
+      select: { id: true, nombre: true, email: true },
+    });
+    const mapa = new Map(actores.map((a) => [a.id, a]));
+
+    return {
+      items: items.map((i) => ({
+        ...i,
+        actor: mapa.get(i.actorId) ?? null,
+      })),
+      total,
+      page,
+      limit,
+    };
   }
 
   // ─────────────────────────── CAJEROS ───────────────────────────
@@ -554,7 +673,7 @@ export class AdminService {
           entidad: 'AmpliacionCredito',
           entidadId: ampliacionId,
           antes: { estado: ampliacion.estado },
-          despues: { estado: nuevoEstado, notaAdmin: nota ?? null },
+          despues: { estado: nuevoEstado, notaAdmin: nota ?? null, cajeroId: ampliacion.cajeroId },
         },
       });
 
@@ -705,7 +824,7 @@ export class AdminService {
    * la garantiza el ledger.
    */
   async registrarCobro(adminId: string, dto: RegistrarCobroAdminDto) {
-    return this.ledger.registrarCobro({
+    const res = await this.ledger.registrarCobro({
       clientUuid: dto.clientUuid,
       cajeroId: dto.cajeroId,
       cobradorId: null,
@@ -715,6 +834,22 @@ export class AdminService {
       nota: dto.nota,
       registradoPorId: adminId,
     });
+
+    if (!res.yaExistia) {
+      await this.audit.crear(this.prisma, {
+        actorId: adminId,
+        accion: 'cobro.admin.registrar',
+        entidad: 'Cobro',
+        entidadId: res.cobro.id,
+        despues: {
+          cajeroId: res.cobro.cajeroId,
+          montoCents: res.cobro.montoCents.toString(),
+          metodo: res.cobro.metodo,
+        },
+      });
+    }
+
+    return res;
   }
 
   // ─────────────────────── MOVIMIENTOS DIARIOS ───────────────────────

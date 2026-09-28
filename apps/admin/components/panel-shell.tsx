@@ -12,6 +12,7 @@ import {
   UserPlus,
   Wallet,
   Globe,
+  ScrollText,
   LogOut,
   Loader2,
 } from 'lucide-react';
@@ -41,6 +42,7 @@ const NAV: { grupo: string; items: NavItem[] }[] = [
       { href: '/servicios', label: 'Servicios', icon: Globe },
       { href: '/usuarios', label: 'Usuarios', icon: UserPlus },
       { href: '/cobros', label: 'Registrar pago', icon: Wallet },
+      { href: '/auditoria', label: 'Auditoría', icon: ScrollText },
       { href: '/movimientos-diarios', label: 'Movimientos diarios', icon: TrendingUp },
     ],
   },

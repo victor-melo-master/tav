@@ -1479,3 +1479,105 @@ describe('Admin — gestión de usuarios', () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ─────────────────────────── AUDITORÍA ───────────────────────────
+
+describe('Admin — auditoría', () => {
+  test('crear un usuario deja un registro con el actor y se consulta en GET /admin/auditoria', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test', nombre: 'Admin Auditor' });
+    const token = await login(app, admin.email, admin.password);
+
+    const creado = await request(app.getHttpServer())
+      .post('/admin/usuarios')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        nombre: 'Cajero Auditado',
+        email: '0414-1000001@tav.test',
+        rol: 'cajero',
+        password: 'clave123',
+        limiteCents: '100000',
+      });
+    expect(creado.status).toBe(201);
+
+    const res = await request(app.getHttpServer())
+      .get('/admin/auditoria?accion=usuario.crear')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    const log = res.body.items[0];
+    expect(log.accion).toBe('usuario.crear');
+    expect(log.entidad).toBe('Usuario');
+    expect(log.entidadId).toBe(creado.body.id);
+    expect(log.actorId).toBe(admin.id);
+    expect(log.actor.email).toBe(admin.email);
+    expect(log.despues.rol).toBe('cajero');
+  });
+
+  test('suspender y reactivar quedan registrados con antes/despues', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+
+    await request(app.getHttpServer())
+      .patch(`/admin/usuarios/${caj.id}/estado`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ activo: false });
+    await request(app.getHttpServer())
+      .patch(`/admin/usuarios/${caj.id}/estado`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ activo: true });
+
+    const res = await request(app.getHttpServer())
+      .get('/admin/auditoria?entidad=Usuario&entidadId=' + caj.id)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
+    const acciones = res.body.items.map((i: { accion: string }) => i.accion).sort();
+    expect(acciones).toEqual(['usuario.activar', 'usuario.suspender']);
+    const suspendida = res.body.items.find(
+      (i: { accion: string }) => i.accion === 'usuario.suspender',
+    );
+    expect(suspendida.antes.activo).toBe(true);
+    expect(suspendida.despues.activo).toBe(false);
+  });
+
+  test('el filtro cajeroId trae acciones sobre el cajero aunque la entidad sea otra', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+
+    // Cambiar límite → entidad PerfilCajero con entidadId = cajeroId.
+    await request(app.getHttpServer())
+      .patch(`/admin/cajeros/${caj.id}/limite`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ limiteCents: '200000' });
+
+    // Fijar precio → entidad PrecioCajeroServicio con despues.cajeroId.
+    await request(app.getHttpServer())
+      .post(`/admin/cajeros/${caj.id}/precios`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ servicioId: corredorIdTest, precioGyd: '1.05' });
+
+    const res = await request(app.getHttpServer())
+      .get(`/admin/auditoria?cajeroId=${caj.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
+    const acciones = res.body.items.map((i: { accion: string }) => i.accion).sort();
+    expect(acciones).toEqual(['cajero.cambiar_limite', 'precio_cajero.fijar']);
+  });
+
+  test('un cajero recibe 403 en /admin/auditoria', async () => {
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+    const cajToken = await login(app, caj.email, caj.password);
+
+    const res = await request(app.getHttpServer())
+      .get('/admin/auditoria')
+      .set('Authorization', `Bearer ${cajToken}`);
+
+    expect(res.status).toBe(403);
+  });
+});

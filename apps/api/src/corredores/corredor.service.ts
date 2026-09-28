@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Corredor, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CrearCorredorDto, EditarCorredorDto } from '../cajas/cajas.dto';
 import {
   CajaEsMadreException,
@@ -22,7 +23,10 @@ type Tx = Prisma.TransactionClient;
  */
 @Injectable()
 export class CorredorService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   /**
    * Crea un servicio. NO crea la caja: el admin la crea por separado y pasa
@@ -44,7 +48,7 @@ export class CorredorService {
     return this.prisma.$transaction(async (tx) => {
       await this.validarNoDuplicado(tx, dto.pais, dto.servicio);
 
-      return tx.corredor.create({
+      const corredor = await tx.corredor.create({
         data: {
           pais: dto.pais,
           paisNombre: dto.paisNombre,
@@ -58,6 +62,21 @@ export class CorredorService {
           creadoPorId: dto.creadoPorId,
         },
       });
+
+      await this.audit.crear(tx, {
+        actorId: dto.creadoPorId,
+        accion: 'corredor.crear',
+        entidad: 'Corredor',
+        entidadId: corredor.id,
+        despues: {
+          pais: corredor.pais,
+          servicio: corredor.servicio,
+          moneda: corredor.moneda,
+          cajaId: corredor.cajaId,
+        },
+      });
+
+      return corredor;
     });
   }
 
@@ -66,7 +85,7 @@ export class CorredorService {
    * identidad del servicio (la unicidad es pais + servicio). Cambiar la caja
    * valida moneda y no-madre igual que al crear.
    */
-  async editar(corredorId: string, dto: EditarCorredorDto): Promise<Corredor> {
+  async editar(corredorId: string, dto: EditarCorredorDto, actorId: string): Promise<Corredor> {
     const corredor = await this.obtener(corredorId);
 
     const data: Prisma.CorredorUpdateInput = {};
@@ -93,7 +112,32 @@ export class CorredorService {
       }
     }
 
-    return this.prisma.corredor.update({ where: { id: corredorId }, data });
+    const actualizado = await this.prisma.corredor.update({ where: { id: corredorId }, data });
+
+    await this.audit.crear(this.prisma, {
+      actorId,
+      accion: 'corredor.editar',
+      entidad: 'Corredor',
+      entidadId: corredorId,
+      antes: {
+        formaEntrega: corredor.formaEntrega,
+        formaEntregaNombre: corredor.formaEntregaNombre,
+        servicioNombre: corredor.servicioNombre,
+        moneda: corredor.moneda,
+        monedaNombre: corredor.monedaNombre,
+        cajaId: corredor.cajaId,
+      },
+      despues: {
+        formaEntrega: actualizado.formaEntrega,
+        formaEntregaNombre: actualizado.formaEntregaNombre,
+        servicioNombre: actualizado.servicioNombre,
+        moneda: actualizado.moneda,
+        monedaNombre: actualizado.monedaNombre,
+        cajaId: actualizado.cajaId,
+      },
+    });
+
+    return actualizado;
   }
 
   /**
@@ -102,11 +146,22 @@ export class CorredorService {
    * listarActivos pero sigue existiendo para consultas y referencias.
    */
   async desactivar(corredorId: string, actorId: string): Promise<Corredor> {
-    await this.obtener(corredorId);
-    return this.prisma.corredor.update({
+    const corredor = await this.obtener(corredorId);
+    const actualizado = await this.prisma.corredor.update({
       where: { id: corredorId },
       data: { activo: false, desactivadoAt: new Date(), desactivadoPorId: actorId },
     });
+
+    await this.audit.crear(this.prisma, {
+      actorId,
+      accion: 'corredor.desactivar',
+      entidad: 'Corredor',
+      entidadId: corredorId,
+      antes: { activo: corredor.activo },
+      despues: { activo: false, desactivadoPorId: actorId },
+    });
+
+    return actualizado;
   }
 
   /**
@@ -114,15 +169,26 @@ export class CorredorService {
    * el último desactivador deja de ser relevante. Valida que reactivar no
    * deje dos servicios activos con la misma combinación pais + servicio.
    */
-  async activar(corredorId: string, _actorId: string): Promise<Corredor> {
+  async activar(corredorId: string, actorId: string): Promise<Corredor> {
     const corredor = await this.obtener(corredorId);
-    return this.prisma.$transaction(async (tx) => {
+    const actualizado = await this.prisma.$transaction(async (tx) => {
       await this.validarNoDuplicado(tx, corredor.pais, corredor.servicio, corredorId);
       return tx.corredor.update({
         where: { id: corredorId },
         data: { activo: true, desactivadoAt: null, desactivadoPorId: null },
       });
     });
+
+    await this.audit.crear(this.prisma, {
+      actorId,
+      accion: 'corredor.activar',
+      entidad: 'Corredor',
+      entidadId: corredorId,
+      antes: { activo: corredor.activo },
+      despues: { activo: true },
+    });
+
+    return actualizado;
   }
 
   /** Todos los servicios, activos e inactivos. Para el panel del admin. */

@@ -124,6 +124,24 @@ describe('Auth — login', () => {
     expect(res.status).toBe(401);
   });
 
+  test('usuario suspendido con contraseña correcta devuelve 401 con mensaje Cuenta inactiva', async () => {
+    const password = 'clave-correcta';
+    const u = await crearUsuario({
+      rol: 'cajero',
+      email: '0414-2222223@tav.test',
+      password,
+    });
+
+    await prisma.usuario.update({ where: { id: u.id }, data: { activo: false } });
+
+    const res = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: u.email, password });
+
+    expect(res.status).toBe(401);
+    expect(res.body.message).toContain('Cuenta inactiva');
+  });
+
   test('teléfono inexistente devuelve 401 (no revela si existe)', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/login')

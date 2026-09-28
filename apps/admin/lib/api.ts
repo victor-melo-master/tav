@@ -34,6 +34,8 @@ import type {
   CrearCorredorPayload,
   EditarCorredorPayload,
   CrearCajaPayload,
+  PaginaAuditoria,
+  FiltrosAuditoria,
 } from './types';
 
 /**
@@ -486,5 +488,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  },
+
+  // ─────────────────────────── AUDITORÍA ───────────────────────────
+
+  listarAuditoria(filtros?: FiltrosAuditoria): Promise<PaginaAuditoria> {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(filtros ?? {})) {
+      if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+    }
+    return request<PaginaAuditoria>(`/admin/auditoria?${qs.toString()}`);
   },
 };

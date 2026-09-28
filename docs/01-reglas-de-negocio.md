@@ -221,7 +221,23 @@ Punto para miles, coma para decimales. Nunca abreviar montos ("1,2K" está prohi
 
 ---
 
-## 10. Pendientes de definir
+## 10. Auditoría
+
+Toda acción administrativa queda registrada en `AuditLog` (solo inserción):
+quién lo hizo, qué hizo, sobre qué entidad, con el antes y el después.
+Eso cubre usuarios (crear, editar, suspender, reactivar, cambiar contraseña),
+límites, ampliaciones, cierres, cobros del admin, precios, cajas y servicios.
+
+Nadie puede editar ni borrar un registro de auditoría. No hay endpoint de
+borrado ni actualización. Los usuarios tampoco se borran nunca: se suspenden,
+y el sistema no permite dejar el panel sin al menos un administrador activo.
+
+En el panel: pantalla **Auditoría** con filtros por acción, entidad y fechas,
+y la ficha de cada cajero muestra su historial en la pestaña "Auditoría".
+
+---
+
+## 11. Pendientes de definir
 
 Marcar en el código con `// PENDIENTE DE DEFINIR:` y no inventar.
 

@@ -75,6 +75,12 @@ que se compró a 237 es un margen del 5,5%, y el sistema lo calcula solo.
 
 ---
 
+> **Una advertencia antes de empezar.** Los usuarios cargados son de prueba y sus
+> correos terminan en `@tav.test`. Registren todas las operaciones que quieran
+> para probar, pero **no carguen todavía cajeros ni clientes reales**: cuando
+> decidan arrancar en serio limpiamos la base una vez y empiezan de cero. Si
+> meten datos de verdad ahora, se pierden en esa limpieza.
+
 ## El recorrido que recomiendo
 
 Toca todo el ciclo en unos diez minutos.
@@ -158,33 +164,17 @@ exactamente la suma de sus movimientos.
 
 Nada de esto impide probar el negocio completo.
 
-**Anular un pago ya ejecutado.** Está bloqueado a propósito, esperando su
-respuesta: si se anula una operación que el pagador ya pagó, ¿la plata vuelve a
-la caja o no?
-
-**Crear servicios desde el panel.** Los siete que hay vienen cargados. Añadir uno
-nuevo requiere que nosotros lo hagamos; la pantalla es trabajo de una tarde.
-
 **Trabajo sin conexión.** La app necesita internet para registrar. La siguiente
-entrega trae una cola local para que el cobrador registre sin señal.
+entrega trae una cola local para que el cobrador registre sin señal y todo suba
+cuando la recupere.
 
-**Cuatro pantallas del cajero** — notificaciones, seguridad, abono y beneficiarios
-guardados — muestran "próximamente".
+**Avisos sin notificación push.** Los avisos —siete días de deuda, cupo topado,
+los que manda el cobrador a mano— se generan y se ven dentro de la app, con su
+contador. Pero no suenan ni llegan en segundo plano: el usuario los ve al abrir
+la aplicación.
 
----
-
-## Lo que necesitamos decidido de su parte
-
-**1. Si se anula una operación que el pagador ya pagó, ¿vuelve la plata a la
-caja?** La deuda del cajero se revierte sin problema, pero los bolívares ya
-salieron del banco. Es lo único del sistema que no sabe qué hacer.
-
-**2. Los precios reales de cada cajero.** Los que están cargados son de ejemplo.
-Pásennos los de verdad, o cámbienlos desde el panel.
-
-**3. Ejemplos reales de mensajes de datos bancarios.** Tres o cuatro mensajes de
-WhatsApp tal como se los mandan a sus cajeros, para afinar el botón de pegar
-datos con los formatos que ustedes ven de verdad.
+**Anular un pago ya ejecutado.** Sigue bloqueado. La deuda del cajero se revierte
+sin problema, pero el dinero ya salió del banco y esa decisión es del negocio.
 
 ---
 

@@ -503,3 +503,44 @@ export interface MovimientosDiarios {
   operaciones: MovimientoDiarioItem[];
   totales: MovimientosDiariosTotales;
 }
+
+// ─────────────────────────── AUDITORÍA ───────────────────────────
+
+export interface AuditLogActor {
+  id: string;
+  nombre: string;
+  email: string;
+}
+
+export interface AuditLogItem {
+  id: string;
+  actorId: string;
+  actor: AuditLogActor | null;
+  accion: string;
+  entidad: string;
+  entidadId: string;
+  antes: Record<string, unknown> | null;
+  despues: Record<string, unknown> | null;
+  ip?: string | null;
+  creadoAt: string;
+}
+
+export interface PaginaAuditoria {
+  items: AuditLogItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface FiltrosAuditoria {
+  actorId?: string;
+  entidad?: string;
+  entidadId?: string;
+  accion?: string;
+  cajeroId?: string;
+  fechaDesde?: string;
+  fechaHasta?: string;
+  orden?: 'creadoAt_desc' | 'creadoAt_asc';
+  page?: number;
+  limit?: number;
+}

@@ -8,6 +8,7 @@ import {
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import {
   AbrirCajaDto,
   AlertaCaja,
@@ -69,7 +70,10 @@ const TX_OPTS = { timeout: 15_000 } as const;
  */
 @Injectable()
 export class CajaService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ──────────────────────── INGRESO A CAJA MADRE ────────────────────────
 
@@ -125,6 +129,19 @@ export class CajaService {
         const cajaActualizada = await tx.caja.update({
           where: { id: madre.id },
           data: { saldoCents: saldoDespues },
+        });
+
+        await this.audit.crear(tx, {
+          actorId: dto.registradoPorId,
+          accion: 'caja.ingreso_madre',
+          entidad: 'MovimientoCaja',
+          entidadId: movimiento.id,
+          despues: {
+            cajaId: madre.id,
+            montoCents: dto.montoCents.toString(),
+            saldoDespues: saldoDespues.toString(),
+            precioCompraGyd: dto.precioCompraGyd,
+          },
         });
 
         return { caja: cajaActualizada, movimiento, yaExistia: false };
@@ -203,6 +220,19 @@ export class CajaService {
         const cajaActualizada = await tx.caja.update({
           where: { id: cajaLock.id },
           data: { saldoCents: saldoDespues },
+        });
+
+        await this.audit.crear(tx, {
+          actorId: dto.registradoPorId,
+          accion: tipo === TipoMovimientoCaja.retiro ? 'caja.retiro' : 'caja.deposito',
+          entidad: 'MovimientoCaja',
+          entidadId: movimiento.id,
+          despues: {
+            cajaId: cajaLock.id,
+            tipo,
+            montoCents: montoMovimiento.toString(),
+            saldoDespues: saldoDespues.toString(),
+          },
         });
 
         return { caja: cajaActualizada, movimiento, yaExistia: false };
@@ -340,6 +370,20 @@ export class CajaService {
         const cajaDestino = await tx.caja.update({
           where: { id: destinoLock.id },
           data: { saldoCents: saldoDestinoDespues },
+        });
+
+        await this.audit.crear(tx, {
+          actorId: dto.registradoPorId,
+          accion: tipo === TipoMovimientoCaja.apertura ? 'caja.apertura' : 'caja.recarga',
+          entidad: 'MovimientoCaja',
+          entidadId: movimientoDestino.id,
+          despues: {
+            cajaMadreId: madreLock.id,
+            cajaDestinoId: destinoLock.id,
+            montoMadreCents: dto.montoMadreCents.toString(),
+            montoDestinoCents: dto.montoDestinoCents.toString(),
+            tasaConversion: dto.tasaConversion,
+          },
         });
 
         return { cajaDestino, cajaMadre, movimientoDestino, movimientoMadre, yaExistia: false };
@@ -566,6 +610,23 @@ export class CajaService {
           data: { saldoCents: madreLock.saldoCents + original.montoMadreCents! },
         });
 
+        await this.audit.crear(tx, {
+          actorId: dto.actorId,
+          accion: 'caja.anular_apertura',
+          entidad: 'MovimientoCaja',
+          entidadId: original.id,
+          antes: {
+            tipo: original.tipo,
+            montoCents: original.montoCents.toString(),
+            montoMadreCents: original.montoMadreCents?.toString(),
+          },
+          despues: {
+            movimientoDestinoId: movimientoDestino.id,
+            movimientoMadreId: movimientoMadre.id,
+            motivo,
+          },
+        });
+
         return { movimientoDestino, movimientoMadre };
       }, TX_OPTS);
     } catch (e) {
@@ -594,8 +655,11 @@ export class CajaService {
   }
 
   /** Crea una caja física (por defecto no es madre). */
-  async crearCaja(dto: { nombre: string; moneda: string; pais?: string | null; esMadre?: boolean }): Promise<Caja> {
-    return this.prisma.caja.create({
+  async crearCaja(
+    dto: { nombre: string; moneda: string; pais?: string | null; esMadre?: boolean },
+    creadoPorId: string,
+  ): Promise<Caja> {
+    const caja = await this.prisma.caja.create({
       data: {
         esMadre: dto.esMadre ?? false,
         moneda: dto.moneda,
@@ -604,6 +668,21 @@ export class CajaService {
         saldoCents: 0n,
       },
     });
+
+    await this.audit.crear(this.prisma, {
+      actorId: creadoPorId,
+      accion: 'caja.crear',
+      entidad: 'Caja',
+      entidadId: caja.id,
+      despues: {
+        nombre: caja.nombre,
+        moneda: caja.moneda,
+        pais: caja.pais,
+        esMadre: caja.esMadre,
+      },
+    });
+
+    return caja;
   }
 
   /** Todas las cajas (madre y de corredor), incluidas las de corredores desactivados. */

@@ -59,13 +59,16 @@ export class CajasController {
   @Post()
   @ApiOperation({ summary: 'Crea una caja física (no madre)' })
   @ApiResponse({ status: 201, description: 'Caja creada' })
-  async crearCaja(@Body() dto: CrearCajaHttpDto) {
-    return this.cajas.crearCaja({
-      nombre: dto.nombre,
-      moneda: dto.moneda,
-      pais: dto.pais ?? null,
-      esMadre: dto.esMadre ?? false,
-    });
+  async crearCaja(@Body() dto: CrearCajaHttpDto, @Req() req: AuthenticatedRequest) {
+    return this.cajas.crearCaja(
+      {
+        nombre: dto.nombre,
+        moneda: dto.moneda,
+        pais: dto.pais ?? null,
+        esMadre: dto.esMadre ?? false,
+      },
+      req.user.sub,
+    );
   }
 
   // ─────────────────────────── INGRESO A CAJA MADRE ───────────────────────────

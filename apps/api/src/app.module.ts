@@ -14,6 +14,7 @@ import { CorredoresModule } from './corredores/corredores.module';
 import { PagadorModule } from './pagador/pagador.module';
 import { AvisosAbonoModule } from './avisos-abono/avisos-abono.module';
 import { AvisosModule } from './avisos/avisos.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AvisosModule } from './avisos/avisos.module';
     PagadorModule,
     AvisosAbonoModule,
     AvisosModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [AppService],

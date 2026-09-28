@@ -4,6 +4,7 @@ import { AdminService } from './admin.service';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
 import { EditarUsuarioDto } from './dto/editar-usuario.dto';
 import { CambiarEstadoUsuarioDto } from './dto/cambiar-estado-usuario.dto';
+import { ListarAuditoriaDto } from './dto/listar-auditoria.dto';
 import { CambiarContrasenaAdminDto } from './dto/cambiar-contrasena-admin.dto';
 import { ListarUsuariosDto } from './dto/listar-usuarios.dto';
 import { ListarCajerosDto } from './dto/listar-cajeros.dto';
@@ -77,8 +78,9 @@ export class AdminController {
   async editarUsuario(
     @Param('id') id: string,
     @Body() dto: EditarUsuarioDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.admin.editarUsuario(id, dto);
+    return this.admin.editarUsuario(req.user.sub, id, dto);
   }
 
   @Patch('usuarios/:id/estado')
@@ -89,8 +91,9 @@ export class AdminController {
   async cambiarEstadoUsuario(
     @Param('id') id: string,
     @Body() dto: CambiarEstadoUsuarioDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.admin.cambiarEstadoUsuario(id, dto);
+    return this.admin.cambiarEstadoUsuario(req.user.sub, id, dto);
   }
 
   @Post('usuarios/:id/contrasena')
@@ -100,8 +103,16 @@ export class AdminController {
   async cambiarContrasenaAdmin(
     @Param('id') id: string,
     @Body() dto: CambiarContrasenaAdminDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.admin.cambiarContrasenaAdmin(id, dto);
+    return this.admin.cambiarContrasenaAdmin(req.user.sub, id, dto);
+  }
+
+  @Get('auditoria')
+  @ApiOperation({ summary: 'Registro de auditoría de acciones administrativas' })
+  @ApiResponse({ status: 200, description: 'Logs paginados con actor' })
+  async auditoria(@Query() filtros: ListarAuditoriaDto) {
+    return this.admin.listarAuditoria(filtros);
   }
 
   // ─────────────────────────── CAJEROS ───────────────────────────

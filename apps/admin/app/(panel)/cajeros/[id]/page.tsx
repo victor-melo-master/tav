@@ -49,7 +49,7 @@ const ESTADO_AMP: Record<string, 'navy' | 'verde' | 'rojo' | 'outline' | 'ambar'
   expirada: 'outline',
 };
 
-type Pestana = 'movimientos' | 'operaciones' | 'ampliaciones' | 'precios';
+type Pestana = 'movimientos' | 'operaciones' | 'ampliaciones' | 'precios' | 'auditoria';
 
 export default function FichaCajeroPage() {
   const { id } = useParams<{ id: string }>();
@@ -57,7 +57,7 @@ export default function FichaCajeroPage() {
   const pestanaInicial = (searchParams.get('tab') as Pestana | null) ?? 'movimientos';
   const { data, cargando, error, recargar } = useApi(() => api.fichaCajero(id), [id]);
   const [pestana, setPestana] = React.useState<Pestana>(
-    ['movimientos', 'operaciones', 'ampliaciones', 'precios'].includes(pestanaInicial)
+    ['movimientos', 'operaciones', 'ampliaciones', 'precios', 'auditoria'].includes(pestanaInicial)
       ? pestanaInicial
       : 'movimientos',
   );
@@ -249,6 +249,7 @@ export default function FichaCajeroPage() {
               ['operaciones', `Operaciones (${data.operaciones.length})`],
               ['ampliaciones', `Ampliaciones (${data.ampliaciones.length})`],
               ['precios', 'Precios'],
+              ['auditoria', 'Auditoría'],
             ] as [Pestana, string][]
           ).map(([key, label]) => (
             <button
@@ -406,9 +407,81 @@ export default function FichaCajeroPage() {
           )}
 
           {pestana === 'precios' && <PreciosCajero cajeroId={id} />}
+
+          {pestana === 'auditoria' && <AuditoriaCajero cajeroId={id} />}
         </div>
       </PageContent>
     </>
+  );
+}
+
+/** Historial de auditoría del cajero: acciones admin que lo tocaron. */
+function AuditoriaCajero({ cajeroId }: { cajeroId: string }) {
+  const { data, cargando, error, recargar } = useApi(
+    () => api.listarAuditoria({ cajeroId, limit: 50 }),
+    [cajeroId],
+  );
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Fecha</TableHead>
+          <TableHead>Admin</TableHead>
+          <TableHead>Acción</TableHead>
+          <TableHead>Entidad</TableHead>
+          <TableHead>Cambios</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {cargando && (
+          <TableRow>
+            <TableCell colSpan={5} className="p-0">
+              <VacioTabla mensaje="Cargando…" />
+            </TableCell>
+          </TableRow>
+        )}
+        {!cargando && error && (
+          <TableRow>
+            <TableCell colSpan={5} className="p-0">
+              <ErrorTabla mensaje={error} onReintentar={recargar} />
+            </TableCell>
+          </TableRow>
+        )}
+        {!cargando && !error && (data?.items.length ?? 0) === 0 && (
+          <TableRow>
+            <TableCell colSpan={5} className="p-0">
+              <VacioTabla mensaje="Sin acciones registradas sobre este cajero" />
+            </TableCell>
+          </TableRow>
+        )}
+        {!cargando &&
+          !error &&
+          data?.items.map((item) => (
+            <TableRow key={item.id}>
+              <TableCell className="whitespace-nowrap font-mono text-[12px] tabular-nums text-tav-ink-2">
+                {formatFecha(item.creadoAt, true)}
+              </TableCell>
+              <TableCell>
+                <div className="text-[13px] font-medium text-tav-ink">
+                  {item.actor?.nombre ?? '—'}
+                </div>
+                <div className="text-[11px] text-tav-ink-3">{item.actor?.email ?? ''}</div>
+              </TableCell>
+              <TableCell className="font-mono text-[12px]">{item.accion}</TableCell>
+              <TableCell className="text-[13px] text-tav-ink-2">{item.entidad}</TableCell>
+              <TableCell className="text-[12px]">
+                <details className="cursor-pointer">
+                  <summary className="text-tav-green-600 hover:underline">ver cambios</summary>
+                  <pre className="mt-2 max-w-[360px] overflow-x-auto whitespace-pre-wrap rounded-md bg-tav-bg p-2 text-[11px] text-tav-ink-2">
+                    {JSON.stringify({ antes: item.antes, despues: item.despues }, null, 2)}
+                  </pre>
+                </details>
+              </TableCell>
+            </TableRow>
+          ))}
+      </TableBody>
+    </Table>
   );
 }
 

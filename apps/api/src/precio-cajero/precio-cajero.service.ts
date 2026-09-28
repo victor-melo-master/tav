@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 /**
  * Precios por cajero (nuevo modelo de Fase 9).
@@ -22,7 +23,10 @@ import { PrismaService } from '../prisma/prisma.service';
  */
 @Injectable()
 export class PrecioCajeroService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   /**
    * Calcula la deuda en centavos de GYD a partir de un monto en centavos de
@@ -75,7 +79,7 @@ export class PrecioCajeroService {
       );
     }
 
-    return this.prisma.precioCajeroServicio.create({
+    const fila = await this.prisma.precioCajeroServicio.create({
       data: {
         cajeroId,
         servicioId,
@@ -84,6 +88,21 @@ export class PrecioCajeroService {
       },
       include: { servicio: true },
     });
+
+    await this.audit.crear(this.prisma, {
+      actorId: fijadoPorId,
+      accion: 'precio_cajero.fijar',
+      entidad: 'PrecioCajeroServicio',
+      entidadId: fila.id,
+      despues: {
+        cajeroId,
+        servicioId,
+        servicioNombre: fila.servicio.servicioNombre,
+        precioGyd: precio.toString(),
+      },
+    });
+
+    return fila;
   }
 
   /**

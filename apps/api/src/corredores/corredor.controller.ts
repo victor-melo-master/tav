@@ -49,8 +49,9 @@ export class CorredorController {
   async editar(
     @Param('id') id: string,
     @Body() dto: EditarCorredorHttpDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.corredores.editar(id, dto);
+    return this.corredores.editar(id, dto, req.user.sub);
   }
 
   @Post(':id/activar')
