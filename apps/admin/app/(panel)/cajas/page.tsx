@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Loader2, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Plus, PlusCircle, RotateCcw, MinusCircle } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
-import { formatoMoneda, formatFecha, formatTasa } from '@/lib/format';
+import { formatoMoneda, formatFecha, formatTasa, parseUserAmountToCents } from '@/lib/format';
 import type {
   Caja,
   AlertaCaja,
@@ -149,9 +149,13 @@ function CajaMadreCard({ caja, onCambio }: { caja: Caja; onCambio: () => void })
   const [enviando, setEnviando] = React.useState(false);
 
   async function registrar() {
-    const cents = monto.replace(/[.,\s]/g, '');
-    if (!cents || !precioCompra.trim() || !motivo.trim()) {
-      toast.error('Faltan el monto, el precio de compra o el motivo');
+    const cents = parseUserAmountToCents(monto);
+    if (cents === null || BigInt(cents) <= 0n) {
+      toast.error('El monto no es válido');
+      return;
+    }
+    if (!precioCompra.trim() || !motivo.trim()) {
+      toast.error('Faltan el precio de compra o el motivo');
       return;
     }
     setEnviando(true);
@@ -201,18 +205,15 @@ function CajaMadreCard({ caja, onCambio }: { caja: Caja; onCambio: () => void })
             </DialogHeader>
             <div className="flex flex-col gap-4 py-2">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="monto-madre">Monto (USDT, centavos)</Label>
+                <Label htmlFor="monto-madre">Monto (USDT)</Label>
                 <Input
                   id="monto-madre"
-                  inputMode="numeric"
-                  placeholder="1000000 (10.000 USDT)"
+                  inputMode="decimal"
+                  placeholder="10.000,00"
                   value={monto}
                   onChange={(e) => setMonto(e.target.value)}
                   className="font-mono tabular-nums"
                 />
-                <span className="text-[12px] text-tav-ink-3">
-                  En centavos: 10.000 USDT = 1.000.000
-                </span>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="precio-compra">Precio de compra (GYD por USD)</Label>
@@ -423,10 +424,14 @@ function AbrirRecargarDialog({
   const [enviando, setEnviando] = React.useState(false);
 
   async function ejecutar() {
-    const mm = montoMadre.replace(/[.,\s]/g, '');
-    const md = montoDestino.replace(/[.,\s]/g, '');
-    if (!mm || !md || !tasa.trim()) {
-      toast.error('Faltan valores');
+    const mm = parseUserAmountToCents(montoMadre);
+    const md = parseUserAmountToCents(montoDestino);
+    if (mm === null || BigInt(mm) <= 0n || md === null || BigInt(md) <= 0n) {
+      toast.error('Los montos deben ser mayores que cero');
+      return;
+    }
+    if (!tasa.trim()) {
+      toast.error('Falta la tasa de conversión');
       return;
     }
     setEnviando(true);
@@ -467,22 +472,22 @@ function AbrirRecargarDialog({
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mm">USDT que sale de la madre (centavos)</Label>
+            <Label htmlFor="mm">USDT que sale de la madre</Label>
             <Input
               id="mm"
-              inputMode="numeric"
-              placeholder="100000 (1.000 USDT)"
+              inputMode="decimal"
+              placeholder="10.000,00"
               value={montoMadre}
               onChange={(e) => setMontoMadre(e.target.value)}
               className="font-mono tabular-nums"
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="md">Entra en la caja destino (centavos de {caja.moneda})</Label>
+            <Label htmlFor="md">Entra en la caja destino ({caja.moneda})</Label>
             <Input
               id="md"
-              inputMode="numeric"
-              placeholder="28540000 (285.400 Bs)"
+              inputMode="decimal"
+              placeholder="285.400,00"
               value={montoDestino}
               onChange={(e) => setMontoDestino(e.target.value)}
               className="font-mono tabular-nums"
@@ -493,13 +498,13 @@ function AbrirRecargarDialog({
             <Input
               id="tasa"
               inputMode="decimal"
-              placeholder="285.4"
+              placeholder="285,4"
               value={tasa}
               onChange={(e) => setTasa(e.target.value)}
               className="font-mono tabular-nums"
             />
             <span className="text-[12px] text-tav-ink-3">
-              Los tres números deben cuadrar: montoDestino ≈ montoMadre × tasa
+              Los tres números deben cuadrar: destino ≈ madre × tasa.
             </span>
           </div>
         </div>
@@ -535,9 +540,13 @@ function RetiroDepositoDialog({
   const [enviando, setEnviando] = React.useState(false);
 
   async function ejecutar() {
-    const cents = monto.replace(/[.,\s]/g, '');
-    if (!cents || !motivo.trim()) {
-      toast.error('Faltan el monto o el motivo');
+    const cents = parseUserAmountToCents(monto);
+    if (cents === null || BigInt(cents) <= 0n) {
+      toast.error('El monto no es válido');
+      return;
+    }
+    if (!motivo.trim()) {
+      toast.error('Falta el motivo');
       return;
     }
     setEnviando(true);
@@ -576,18 +585,15 @@ function RetiroDepositoDialog({
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`monto-${modo}`}>Monto ({caja.moneda}, centavos)</Label>
+            <Label htmlFor={`monto-${modo}`}>Monto ({caja.moneda})</Label>
             <Input
               id={`monto-${modo}`}
-              inputMode="numeric"
-              placeholder="100000"
+              inputMode="decimal"
+              placeholder="10.000,00"
               value={monto}
               onChange={(e) => setMonto(e.target.value)}
               className="font-mono tabular-nums"
             />
-            <span className="text-[12px] text-tav-ink-3">
-              En centavos de {caja.moneda}.
-            </span>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`motivo-${modo}`}>Motivo (obligatorio)</Label>
