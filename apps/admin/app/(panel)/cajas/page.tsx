@@ -322,7 +322,7 @@ function CajaCorredorCard({
         {formatoMoneda(caja.saldoCents, caja.moneda)}
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="mt-3 grid grid-flow-col grid-cols-2 grid-rows-2 gap-2">
         <Button
           size="sm"
           variant="default"
@@ -332,6 +332,15 @@ function CajaCorredorCard({
         >
           <ArrowUpCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{caja.saldoCents === '0' ? 'Abrir' : 'Recargar'}</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 w-full px-1.5 text-[11px]"
+          onClick={() => setDepositoAbierto(true)}
+        >
+          <PlusCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Depósito</span>
         </Button>
         <Button
           size="sm"
@@ -349,15 +358,6 @@ function CajaCorredorCard({
         >
           <MinusCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
           <span className="truncate">Retiro</span>
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 w-full px-1.5 text-[11px]"
-          onClick={() => setDepositoAbierto(true)}
-        >
-          <PlusCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">Depósito</span>
         </Button>
       </div>
 
