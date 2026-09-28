@@ -107,12 +107,6 @@ class _PagadorPerfilScreenState extends ConsumerState<PagadorPerfilScreen> {
           loading: _cerrando,
           onPressed: _cerrando ? null : _logout,
         ),
-        const SizedBox(height: 8),
-        Text(
-          'PENDIENTE DE DEFINIR: cambiar PIN y sincronización manual dependen de endpoints aún no conectados.',
-          style: TavText.caption.copyWith(color: TavColors.ink3),
-          textAlign: TextAlign.center,
-        ),
       ],
     );
   }

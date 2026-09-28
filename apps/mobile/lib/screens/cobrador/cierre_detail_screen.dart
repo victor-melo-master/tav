@@ -271,7 +271,7 @@ class _CierreDetailScreenState extends ConsumerState<CierreDetailScreen> {
               ),
               child: Center(
                 child: Text(
-                  'PENDIENTE DE DEFINIR: el historial no devuelve la lista de cobros.',
+                  'No hay cobros disponibles para este cierre.',
                   style: TavText.caption.copyWith(color: TavColors.ink3),
                 ),
               ),

@@ -15,9 +15,8 @@ import '../../utils/labels.dart';
 
 /// Perfil del cobrador.
 ///
-/// Muestra datos del usuario autenticado, sincronización, rol, zona y
-/// acceso a la sesión. Opciones que dependen de un endpoint aún no expuesto
-/// se marcan como PENDIENTE DE DEFINIR.
+/// Muestra datos del usuario autenticado, acceso a la sesión y enlaces
+/// a opciones activas.
 class PerfilCobradorScreen extends ConsumerStatefulWidget {
   const PerfilCobradorScreen({super.key});
 
@@ -112,18 +111,6 @@ class _PerfilCobradorScreenState extends ConsumerState<PerfilCobradorScreen> {
           child: Column(
             children: [
               _ProfileAction(
-                icon: Icons.lock_outline,
-                label: 'Cambiar PIN',
-                onTap: () {},
-              ),
-              const Divider(height: 1, color: TavColors.line2),
-              _ProfileAction(
-                icon: Icons.sync_outlined,
-                label: 'Sincronizar con la central',
-                onTap: () {},
-              ),
-              const Divider(height: 1, color: TavColors.line2),
-              _ProfileAction(
                 icon: Icons.description_outlined,
                 label: 'Términos y condiciones',
                 onTap: () {},
@@ -169,12 +156,6 @@ class _PerfilCobradorScreenState extends ConsumerState<PerfilCobradorScreen> {
           variant: TavButtonVariant.outline,
           loading: _cerrando,
           onPressed: _cerrando ? null : _logout,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'PENDIENTE DE DEFINIR: cambiar PIN y sincronización manual dependen de endpoints aún no conectados.',
-          style: TavText.caption.copyWith(color: TavColors.ink3),
-          textAlign: TextAlign.center,
         ),
       ],
     );

@@ -18,9 +18,7 @@ import '../../theme/tav_text.dart';
 /// Pantalla para declarar la entrega y cerrar el día.
 ///
 /// El cobrador confirma el efectivo que entrega y una nota. El efectivo se
-/// deriva del cierre actual (suma de cobros en efectivo). La API no acepta
-/// aún el campo "entregadoA" (PENDIENTE DE DEFINIR), así que se muestra en
-/// la interfaz pero no se envía.
+/// deriva del cierre actual (suma de cobros en efectivo).
 class DeclararEntregaScreen extends ConsumerStatefulWidget {
   const DeclararEntregaScreen({super.key, required this.cierreId});
 
@@ -33,7 +31,6 @@ class DeclararEntregaScreen extends ConsumerStatefulWidget {
 
 class _DeclararEntregaScreenState extends ConsumerState<DeclararEntregaScreen> {
   final _notaCtrl = TextEditingController();
-  final _entregadoA = 'Caja Central · Valencia';
   bool _enviando = false;
 
   @override
@@ -124,20 +121,6 @@ class _DeclararEntregaScreenState extends ConsumerState<DeclararEntregaScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-
-                  // PENDIENTE DE DEFINIR: entregadoA no está en EnviarCierreDto.
-                  TavField(
-                    label: '¿A quién le entregas?',
-                    controller: TextEditingController(text: _entregadoA),
-                    enabled: false,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'PENDIENTE DE DEFINIR: la API aún no permite elegir destinatario.',
-                    style: TavText.caption.copyWith(color: TavColors.ink3),
-                  ),
-
                   const SizedBox(height: TavSpace.md),
                   TavField(
                     label: 'Nota para el administrador (opcional)',

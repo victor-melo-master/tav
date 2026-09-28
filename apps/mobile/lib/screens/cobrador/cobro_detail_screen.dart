@@ -226,51 +226,6 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             ),
           ),
           const SizedBox(height: TavSpace.lg),
-          Text('Respaldo',
-              style: TavText.overline.copyWith(color: TavColors.ink3)),
-          const SizedBox(height: TavSpace.sm),
-          TavCard(
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEDF1F6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.camera_alt_outlined,
-                      color: TavColors.ink4, size: 20),
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'recibo_${cobro.folio.toLowerCase().replaceAll('-', '_')}.jpg',
-                        style: TavText.body
-                            .copyWith(fontSize: 13.5, fontWeight: FontWeight.w600),
-                      ),
-                      // PENDIENTE DE DEFINIR: adjuntos no expuestos aún.
-                      Text(
-                        'Subir comprobante · PENDIENTE DE DEFINIR',
-                        style: TavText.caption.copyWith(color: TavColors.ink3),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: TavSpace.lg),
-          TavButton(
-            label: 'Compartir recibo',
-            variant: TavButtonVariant.outline,
-            icon: const Icon(Icons.share_outlined, size: 20),
-            onPressed: () {},
-          ),
-          const SizedBox(height: 10),
           TavButton(
             label: 'Anular este cobro',
             variant: TavButtonVariant.text,
