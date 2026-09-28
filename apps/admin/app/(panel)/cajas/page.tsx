@@ -322,43 +322,47 @@ function CajaCorredorCard({
         {formatoMoneda(caja.saldoCents, caja.moneda)}
       </div>
 
-      <div className="mt-3 grid grid-flow-col grid-cols-2 grid-rows-2 gap-2">
-        <Button
-          size="sm"
-          variant="default"
-          className="h-8 w-full px-1.5 text-[11px]"
-          onClick={() => setAbierta(true)}
-          disabled={!madreId}
-        >
-          <ArrowUpCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{caja.saldoCents === '0' ? 'Abrir' : 'Recargar'}</span>
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 w-full px-1.5 text-[11px]"
-          onClick={() => setDepositoAbierto(true)}
-        >
-          <PlusCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">Depósito</span>
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 w-full px-1.5 text-[11px]"
-          onClick={() => setVerMovs(true)}
-        >
-          <span className="truncate">Movimientos</span>
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 w-full px-1.5 text-[11px]"
-          onClick={() => setRetiroAbierto(true)}
-        >
-          <MinusCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">Retiro</span>
-        </Button>
+      <div className="mt-3 flex flex-col gap-2">
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="default"
+            className="h-8 flex-1 px-1.5 text-[11px]"
+            onClick={() => setAbierta(true)}
+            disabled={!madreId}
+          >
+            <ArrowUpCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{caja.saldoCents === '0' ? 'Abrir' : 'Recargar'}</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 flex-1 px-1.5 text-[11px]"
+            onClick={() => setVerMovs(true)}
+          >
+            <span className="truncate">Movimientos</span>
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 flex-1 px-1.5 text-[11px]"
+            onClick={() => setDepositoAbierto(true)}
+          >
+            <PlusCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Depósito</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 flex-1 px-1.5 text-[11px]"
+            onClick={() => setRetiroAbierto(true)}
+          >
+            <MinusCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Retiro</span>
+          </Button>
+        </div>
       </div>
 
       <RetiroDepositoDialog
