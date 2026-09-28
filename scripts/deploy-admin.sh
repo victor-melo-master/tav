@@ -10,9 +10,10 @@
 #
 # Salida:
 #   0  → despliegue OK, http://127.0.0.1:3002 responde y el público
-#        https://tav.rolapro.com está configurado.
+#        https://panel.tav.rolapro.com sirve el build recién creado.
 #   1  → error en rsync o build.
 #   2  → el panel no respondió tras el build.
+#   3  → el público sirve contenido distinto al build recién creado.
 
 set -euo pipefail
 
@@ -112,6 +113,60 @@ until ssh "$REMOTE" "curl -sf $HEALTH_LOCAL" >/dev/null 2>&1; do
 done
 
 ok "Panel responde localmente en ${WAITED}s."
+
+# ─────────────────── 3.5. Verificar que el público sirve el build nuevo ───────────────────
+
+# Un 200 no verifica nada: ya pasó que el despliegue reportó éxito con un
+# build viejo porque solo se miraba el código de estado. Aquí se compara el
+# CONTENIDO: la lista de chunks del HTML público y el hash de cada chunk
+# tienen que ser idénticos a los que sirve el contenedor recién construido.
+log "Verificando que https://panel.tav.rolapro.com sirve el build recién creado..."
+
+if ! ssh "$REMOTE" 'bash -s' <<'VERIFY_EOF'; then
+set -u
+PUBLIC="https://panel.tav.rolapro.com"
+LOCAL="http://127.0.0.1:3002"
+
+chunks_of() {
+  curl -sf "$1/tablero" | grep -o '/_next/static/chunks/[^"]*\.js' | sort -u
+}
+
+PUB_CHUNKS=$(chunks_of "$PUBLIC")
+LOC_CHUNKS=$(chunks_of "$LOCAL")
+
+if [ -z "$PUB_CHUNKS" ] || [ -z "$LOC_CHUNKS" ]; then
+  echo "ERROR: no se pudieron extraer chunks de /tablero (público o local)." >&2
+  exit 1
+fi
+
+if [ "$PUB_CHUNKS" != "$LOC_CHUNKS" ]; then
+  echo "ERROR: el HTML público referencia chunks distintos al build local." >&2
+  echo "--- Solo en público ---" >&2
+  comm -23 <(echo "$PUB_CHUNKS") <(echo "$LOC_CHUNKS") >&2
+  echo "--- Solo en local ---" >&2
+  comm -13 <(echo "$PUB_CHUNKS") <(echo "$LOC_CHUNKS") >&2
+  exit 1
+fi
+
+FAIL=0
+while IFS= read -r chunk; do
+  enc=$(printf '%s' "$chunk" | sed 's/(/%28/g;s/)/%29/g')
+  pub_md5=$(curl -sf "$PUBLIC$enc" | md5sum | awk '{print $1}')
+  loc_md5=$(curl -sf "$LOCAL$enc" | md5sum | awk '{print $1}')
+  if [ -z "$pub_md5" ] || [ "$pub_md5" != "$loc_md5" ]; then
+    echo "ERROR: $chunk difiere o no carga en público (pub=${pub_md5:-404} loc=${loc_md5:-404})" >&2
+    FAIL=1
+  fi
+done <<< "$PUB_CHUNKS"
+
+exit $FAIL
+VERIFY_EOF
+  fail "El panel público NO sirve el build recién creado."
+  fail "Posible HTML/chunk cacheado en nginx o el contenedor no recogió la imagen nueva."
+  exit 3
+fi
+
+ok "Contenido verificado: los chunks públicos son idénticos al build nuevo."
 
 # ─────────────────── 4. Limpiar imágenes viejas y caché de build ───────────────────
 

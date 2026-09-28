@@ -220,9 +220,28 @@ no).
 ./scripts/deploy-admin.sh
 ```
 
+Después del health check, verifica el **contenido** servido, no solo el
+código de estado (un 200 no prueba nada: ya ocurrió que un deploy reportó
+éxito sirviendo un build viejo). Compara entre `https://panel.tav.rolapro.com`
+y el contenedor local:
+
+- La lista de chunks `/_next/static/chunks/*.js` que referencia el HTML de
+  `/tablero` debe ser idéntica en ambos.
+- El md5 de **cada** chunk debe coincidir.
+
+Si hay diferencia — HTML cacheado en nginx, chunks viejos o contenedor sin
+la imagen nueva — aborta con código 3 y no reporta éxito.
+
 Aplica la misma verificación de espacio libre (20 GB mínimo) antes de
 construir y la misma limpieza de imágenes y caché de build al terminar,
 sin tocar nunca los volúmenes.
+
+| Código | Qué pasó |
+|--------|----------|
+| 0 | Panel desplegado y el público sirve el build recién creado. |
+| 1 | Error en rsync o build, o menos de 20 GB libres en el servidor. |
+| 2 | El panel no respondió en 60s tras el build. |
+| 3 | El público sirve contenido distinto al build recién creado. |
 
 ### Espacio en disco
 
