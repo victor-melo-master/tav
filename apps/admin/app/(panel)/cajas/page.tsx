@@ -326,38 +326,38 @@ function CajaCorredorCard({
         <Button
           size="sm"
           variant="default"
-          className="h-8 px-2 text-[11px]"
+          className="h-8 w-full px-1.5 text-[11px]"
           onClick={() => setAbierta(true)}
           disabled={!madreId}
         >
-          <ArrowUpCircle className="mr-1 h-3.5 w-3.5" />
-          {caja.saldoCents === '0' ? 'Abrir' : 'Recargar'}
+          <ArrowUpCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{caja.saldoCents === '0' ? 'Abrir' : 'Recargar'}</span>
         </Button>
         <Button
           size="sm"
           variant="outline"
-          className="h-8 px-2 text-[11px]"
+          className="h-8 w-full px-1.5 text-[11px]"
           onClick={() => setVerMovs(true)}
         >
-          Movimientos
+          <span className="truncate">Movimientos</span>
         </Button>
         <Button
           size="sm"
           variant="outline"
-          className="h-8 px-2 text-[11px]"
+          className="h-8 w-full px-1.5 text-[11px]"
           onClick={() => setRetiroAbierto(true)}
         >
-          <MinusCircle className="mr-1 h-3.5 w-3.5" />
-          Retiro
+          <MinusCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Retiro</span>
         </Button>
         <Button
           size="sm"
           variant="outline"
-          className="h-8 px-2 text-[11px]"
+          className="h-8 w-full px-1.5 text-[11px]"
           onClick={() => setDepositoAbierto(true)}
         >
-          <PlusCircle className="mr-1 h-3.5 w-3.5" />
-          Depósito
+          <PlusCircle className="mr-1 h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Depósito</span>
         </Button>
       </div>
 
