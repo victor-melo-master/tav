@@ -13,6 +13,10 @@ import { fechaCaracasHoy } from '../ledger/fecha-caracas';
 import { NoEncontradoException } from '../ledger/ledger.exceptions';
 import argon2 from 'argon2';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
+import { EditarUsuarioDto } from './dto/editar-usuario.dto';
+import { CambiarEstadoUsuarioDto } from './dto/cambiar-estado-usuario.dto';
+import { CambiarContrasenaAdminDto } from './dto/cambiar-contrasena-admin.dto';
+import { ListarUsuariosDto } from './dto/listar-usuarios.dto';
 import { ListarCajerosDto } from './dto/listar-cajeros.dto';
 import { CambiarLimiteDto } from './dto/cambiar-limite.dto';
 import { ResolverAmpliacionDto } from './dto/resolver-ampliacion.dto';
@@ -120,6 +124,165 @@ export class AdminService {
       }
       throw e;
     }
+  }
+
+  async listarUsuarios(filtros: ListarUsuariosDto) {
+    const page = Math.max(1, filtros.page ?? 1);
+    const limit = Math.max(1, Math.min(100, filtros.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.UsuarioWhereInput = {};
+
+    if (filtros.rol) {
+      where.rol = filtros.rol;
+    }
+
+    if (filtros.q?.trim()) {
+      const q = filtros.q.trim().toLowerCase();
+      where.OR = [
+        { nombre: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+        { telefono: { contains: q, mode: 'insensitive' } },
+        { documento: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.usuario.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [{ rol: 'asc' }, { nombre: 'asc' }],
+        include: {
+          perfilCajero: { select: { limiteCents: true, zona: true, direccion: true } },
+          perfilCobrador: { select: { zona: true } },
+          perfilPagador: { select: { pais: true } },
+        },
+      }),
+      this.prisma.usuario.count({ where }),
+    ]);
+
+    return {
+      items: items.map(({ passwordHash: _ph, ...u }) => u),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async obtenerUsuario(id: string) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id },
+      include: {
+        perfilCajero: true,
+        perfilCobrador: true,
+        perfilPagador: true,
+      },
+    });
+    if (!usuario) throw new NoEncontradoException('usuario', id);
+    const { passwordHash: _ph, ...sinPassword } = usuario;
+    return sinPassword;
+  }
+
+  async editarUsuario(id: string, dto: EditarUsuarioDto) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id },
+      include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
+    });
+    if (!usuario) throw new NoEncontradoException('usuario', id);
+
+    const email = dto.email?.trim().toLowerCase();
+    if (email && email !== usuario.email) {
+      const existe = await this.prisma.usuario.findUnique({ where: { email } });
+      if (existe) {
+        throw new ConflictException(`Ya existe un usuario con el correo ${email}`);
+      }
+    }
+
+    const dataUsuario: Prisma.UsuarioUpdateInput = {
+      nombre: dto.nombre,
+      email,
+      telefono: dto.telefono?.trim() || null,
+      documento: dto.documento?.trim() || null,
+    };
+
+    const actualizado = await this.prisma.$transaction(async (tx) => {
+      await tx.usuario.update({
+        where: { id },
+        data: dataUsuario,
+      });
+
+      if (usuario.rol === 'cajero') {
+        const data: Prisma.PerfilCajeroUpdateInput = {};
+        if (dto.zona !== undefined) data.zona = dto.zona.trim() || null;
+        if (dto.direccion !== undefined) data.direccion = dto.direccion.trim() || null;
+        if (dto.notas !== undefined) data.notas = dto.notas.trim() || null;
+        await tx.perfilCajero.update({ where: { usuarioId: id }, data });
+      }
+
+      if (usuario.rol === 'cobrador' && (dto.zona !== undefined || dto.notas !== undefined)) {
+        const data: Prisma.PerfilCobradorUpdateInput = {};
+        if (dto.zona !== undefined) data.zona = dto.zona.trim() || null;
+        await tx.perfilCobrador.update({ where: { usuarioId: id }, data });
+      }
+
+      if (usuario.rol === 'pagador') {
+        const data: Prisma.PerfilPagadorUpdateInput = {};
+        if (dto.pais !== undefined) data.pais = dto.pais.trim().toUpperCase();
+        if (dto.notas !== undefined) data.notas = dto.notas.trim() || null;
+        await tx.perfilPagador.update({ where: { usuarioId: id }, data });
+      }
+
+      return tx.usuario.findUnique({
+        where: { id },
+        include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
+      });
+    });
+
+    const { passwordHash: _ph, ...sinPassword } = actualizado!;
+    return sinPassword;
+  }
+
+  async cambiarEstadoUsuario(id: string, dto: CambiarEstadoUsuarioDto) {
+    const usuario = await this.prisma.usuario.findUnique({ where: { id } });
+    if (!usuario) throw new NoEncontradoException('usuario', id);
+
+    if (!dto.activo && usuario.rol === 'admin') {
+      const activos = await this.prisma.usuario.count({
+        where: { rol: 'admin', activo: true, id: { not: id } },
+      });
+      if (activos === 0) {
+        throw new BadRequestException('No se puede desactivar el último administrador activo');
+      }
+    }
+
+    const actualizado = await this.prisma.usuario.update({
+      where: { id },
+      data: { activo: dto.activo },
+      include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
+    });
+
+    const { passwordHash: _ph, ...sinPassword } = actualizado;
+    return sinPassword;
+  }
+
+  async cambiarContrasenaAdmin(id: string, dto: CambiarContrasenaAdminDto) {
+    const usuario = await this.prisma.usuario.findUnique({ where: { id } });
+    if (!usuario) throw new NoEncontradoException('usuario', id);
+
+    const passwordHash = await argon2.hash(dto.nuevaContrasena);
+
+    const actualizado = await this.prisma.usuario.update({
+      where: { id },
+      data: {
+        passwordHash,
+        tokenVersion: { increment: 1 },
+      },
+      include: { perfilCajero: true, perfilCobrador: true, perfilPagador: true },
+    });
+
+    const { passwordHash: _ph, ...sinPassword } = actualizado;
+    return sinPassword;
   }
 
   // ─────────────────────────── CAJEROS ───────────────────────────

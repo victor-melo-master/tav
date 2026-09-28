@@ -4,7 +4,7 @@
  * Reflejan los retornos de apps/api/src/admin/admin.service.ts.
  */
 
-export type Rol = 'cajero' | 'cobrador' | 'admin';
+export type Rol = 'admin' | 'cajero' | 'cobrador' | 'pagador';
 export type EstadoSemaforo = 'verde' | 'ambar' | 'rojo';
 export type EstadoCierre = 'abierto' | 'enviado' | 'verificado' | 'con_diferencia';
 export type EstadoAmpliacion = 'pendiente' | 'aprobada' | 'rechazada' | 'consumida' | 'expirada';
@@ -30,6 +30,14 @@ export interface UsuarioPublico {
   creadoAt: string;
   perfilCajero?: PerfilCajeroRaw | null;
   perfilCobrador?: { usuarioId: string; zona?: string | null } | null;
+  perfilPagador?: PerfilPagadorRaw | null;
+}
+
+export interface PaginaUsuarios {
+  items: UsuarioPublico[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface PerfilCajeroRaw {
@@ -39,6 +47,12 @@ export interface PerfilCajeroRaw {
   deudaDesde?: string | null;
   zona?: string | null;
   direccion?: string | null;
+  notas?: string | null;
+}
+
+export interface PerfilPagadorRaw {
+  usuarioId: string;
+  pais: string;
   notas?: string | null;
 }
 

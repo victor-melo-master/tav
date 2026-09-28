@@ -2,6 +2,10 @@ import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/c
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
+import { EditarUsuarioDto } from './dto/editar-usuario.dto';
+import { CambiarEstadoUsuarioDto } from './dto/cambiar-estado-usuario.dto';
+import { CambiarContrasenaAdminDto } from './dto/cambiar-contrasena-admin.dto';
+import { ListarUsuariosDto } from './dto/listar-usuarios.dto';
 import { ListarCajerosDto } from './dto/listar-cajeros.dto';
 import { CambiarLimiteDto } from './dto/cambiar-limite.dto';
 import { ResolverAmpliacionDto } from './dto/resolver-ampliacion.dto';
@@ -42,12 +46,62 @@ export class AdminController {
   // ─────────────────────────── USUARIOS ───────────────────────────
 
   @Post('usuarios')
-  @ApiOperation({ summary: 'Crea un cajero o cobrador (las cuentas las crea el admin)' })
+  @ApiOperation({ summary: 'Crea un usuario (cajero, cobrador, pagador o admin). Las cuentas las crea el admin.' })
   @ApiResponse({ status: 201, description: 'Usuario creado con su perfil' })
-  @ApiResponse({ status: 409, description: 'Ya existe un usuario con ese teléfono' })
+  @ApiResponse({ status: 409, description: 'Ya existe un usuario con ese correo' })
   async crearUsuario(@Body() dto: CrearUsuarioDto, @Req() req: AuthenticatedRequest) {
     // creadoPorId sale del JWT, nunca del body.
     return this.admin.crearUsuario(dto, req.user.sub);
+  }
+
+  @Get('usuarios')
+  @ApiOperation({ summary: 'Lista usuarios con búsqueda, filtro por rol y paginación' })
+  @ApiResponse({ status: 200, description: 'Usuarios paginados' })
+  async listarUsuarios(@Query() filtros: ListarUsuariosDto) {
+    return this.admin.listarUsuarios(filtros);
+  }
+
+  @Get('usuarios/:id')
+  @ApiOperation({ summary: 'Ficha de un usuario' })
+  @ApiResponse({ status: 200, description: 'Usuario con su perfil' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  async obtenerUsuario(@Param('id') id: string) {
+    return this.admin.obtenerUsuario(id);
+  }
+
+  @Patch('usuarios/:id')
+  @ApiOperation({ summary: 'Edita los datos básicos de un usuario' })
+  @ApiResponse({ status: 200, description: 'Usuario actualizado' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  @ApiResponse({ status: 409, description: 'Correo duplicado' })
+  async editarUsuario(
+    @Param('id') id: string,
+    @Body() dto: EditarUsuarioDto,
+  ) {
+    return this.admin.editarUsuario(id, dto);
+  }
+
+  @Patch('usuarios/:id/estado')
+  @ApiOperation({ summary: 'Activa o suspende un usuario' })
+  @ApiResponse({ status: 200, description: 'Estado actualizado' })
+  @ApiResponse({ status: 400, description: 'No se puede desactivar el último admin activo' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  async cambiarEstadoUsuario(
+    @Param('id') id: string,
+    @Body() dto: CambiarEstadoUsuarioDto,
+  ) {
+    return this.admin.cambiarEstadoUsuario(id, dto);
+  }
+
+  @Post('usuarios/:id/contrasena')
+  @ApiOperation({ summary: 'Cambia la contraseña de un usuario (admin). Invalida sesiones abiertas.' })
+  @ApiResponse({ status: 201, description: 'Contraseña actualizada' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  async cambiarContrasenaAdmin(
+    @Param('id') id: string,
+    @Body() dto: CambiarContrasenaAdminDto,
+  ) {
+    return this.admin.cambiarContrasenaAdmin(id, dto);
   }
 
   // ─────────────────────────── CAJEROS ───────────────────────────

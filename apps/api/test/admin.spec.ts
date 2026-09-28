@@ -1327,3 +1327,155 @@ describe('Admin — GET /admin/movimientos-diarios', () => {
     expect(res.body.operaciones[0].folio).toBe('TAV-TEST-MOV-3');
   });
 });
+
+// ─────────────────────────── GESTIÓN DE USUARIOS ───────────────────────────
+
+describe('Admin — gestión de usuarios', () => {
+  test('GET /admin/usuarios lista, pagina y filtra por rol', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+    await crearCajero({ email: '0414-1000001@tav.test', nombre: 'Cajero Uno' });
+    await crearCobrador({ email: '0414-2000001@tav.test', nombre: 'Cobrador Uno' });
+
+    const res = await request(app.getHttpServer())
+      .get('/admin/usuarios')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(3);
+    expect(res.body.total).toBe(3);
+
+    const cajeros = await request(app.getHttpServer())
+      .get('/admin/usuarios?rol=cajero')
+      .set('Authorization', `Bearer ${token}`);
+    expect(cajeros.body.items).toHaveLength(1);
+    expect(cajeros.body.items[0].rol).toBe('cajero');
+  });
+
+  test('GET /admin/usuarios busca por nombre, correo o teléfono', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+    await crearCajero({ email: '0414-1000001@tav.test', nombre: 'Ana Pérez', telefono: '0414-1000001' });
+
+    const res = await request(app.getHttpServer())
+      .get('/admin/usuarios?q=ana')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].nombre).toBe('Ana Pérez');
+
+    const porEmail = await request(app.getHttpServer())
+      .get('/admin/usuarios?q=1000001%40tav')
+      .set('Authorization', `Bearer ${token}`);
+    expect(porEmail.body.items).toHaveLength(1);
+
+    const porTelefono = await request(app.getHttpServer())
+      .get('/admin/usuarios?q=0414-1000001')
+      .set('Authorization', `Bearer ${token}`);
+    expect(porTelefono.body.items).toHaveLength(1);
+  });
+
+  test('PATCH /admin/usuarios/:id edita datos básicos', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', nombre: 'Cajero Viejo' });
+
+    const res = await request(app.getHttpServer())
+      .patch(`/admin/usuarios/${caj.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ nombre: 'Cajero Nuevo', telefono: '0424-1111111', zona: 'Oeste' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.nombre).toBe('Cajero Nuevo');
+    expect(res.body.telefono).toBe('0424-1111111');
+    expect(res.body.perfilCajero.zona).toBe('Oeste');
+  });
+
+  test('PATCH /admin/usuarios/:id/estado suspende y reactiva', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+
+    const suspender = await request(app.getHttpServer())
+      .patch(`/admin/usuarios/${caj.id}/estado`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ activo: false });
+    expect(suspender.status).toBe(200);
+    expect(suspender.body.activo).toBe(false);
+
+    const reactivar = await request(app.getHttpServer())
+      .patch(`/admin/usuarios/${caj.id}/estado`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ activo: true });
+    expect(reactivar.status).toBe(200);
+    expect(reactivar.body.activo).toBe(true);
+  });
+
+  test('no se puede desactivar el último administrador activo', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+
+    const res = await request(app.getHttpServer())
+      .patch(`/admin/usuarios/${admin.id}/estado`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ activo: false });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('último administrador');
+  });
+
+  test('POST /admin/usuarios/:id/contrasena cambia la clave e invalida sesiones', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+    const caj = await crearCajero({ email: '0414-1000001@tav.test', password: 'clave-vieja' });
+    const cajToken = await login(app, caj.email, 'clave-vieja');
+
+    const res = await request(app.getHttpServer())
+      .post(`/admin/usuarios/${caj.id}/contrasena`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ nuevaContrasena: 'nueva-clave' });
+
+    expect(res.status).toBe(201);
+
+    // El token anterior deja de funcionar porque tokenVersion cambió.
+    const protegido = await request(app.getHttpServer())
+      .get('/cajero/operaciones')
+      .set('Authorization', `Bearer ${cajToken}`);
+    expect(protegido.status).toBe(401);
+
+    // La nueva contraseña sí funciona.
+    const loginNuevo = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: caj.email, password: 'nueva-clave' });
+    expect(loginNuevo.status).toBe(201);
+  });
+
+  test('POST /admin/usuarios crea un administrador', async () => {
+    const admin = await crearAdmin({ email: '0414-0000001@tav.test' });
+    const token = await login(app, admin.email, admin.password);
+
+    const res = await request(app.getHttpServer())
+      .post('/admin/usuarios')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        nombre: 'Admin Nuevo',
+        email: '0414-0000002@tav.test',
+        rol: 'admin',
+        password: 'admin-nueva',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.rol).toBe('admin');
+    expect(res.body.activo).toBe(true);
+  });
+
+  test('roles no-admin reciben 403 en /admin/usuarios', async () => {
+    const caj = await crearCajero({ email: '0414-1000001@tav.test' });
+    const cajToken = await login(app, caj.email, caj.password);
+
+    const res = await request(app.getHttpServer())
+      .get('/admin/usuarios')
+      .set('Authorization', `Bearer ${cajToken}`);
+
+    expect(res.status).toBe(403);
+  });
+});

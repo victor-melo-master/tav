@@ -49,6 +49,14 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Token inválido o expirado');
     }
 
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: payload.sub },
+      select: { activo: true, tokenVersion: true },
+    });
+    if (!usuario || !usuario.activo || usuario.tokenVersion !== payload.tokenVersion) {
+      throw new UnauthorizedException('Token no válido');
+    }
+
     request.user = payload;
 
     // Fire-and-forget: no bloquea la petición ni la falla si la BD se cae.

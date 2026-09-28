@@ -10,6 +10,8 @@ import type {
   RegistrarCobroAdminPayload,
   CobroAdminRespuesta,
   UsuarioPublico,
+  PaginaUsuarios,
+  Rol,
   EstadoSemaforo,
   EstadoCierre,
   EstadoAmpliacion,
@@ -316,7 +318,7 @@ export const api = {
     nombre: string;
     email: string;
     telefono?: string;
-    rol: 'cajero' | 'cobrador' | 'pagador';
+    rol: Rol;
     password: string;
     documento?: string;
     limiteCents?: string;
@@ -324,10 +326,56 @@ export const api = {
     direccion?: string;
     pais?: string;
     notas?: string;
-  }): Promise<unknown> {
-    return request('/admin/usuarios', {
+  }): Promise<UsuarioPublico> {
+    return request<UsuarioPublico>('/admin/usuarios', {
       method: 'POST',
       body: JSON.stringify(body),
+    });
+  },
+
+  listarUsuarios(params?: { q?: string; rol?: Rol; page?: number; limit?: number }): Promise<PaginaUsuarios> {
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set('q', params.q);
+    if (params?.rol) qs.set('rol', params.rol);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    return request<PaginaUsuarios>(`/admin/usuarios?${qs.toString()}`);
+  },
+
+  obtenerUsuario(id: string): Promise<UsuarioPublico> {
+    return request<UsuarioPublico>(`/admin/usuarios/${id}`);
+  },
+
+  editarUsuario(
+    id: string,
+    body: {
+      nombre?: string;
+      email?: string;
+      telefono?: string;
+      documento?: string;
+      notas?: string;
+      pais?: string;
+      zona?: string;
+      direccion?: string;
+    },
+  ): Promise<UsuarioPublico> {
+    return request<UsuarioPublico>(`/admin/usuarios/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
+
+  cambiarEstadoUsuario(id: string, activo: boolean): Promise<UsuarioPublico> {
+    return request<UsuarioPublico>(`/admin/usuarios/${id}/estado`, {
+      method: 'PATCH',
+      body: JSON.stringify({ activo }),
+    });
+  },
+
+  cambiarContrasenaAdmin(id: string, nuevaContrasena: string): Promise<UsuarioPublico> {
+    return request<UsuarioPublico>(`/admin/usuarios/${id}/contrasena`, {
+      method: 'POST',
+      body: JSON.stringify({ nuevaContrasena }),
     });
   },
 

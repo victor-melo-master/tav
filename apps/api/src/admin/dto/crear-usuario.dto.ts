@@ -28,8 +28,8 @@ export class CrearUsuarioDto {
   @IsString()
   telefono?: string;
 
-  @IsIn(['cajero', 'cobrador', 'pagador'])
-  rol!: 'cajero' | 'cobrador' | 'pagador';
+  @IsIn(['admin', 'cajero', 'cobrador', 'pagador'])
+  rol!: 'admin' | 'cajero' | 'cobrador' | 'pagador';
 
   @IsString()
   @IsNotEmpty()
