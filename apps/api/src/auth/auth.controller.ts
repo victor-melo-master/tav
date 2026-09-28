@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthenticatedRequest } from './auth.types';
-import { LoginDto, RefreshDto, SetPinDto, LoginPinDto } from './dto/login.dto';
+import { LoginDto, RefreshDto } from './dto/login.dto';
 import { Public } from './public.decorator';
 
 @Controller('auth')
@@ -35,14 +35,4 @@ export class AuthController {
     return this.auth.me(req.user.sub);
   }
 
-  @Post('pin')
-  async setPin(@Req() req: AuthenticatedRequest, @Body() dto: SetPinDto) {
-    return this.auth.setPin(req.user.sub, dto);
-  }
-
-  @Public()
-  @Post('login-pin')
-  async loginPin(@Body() dto: LoginPinDto) {
-    return this.auth.loginPin(dto);
-  }
 }

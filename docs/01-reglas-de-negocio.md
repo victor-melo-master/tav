@@ -45,6 +45,14 @@ para llamar y escribir por WhatsApp al cajero. Es editable, opcional y **sin
 índice único**: dos personas pueden compartir un número. Lo que perdió es su
 papel de llave de acceso.
 
+### Acceso por sesión persistente
+
+La app **guarda la sesión**: tras un login exitoso se almacenan los tokens.
+Al cerrar y reabrir la app se entra **directamente**, sin pedir contraseña.
+
+Solo se vuelve a pedir la contraseña **si la sesión caduca o se invalida**
+(logout, cambio de tokenVersion, refresh expirado). No hay PIN local.
+
 ---
 
 ## 3. El ciclo del dinero

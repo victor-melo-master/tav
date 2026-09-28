@@ -174,12 +174,8 @@ class AuthInterceptor extends Interceptor {
     // Solo las rutas públicas (sin @Public en el controller) no requieren token.
     // /auth/login → pública
     // /auth/refresh → pública
-    // /auth/login-pin → pública
-    // /auth/pin → requiere autenticación (no es pública)
     // /auth/logout → requiere autenticación
     // /auth/me → requiere autenticación
-    return path == '/auth/login' ||
-        path == '/auth/refresh' ||
-        path == '/auth/login-pin';
+    return path == '/auth/login' || path == '/auth/refresh';
   }
 }

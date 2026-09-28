@@ -31,31 +31,23 @@ import '../screens/pagador/cola_screen.dart';
 import '../screens/pagador/hoy_screen.dart';
 import '../screens/pagador/operacion_screen.dart';
 import '../screens/pagador/perfil_screen.dart';
-import '../screens/pin_bloqueado_screen.dart';
-import '../screens/pin_login_screen.dart';
-import '../screens/pin_setup_screen.dart';
 import '../screens/shells.dart';
 import '../state/auth_state.dart';
 import 'router_notifier.dart';
 
 /// Proveedor del router.
 ///
-/// El redirect implementa cuatro reglas en orden, evaluadas contra el estado
-/// de autenticación. Cada regla es excluyente: la primera que coincide gana.
+/// El redirect implementa dos reglas simples:
 ///
 /// 1. No autenticado → /login
-/// 2. Autenticado y sin PIN establecido → /pin-setup
-/// 3. Autenticado, con PIN, y no desbloqueado → /pin-login
-/// 4. Autenticado y desbloqueado → si está en una ruta de autenticación
-///    (/login, /pin-setup, /pin-login), va al shell de su rol.
+/// 2. Autenticado y en una ruta de autenticación (/login) → shell de su rol.
 ///
-/// `desbloqueado` indica que el usuario probó su identidad en esta ejecución
-/// de la app (login con contraseña o loginPin). Un arranque en frío con
-/// tokens guardados deja desbloqueado=false: hay sesión pero hay que
-/// validar el PIN antes de entrar al shell.
+/// La sesión persistente se maneja con tokens. Si el access/refresh token
+/// expira, el interceptor de Dio devuelve 401, limpia la sesión y el estado
+/// pasa a no autenticado, llevando al usuario a /login.
 ///
-/// Usa refreshListenable con RouterNotifier para re-evaluar
-/// redirects cuando cambia authProvider (login, logout, PIN).
+/// Usa refreshListenable con RouterNotifier para re-evaluar redirects cuando
+/// cambia authProvider (login, logout).
 final tavRouterProvider = Provider<GoRouter>((ref) {
   final routerNotifier = ref.read(routerNotifierProvider);
 
@@ -71,37 +63,17 @@ final tavRouterProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
-      // Rutas de autenticación: login, pin-setup, pin-login, pin-bloqueado.
-      final isAuthRoute = location == '/login' ||
-          location == '/pin-setup' ||
-          location == '/pin-login' ||
-          location == '/pin-bloqueado';
+      // Rutas de autenticación: login.
+      final isAuthRoute = location == '/login';
 
       // Regla 1: No autenticado → /login
       if (authState is AuthUnauthenticated || authState is AuthError) {
         return isAuthRoute ? null : '/login';
       }
 
-      if (authState is AuthAuthenticated) {
-        final pinEstablecido = authState.pinEstablecido;
-        final desbloqueado = authState.desbloqueado;
-        final rol = authState.usuario.rol;
-
-        // Regla 2: Autenticado y sin PIN establecido → /pin-setup
-        if (!pinEstablecido) {
-          return location == '/pin-setup' ? null : '/pin-setup';
-        }
-
-        // Regla 3: Autenticado, con PIN, y no desbloqueado → /pin-login
-        if (!desbloqueado) {
-          return location == '/pin-login' ? null : '/pin-login';
-        }
-
-        // Regla 4: Autenticado y desbloqueado → si está en una ruta de
-        // autenticación, va al shell de su rol.
-        if (isAuthRoute) {
-          return _shellRoute(rol);
-        }
+      // Regla 2: Autenticado y en una ruta de autenticación → va al shell de su rol.
+      if (authState is AuthAuthenticated && isAuthRoute) {
+        return _shellRoute(authState.usuario.rol);
       }
 
       return null;
@@ -110,18 +82,6 @@ final tavRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: '/pin-setup',
-        builder: (context, state) => const PinSetupScreen(),
-      ),
-      GoRoute(
-        path: '/pin-login',
-        builder: (context, state) => const PinLoginScreen(),
-      ),
-      GoRoute(
-        path: '/pin-bloqueado',
-        builder: (context, state) => const PinBloqueadoScreen(),
       ),
       // Shell del cajero — 4 destinos del bottom nav
       ShellRoute(

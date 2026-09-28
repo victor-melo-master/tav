@@ -28,7 +28,6 @@ export interface UsuarioPublico {
   activo: boolean;
   ultimaVezAt?: string | null;
   creadoAt: string;
-  pinEstablecido: boolean;
   perfilCajero?: PerfilCajeroRaw | null;
   perfilCobrador?: { usuarioId: string; zona?: string | null } | null;
 }

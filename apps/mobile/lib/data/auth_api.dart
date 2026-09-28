@@ -43,7 +43,6 @@ class UsuarioDto {
     this.telefono,
     required this.nombre,
     required this.rol,
-    this.pinEstablecido = false,
   });
 
   final String id;
@@ -51,7 +50,6 @@ class UsuarioDto {
   final String? telefono;
   final String nombre;
   final String rol;
-  final bool pinEstablecido;
 
   factory UsuarioDto.fromJson(Map<String, dynamic> json) {
     return UsuarioDto(
@@ -60,7 +58,6 @@ class UsuarioDto {
       telefono: json['telefono'] as String?,
       nombre: json['nombre'] as String,
       rol: json['rol'] as String,
-      pinEstablecido: (json['pinEstablecido'] as bool?) ?? false,
     );
   }
 }
@@ -71,43 +68,6 @@ class RefreshRequest {
   final String refreshToken;
 
   Map<String, dynamic> toJson() => {'refreshToken': refreshToken};
-}
-
-class SetPinRequest {
-  const SetPinRequest({required this.pin});
-
-  final String pin;
-
-  Map<String, dynamic> toJson() => {'pin': pin};
-}
-
-class LoginPinRequest {
-  const LoginPinRequest({required this.refreshToken, required this.pin});
-
-  final String refreshToken;
-  final String pin;
-
-  Map<String, dynamic> toJson() => {
-        'refreshToken': refreshToken,
-        'pin': pin,
-      };
-}
-
-class LoginPinResponse {
-  const LoginPinResponse({
-    required this.accessToken,
-    required this.refreshToken,
-  });
-
-  final String accessToken;
-  final String refreshToken;
-
-  factory LoginPinResponse.fromJson(Map<String, dynamic> json) {
-    return LoginPinResponse(
-      accessToken: json['accessToken'] as String,
-      refreshToken: json['refreshToken'] as String,
-    );
-  }
 }
 
 /// Decodifica el JWT para extraer el rol sin verificar la firma.

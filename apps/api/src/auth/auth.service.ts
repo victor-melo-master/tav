@@ -7,8 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import argon2 from 'argon2';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { LoginDto, RefreshDto, SetPinDto, LoginPinDto } from './dto/login.dto';
-import { PinBloqueadoException } from './auth.exceptions';
+import { LoginDto, RefreshDto } from './dto/login.dto';
 import { JwtPayload } from './auth.types';
 import type { StringValue } from 'ms';
 
@@ -22,17 +21,13 @@ type UsuarioConPerfiles = Prisma.UsuarioGetPayload<{
 
 /**
  * Usuario sin campos sensibles: lo que se devuelve al cliente.
- * `pinEstablecido` es un booleano derivado de `pinHash`, porque el hash
- * en sí nunca se envía al cliente.
  */
-type UsuarioPublico = Omit<UsuarioConPerfiles, 'passwordHash' | 'pinHash'> & {
-  pinEstablecido: boolean;
-};
+type UsuarioPublico = Omit<UsuarioConPerfiles, 'passwordHash'>;
 
 /** Mínimo para firmar un JWT: quien es y qué versión de token tiene. */
 type UsuarioParaToken = Pick<UsuarioConPerfiles, 'id' | 'rol' | 'nombre' | 'tokenVersion'>;
 
-const MAX_INTENTOS_PIN = 5;
+
 
 @Injectable()
 export class AuthService {
@@ -59,14 +54,6 @@ export class AuthService {
 
     const passwordOk = await argon2.verify(usuario.passwordHash, dto.password);
     if (!passwordOk) throw new UnauthorizedException('Correo o contraseña incorrectos');
-
-    // Login con contraseña exitoso → resetea el bloqueo del PIN.
-    if (usuario.pinIntentos !== 0 || usuario.pinBloqueadoAt !== null) {
-      await this.prisma.usuario.update({
-        where: { id: usuario.id },
-        data: { pinIntentos: 0, pinBloqueadoAt: null },
-      });
-    }
 
     return this.emitirTokensYUsuario(usuario);
   }
@@ -121,80 +108,6 @@ export class AuthService {
     return this.perfilPublico(usuario);
   }
 
-  // ─────────────────────────── PIN ───────────────────────────
-
-  /**
-   * Establece el PIN de 4 dígitos con el que se reabre la app.
-   * Requiere autenticación (access token): el usuario ya está dentro y
-   * decide fijar o cambiar su PIN.
-   */
-  async setPin(userId: string, dto: SetPinDto): Promise<{ ok: true }> {
-    if (!/^\d{4}$/.test(dto.pin)) {
-      throw new UnauthorizedException('El PIN debe ser 4 dígitos numéricos');
-    }
-    const pinHash = await argon2.hash(dto.pin);
-    await this.prisma.usuario.update({
-      where: { id: userId },
-      data: { pinHash },
-    });
-    return { ok: true };
-  }
-
-  // ─────────────────────────── LOGIN-PIN ───────────────────────────
-
-  /**
-   * Reingreso rápido: el usuario ya tiene un refresh token válido (no expirado)
-   * que prueba que se autenticó antes. En lugar de pedir la contraseña de nuevo,
-   * pide el PIN de 4 dígitos. Si el PIN cuadra, emite tokens nuevos.
-   *
-   * Bloqueo: tras MAX_INTENTOS_PIN (5) fallos consecutivos, pinBloqueadoAt se
-   * fija y el usuario debe entrar con contraseña para desbloquear. Un PIN
-   * correcto resetea el contador.
-   */
-  async loginPin(dto: LoginPinDto): Promise<{ accessToken: string; refreshToken: string }> {
-    const payload = await this.verificarRefreshToken(dto.refreshToken);
-    const usuario = await this.prisma.usuario.findUnique({
-      where: { id: payload.sub },
-    });
-    if (!usuario || !usuario.activo) throw new UnauthorizedException('Usuario no válido');
-    this.validarTokenVersion(payload, usuario.tokenVersion);
-    if (!usuario.pinHash) throw new UnauthorizedException('PIN no establecido');
-
-    // Si ya está bloqueado, no se permiten más intentos con PIN.
-    if (usuario.pinBloqueadoAt !== null) {
-      throw new PinBloqueadoException();
-    }
-
-    const pinOk = await argon2.verify(usuario.pinHash, dto.pin);
-    if (!pinOk) {
-      const nuevosIntentos = usuario.pinIntentos + 1;
-      if (nuevosIntentos >= MAX_INTENTOS_PIN) {
-        await this.prisma.usuario.update({
-          where: { id: usuario.id },
-          data: { pinIntentos: nuevosIntentos, pinBloqueadoAt: new Date() },
-        });
-        throw new PinBloqueadoException();
-      }
-      await this.prisma.usuario.update({
-        where: { id: usuario.id },
-        data: { pinIntentos: nuevosIntentos },
-      });
-      throw new UnauthorizedException(
-        `PIN incorrecto. Intentos restantes: ${MAX_INTENTOS_PIN - nuevosIntentos}`,
-      );
-    }
-
-    // PIN correcto → resetea el contador de fallos.
-    if (usuario.pinIntentos !== 0) {
-      await this.prisma.usuario.update({
-        where: { id: usuario.id },
-        data: { pinIntentos: 0 },
-      });
-    }
-
-    return this.emitirTokens(usuario);
-  }
-
   // ─────────────────────────── HELPERS ───────────────────────────
 
   private validarTokenVersion(payload: JwtPayload, versionBd: number): void {
@@ -235,12 +148,11 @@ export class AuthService {
   }
 
   /**
-   * Quita campos sensibles (passwordHash, pinHash) antes de devolver el usuario.
-   * Añade `pinEstablecido` como booleano derivado, porque el hash no se envía.
+   * Quita campos sensibles (passwordHash) antes de devolver el usuario.
    * BigInt se serializa como string (ver main.ts).
    */
   private perfilPublico(usuario: UsuarioConPerfiles): UsuarioPublico {
-    const { passwordHash: _ph, pinHash: _pin, ...resto } = usuario;
-    return { ...resto, pinEstablecido: usuario.pinHash !== null };
+    const { passwordHash: _ph, ...resto } = usuario;
+    return resto as UsuarioPublico;
   }
 }

@@ -5,15 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tav_mobile/data/token_storage.dart';
 import 'package:tav_mobile/state/auth_state.dart';
 
-/// Test del ciclo completo de autenticación:
-///   login → setPin → "reiniciar app" (checkSession) → loginPin → autenticado
-///
-/// Verifica que la máquina de estados descrita en
-/// docs/06-maquina-de-estados-auth.md no se rompe. Específicamente:
-/// - pinEstablecido se lee del campo booleano del servidor, no de pinHash.
-/// - checkSession no pisa el estado si este ya cambió (guard anti-race).
-/// - loginPin deja pinEstablecido=true tras entrar con PIN.
-/// - logout limpia sesión y manda a AuthUnauthenticated.
+/// Tests del flujo de autenticación simplificado: correo + contraseña,
+/// sesión persistente por tokens, y logout. No hay PIN.
 
 // ─────────────────── Fakes ───────────────────
 
@@ -66,8 +59,6 @@ class _FakeTokenStorage implements TokenStorage {
 class _MockAdapter implements HttpClientAdapter {
   _MockAdapter(this._handlers);
 
-  /// Cada handler recibe el RequestOptions y decide si lo maneja.
-  /// Si devuelve una Response, se usa; si devuelve null, se prueba el siguiente.
   final List<_MockHandler> _handlers;
 
   @override
@@ -116,75 +107,44 @@ const _testUserId = 'user-001';
 const _testUserName = 'Juan Pérez';
 const _testUserPhone = '+584120000010';
 const _testUserRole = 'cajero';
-const _testPin = '1234';
+const _testPassword = 'tav1234';
 
-/// Estado del servidor mock: simula la base de datos.
-class _MockServer {
-  bool pinEstablecido = false;
-  String? refreshTokenActivo;
-  int tokenVersion = 0;
-}
+Map<String, dynamic> get _loginResponse => {
+  'accessToken': 'access-1',
+  'refreshToken': 'refresh-1',
+  'usuario': {
+    'id': _testUserId,
+    'email': 'juan@tav.test',
+    'telefono': _testUserPhone,
+    'nombre': _testUserName,
+    'rol': _testUserRole,
+  },
+};
 
-/// Crea los handlers del mock server.
-List<_MockHandler> _buildHandlers(_MockServer server) {
+Map<String, dynamic> get _meResponse => {
+  'id': _testUserId,
+  'email': 'juan@tav.test',
+  'telefono': _testUserPhone,
+  'nombre': _testUserName,
+  'rol': _testUserRole,
+};
+
+List<_MockHandler> _buildHandlers() {
   return [
-    // POST /auth/login
     (req) {
       if (req.method == 'POST' && req.path == '/auth/login') {
-        server.tokenVersion++;
-        final access = 'access-${server.tokenVersion}';
-        final refresh = 'refresh-${server.tokenVersion}';
-        server.refreshTokenActivo = refresh;
-        return {
-          'accessToken': access,
-          'refreshToken': refresh,
-          'usuario': {
-            'id': _testUserId,
-            'telefono': _testUserPhone,
-            'nombre': _testUserName,
-            'rol': _testUserRole,
-            'pinEstablecido': server.pinEstablecido,
-          },
-        };
+        return _loginResponse;
       }
       return null;
     },
-    // POST /auth/pin
-    (req) {
-      if (req.method == 'POST' && req.path == '/auth/pin') {
-        server.pinEstablecido = true;
-        return {'ok': true};
-      }
-      return null;
-    },
-    // POST /auth/login-pin
-    (req) {
-      if (req.method == 'POST' && req.path == '/auth/login-pin') {
-        server.tokenVersion++;
-        final access = 'access-${server.tokenVersion}';
-        final refresh = 'refresh-${server.tokenVersion}';
-        server.refreshTokenActivo = refresh;
-        return {'accessToken': access, 'refreshToken': refresh};
-      }
-      return null;
-    },
-    // GET /auth/me
     (req) {
       if (req.method == 'GET' && req.path == '/auth/me') {
-        return {
-          'id': _testUserId,
-          'telefono': _testUserPhone,
-          'nombre': _testUserName,
-          'rol': _testUserRole,
-          'pinEstablecido': server.pinEstablecido,
-        };
+        return _meResponse;
       }
       return null;
     },
-    // POST /auth/logout
     (req) {
       if (req.method == 'POST' && req.path == '/auth/logout') {
-        server.tokenVersion++;
         return {'ok': true};
       }
       return null;
@@ -195,280 +155,110 @@ List<_MockHandler> _buildHandlers(_MockServer server) {
 // ─────────────────── Tests ───────────────────
 
 void main() {
-  test('ciclo completo: login → setPin → restart → loginPin → autenticado', () async {
-    final server = _MockServer();
+  test('login guarda tokens y deja el usuario autenticado', () async {
     final storage = _FakeTokenStorage();
-    final dio = _buildMockDio(_buildHandlers(server));
+    final dio = _buildMockDio(_buildHandlers());
     final auth = AuthNotifier(dio: dio, storage: storage);
 
-    // 1. Login con contraseña
-    await auth.login(_testUserPhone, 'tav1234');
+    await auth.login(_testUserPhone, _testPassword);
+
     expect(auth.state, isA<AuthAuthenticated>());
-    final stateAfterLogin = auth.state as AuthAuthenticated;
-    expect(stateAfterLogin.pinEstablecido, isFalse,
-        reason: 'Tras login sin PIN previo, pinEstablecido debe ser false');
-    expect(stateAfterLogin.desbloqueado, isTrue,
-        reason: 'Tras login con contraseña, desbloqueado debe ser true');
-    expect(stateAfterLogin.usuario.nombre, _testUserName);
-
-    // 2. Establecer PIN
-    final setPinOk = await auth.setPin(_testPin);
-    expect(setPinOk, isTrue);
-    final stateAfterSetPin = auth.state as AuthAuthenticated;
-    expect(stateAfterSetPin.pinEstablecido, isTrue,
-        reason: 'Tras setPin, pinEstablecido debe ser true');
-    expect(stateAfterSetPin.desbloqueado, isTrue,
-        reason: 'Tras setPin, desbloqueado se mantiene (venía de login)');
-
-    // 3. Simular reinicio de app: nuevo AuthNotifier, mismo storage
-    final dio2 = _buildMockDio(_buildHandlers(server));
-    final auth2 = AuthNotifier(dio: dio2, storage: storage);
-    expect(auth2.state, isA<AuthInitial>());
-
-    await auth2.checkSession();
-    expect(auth2.state, isA<AuthAuthenticated>());
-    final stateAfterRestart = auth2.state as AuthAuthenticated;
-    expect(stateAfterRestart.pinEstablecido, isTrue,
-        reason: 'Tras reinicio con PIN ya guardado, pinEstablecido debe ser '
-            'true (leído del servidor, no de pinHash)');
-    expect(stateAfterRestart.desbloqueado, isFalse,
-        reason: 'Tras reinicio en frío, desbloqueado debe ser false: '
-            'tiene sesión pero debe validar el PIN');
-    expect(stateAfterRestart.usuario.nombre, _testUserName,
-        reason: 'El nombre debe venir de /auth/me, no estar vacío');
-
-    // 4. Login con PIN
-    await auth2.loginPin(_testPin);
-    expect(auth2.state, isA<AuthAuthenticated>());
-    final stateAfterPinLogin = auth2.state as AuthAuthenticated;
-    expect(stateAfterPinLogin.pinEstablecido, isTrue,
-        reason: 'Tras loginPin, pinEstablecido debe seguir siendo true');
-    expect(stateAfterPinLogin.desbloqueado, isTrue,
-        reason: 'Tras loginPin, desbloqueado debe ser true: probó su identidad');
-    expect(stateAfterPinLogin.usuario.nombre, _testUserName);
-
-    // 5. Logout
-    await auth2.logout();
-    expect(auth2.state, isA<AuthUnauthenticated>());
-    expect(await storage.getAccessToken(), isNull);
-    expect(await storage.getRefreshToken(), isNull);
+    final state = auth.state as AuthAuthenticated;
+    expect(state.usuario.nombre, _testUserName);
+    expect(state.usuario.rol, _testUserRole);
+    expect(await storage.getAccessToken(), isNotNull);
+    expect(await storage.getRefreshToken(), isNotNull);
   });
 
-  test('checkSession no pisa el estado si ya cambió (guard anti-race)', () async {
-    final server = _MockServer();
-    // Pre-poblar: el usuario ya tiene PIN
-    server.pinEstablecido = true;
-
+  test('login fallido deja AuthError', () async {
     final storage = _FakeTokenStorage();
-    // Simular tokens de una sesión previa en storage
-    await storage.saveTokens(accessToken: 'old-access', refreshToken: 'old-refresh');
-    await storage.saveSession(userId: _testUserId, role: _testUserRole, name: _testUserName);
-
-    final dio = _buildMockDio(_buildHandlers(server));
-    final auth = AuthNotifier(dio: dio, storage: storage);
-
-    // Simular que el usuario loguea ANTES de que checkSession termine.
-    // Para eso, llamamos login() primero, luego checkSession().
-    // checkSession debe ver que el estado ya no es AuthInitial y descartar.
-    await auth.login(_testUserPhone, 'tav1234');
-    expect(auth.state, isA<AuthAuthenticated>());
-    final stateAfterLogin = auth.state as AuthAuthenticated;
-    expect(stateAfterLogin.usuario.nombre, _testUserName);
-
-    // Ahora checkSession llega tarde. No debe pisar el estado.
-    await auth.checkSession();
-    final stateAfterCheck = auth.state as AuthAuthenticated;
-    expect(stateAfterCheck.usuario.nombre, _testUserName,
-        reason: 'checkSession tardío no debe cambiar el usuario');
-    expect(stateAfterCheck.pinEstablecido, isTrue,
-        reason: 'checkSession tardío no debe resetear pinEstablecido');
-    expect(stateAfterCheck.desbloqueado, isTrue,
-        reason: 'checkSession tardío no debe resetear desbloqueado a false');
-  });
-
-  test('checkSession sin tokens → AuthUnauthenticated', () async {
-    final server = _MockServer();
-    final storage = _FakeTokenStorage();
-    final dio = _buildMockDio(_buildHandlers(server));
-    final auth = AuthNotifier(dio: dio, storage: storage);
-
-    await auth.checkSession();
-    expect(auth.state, isA<AuthUnauthenticated>());
-  });
-
-  test('setPin falla → AuthError con mensaje, no pisa pinEstablecido', () async {
-    final storage = _FakeTokenStorage();
-    // Dio que devuelve 400 para /auth/pin
     final dio = Dio(BaseOptions(baseUrl: 'https://mock.test'));
     dio.httpClientAdapter = _MockAdapter([
       (req) {
         if (req.method == 'POST' && req.path == '/auth/login') {
-          return {
-            'accessToken': 'access-1',
-            'refreshToken': 'refresh-1',
-            'usuario': {
-              'id': _testUserId,
-              'telefono': _testUserPhone,
-              'nombre': _testUserName,
-              'rol': _testUserRole,
-              'pinEstablecido': false,
-            },
-          };
-        }
-        if (req.method == 'POST' && req.path == '/auth/pin') {
-          // Simular error del servidor
           throw DioException(
             requestOptions: req,
             response: Response(
               requestOptions: req,
-              statusCode: 400,
-              data: {'message': 'El PIN ya fue establecido. Usa cambiar PIN.'},
+              statusCode: 401,
+              data: {'message': 'Credenciales incorrectas'},
             ),
           );
         }
         return null;
       },
     ]);
-
     final auth = AuthNotifier(dio: dio, storage: storage);
-    await auth.login(_testUserPhone, 'tav1234');
-    expect(auth.state, isA<AuthAuthenticated>());
 
-    final setPinOk = await auth.setPin(_testPin);
-    expect(setPinOk, isFalse);
+    await auth.login(_testUserPhone, 'mal');
+
     expect(auth.state, isA<AuthError>());
-    expect((auth.state as AuthError).message, contains('PIN'));
+    // Sin interceptor de errores, el mensaje es el fallback genérico.
+    expect((auth.state as AuthError).message, isNotEmpty);
   });
 
-  test('caso que fallaba: usuario con PIN que valida PIN y llega al shell', () async {
-    // Este test cubre el bug original: un usuario autenticado con PIN
-    // establecido, ubicado en /pin-login, no tenía a dónde ir porque ninguna
-    // rama del redirect coincidía. Con el campo `desbloqueado`, loginPin
-    // pone desbloqueado=true y la regla 4 lo manda al shell.
-    final server = _MockServer();
-    server.pinEstablecido = true; // El usuario ya tiene PIN
-
+  test('checkSession con tokens guardados entra directo', () async {
     final storage = _FakeTokenStorage();
-    final dio = _buildMockDio(_buildHandlers(server));
-    final auth = AuthNotifier(dio: dio, storage: storage);
-
-    // Simular arranque en frío con sesión guardada
-    await storage.saveTokens(accessToken: 'access-1', refreshToken: 'refresh-1');
+    await storage.saveTokens(accessToken: 'access-x', refreshToken: 'refresh-x');
     await storage.saveSession(
-        userId: _testUserId, role: _testUserRole, name: _testUserName);
+      userId: _testUserId,
+      role: _testUserRole,
+      name: _testUserName,
+    );
+
+    final dio = _buildMockDio(_buildHandlers());
+    final auth = AuthNotifier(dio: dio, storage: storage);
 
     await auth.checkSession();
+
     expect(auth.state, isA<AuthAuthenticated>());
-    final stateBefore = auth.state as AuthAuthenticated;
-    expect(stateBefore.pinEstablecido, isTrue);
-    expect(stateBefore.desbloqueado, isFalse,
-        reason: 'Arranque en frío: desbloqueado debe ser false');
-
-    // El redirect debe mandar a /pin-login (regla 3)
-    expect(_resolveRedirect(auth.state, '/pin-login'), isNull,
-        reason: 'Ya está en /pin-login, regla 3 devuelve null');
-    expect(_resolveRedirect(auth.state, '/login'), '/pin-login',
-        reason: 'Desde /login, regla 3 debe mandar a /pin-login');
-    expect(_resolveRedirect(auth.state, '/cajero/inicio'), '/pin-login',
-        reason: 'Desde el shell, regla 3 debe mandar a /pin-login (no desbloqueado)');
-
-    // Usuario valida el PIN
-    await auth.loginPin(_testPin);
-    expect(auth.state, isA<AuthAuthenticated>());
-    final stateAfter = auth.state as AuthAuthenticated;
-    expect(stateAfter.pinEstablecido, isTrue);
-    expect(stateAfter.desbloqueado, isTrue,
-        reason: 'Tras loginPin, desbloqueado debe ser true');
-
-    // El redirect debe mandar al shell (regla 4)
-    expect(_resolveRedirect(auth.state, '/pin-login'), '/cajero/inicio',
-        reason: 'Desde /pin-login con desbloqueado=true, regla 4 debe mandar '
-            'al shell del rol');
-    expect(_resolveRedirect(auth.state, '/login'), '/cajero/inicio',
-        reason: 'Desde /login con desbloqueado=true, regla 4 debe mandar '
-            'al shell del rol');
-    expect(_resolveRedirect(auth.state, '/pin-setup'), '/cajero/inicio',
-        reason: 'Desde /pin-setup con desbloqueado=true, regla 4 debe mandar '
-            'al shell del rol');
-    expect(_resolveRedirect(auth.state, '/cajero/inicio'), isNull,
-        reason: 'Ya está en el shell, regla 4 devuelve null');
+    final state = auth.state as AuthAuthenticated;
+    expect(state.usuario.nombre, _testUserName);
   });
 
-  test('login sin PIN → setPin → directo al shell (sin pedir PIN de nuevo)', () async {
-    // Tras login con contraseña (desbloqueado=true) + setPin, el usuario
-    // va directo al shell porque ya probó su identidad. No se le pide el
-    // PIN de nuevo en la misma sesión.
-    final server = _MockServer();
+  test('checkSession sin tokens deja AuthUnauthenticated', () async {
     final storage = _FakeTokenStorage();
-    final dio = _buildMockDio(_buildHandlers(server));
+    final dio = _buildMockDio(_buildHandlers());
     final auth = AuthNotifier(dio: dio, storage: storage);
 
-    await auth.login(_testUserPhone, 'tav1234');
-    expect((auth.state as AuthAuthenticated).desbloqueado, isTrue);
+    await auth.checkSession();
 
-    // Antes de setPin: sin PIN → regla 2 → /pin-setup
-    expect(_resolveRedirect(auth.state, '/login'), '/pin-setup');
-
-    await auth.setPin(_testPin);
-    final state = auth.state as AuthAuthenticated;
-    expect(state.pinEstablecido, isTrue);
-    expect(state.desbloqueado, isTrue,
-        reason: 'setPin mantiene desbloqueado (venía de login)');
-
-    // Tras setPin: con PIN + desbloqueado → regla 4 → shell
-    expect(_resolveRedirect(auth.state, '/pin-setup'), '/cajero/inicio',
-        reason: 'Tras setPin con desbloqueado=true, debe ir al shell, '
-            'no a /pin-login');
+    expect(auth.state, isA<AuthUnauthenticated>());
   });
-}
 
-// ─────────────────── Helper: simular la lógica del redirect ───────────────────
+  test('checkSession no pisa el estado si ya cambió', () async {
+    final storage = _FakeTokenStorage();
+    await storage.saveTokens(accessToken: 'old-access', refreshToken: 'old-refresh');
+    await storage.saveSession(
+      userId: _testUserId,
+      role: _testUserRole,
+      name: _testUserName,
+    );
 
-/// Replica la lógica del redirect del router para poder testearla sin
-/// montar el GoRouter completo. Las 4 reglas en orden:
-/// 1. No autenticado → /login
-/// 2. Autenticado sin PIN → /pin-setup
-/// 3. Autenticado con PIN, no desbloqueado → /pin-login
-/// 4. Autenticado y desbloqueado → shell del rol (si está en ruta de auth)
-String? _resolveRedirect(AuthState authState, String location) {
-  if (authState is AuthLoading || authState is AuthInitial) {
-    return null;
-  }
+    final dio = _buildMockDio(_buildHandlers());
+    final auth = AuthNotifier(dio: dio, storage: storage);
 
-  final isAuthRoute = location == '/login' ||
-      location == '/pin-setup' ||
-      location == '/pin-login' ||
-      location == '/pin-bloqueado';
+    // El usuario loguea antes de que checkSession termine.
+    await auth.login(_testUserPhone, _testPassword);
+    expect(auth.state, isA<AuthAuthenticated>());
 
-  // Regla 1
-  if (authState is AuthUnauthenticated || authState is AuthError) {
-    return isAuthRoute ? null : '/login';
-  }
+    await auth.checkSession();
+    final state = auth.state as AuthAuthenticated;
+    expect(state.usuario.nombre, _testUserName);
+  });
 
-  if (authState is AuthAuthenticated) {
-    final pinEstablecido = authState.pinEstablecido;
-    final desbloqueado = authState.desbloqueado;
-    final rol = authState.usuario.rol;
+  test('logout limpia sesión y deja AuthUnauthenticated', () async {
+    final storage = _FakeTokenStorage();
+    final dio = _buildMockDio(_buildHandlers());
+    final auth = AuthNotifier(dio: dio, storage: storage);
 
-    // Regla 2
-    if (!pinEstablecido) {
-      return location == '/pin-setup' ? null : '/pin-setup';
-    }
+    await auth.login(_testUserPhone, _testPassword);
+    expect(auth.state, isA<AuthAuthenticated>());
 
-    // Regla 3
-    if (!desbloqueado) {
-      return location == '/pin-login' ? null : '/pin-login';
-    }
+    await auth.logout();
 
-    // Regla 4
-    if (isAuthRoute) {
-      return switch (rol) {
-        'cajero' => '/cajero/inicio',
-        'cobrador' => '/cobrador/mi-dia',
-        _ => '/cajero/inicio',
-      };
-    }
-  }
-
-  return null;
+    expect(auth.state, isA<AuthUnauthenticated>());
+    expect(await storage.getAccessToken(), isNull);
+    expect(await storage.getRefreshToken(), isNull);
+  });
 }

@@ -4,9 +4,9 @@ import { Request } from 'express';
  * Payload del JWT tal como lo firma AuthService y lo verifica JwtAuthGuard.
  * Viaja en `request.user` después de que el guard lo extrae del Bearer token.
  *
- * `tokenVersion` se incluye en el payload para que refresh/loginPin puedan
- * invalidar sesiones, pero los controladores no lo necesitan: les basta
- * `sub` (quién es) y `rol` (qué puede hacer).
+ * `tokenVersion` se incluye en el payload para que refresh pueda invalidar
+ * sesiones, pero los controladores no lo necesitan: les basta `sub` (quién es)
+ * y `rol` (qué puede hacer).
  */
 export interface JwtPayload {
   sub: string;

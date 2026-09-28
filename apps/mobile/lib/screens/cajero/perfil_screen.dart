@@ -117,7 +117,7 @@ class PerfilScreen extends ConsumerWidget {
                     ),
                     TavListRow(
                       title: 'Seguridad',
-                      subtitle: 'PIN y autenticación',
+                      subtitle: 'Autenticación y sesión',
                       avatar: const Icon(Icons.lock_outline, color: TavColors.blue, size: 20),
                       onTap: () => context.push('/cajero/seguridad'),
                       showDivider: true,

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:go_router/go_router.dart';
 
 import '../components/tav_button.dart';
 import '../components/tav_field.dart';
@@ -13,9 +12,9 @@ import '../theme/tav_text.dart';
 
 /// Pantalla de login con correo y contraseña.
 ///
-/// Es el primer ingreso. La API valida correo + contraseña con argon2.
-/// Después del login, si no hay PIN establecido, va a /pin-setup.
-/// Si hay PIN, va al shell del rol correspondiente.
+/// Pantalla de login con correo y contraseña.
+/// La API valida las credenciales y devuelve tokens; la sesión queda guardada.
+/// Tras el login, el router redirige al shell del rol correspondiente.
 ///
 /// La cabecera replica s-welcome del prototipo: bloque navy con gradiente,
 /// esquinas inferiores redondeadas 34px, logo SVG + titular en blanco.
@@ -63,11 +62,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     final state = ref.read(authProvider);
     if (state is AuthError) {
-      if (state.message == 'PIN_BLOQUEADO') {
-        context.go('/pin-bloqueado');
-      } else {
-        setState(() => _error = state.message);
-      }
+      setState(() => _error = state.message);
     }
   }
 

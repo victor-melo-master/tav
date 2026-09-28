@@ -31,22 +31,9 @@ class AuthLoading extends AuthState {
 }
 
 class AuthAuthenticated extends AuthState {
-  const AuthAuthenticated({
-    required this.usuario,
-    required this.pinEstablecido,
-    required this.desbloqueado,
-  });
+  const AuthAuthenticated({required this.usuario});
 
   final UsuarioDto usuario;
-  final bool pinEstablecido;
-
-  /// True cuando el usuario probó su identidad en esta ejecución de la app.
-  /// - Login con contraseña → true (acaba de probar su identidad).
-  /// - checkSession (arranque en frío con tokens guardados) → false:
-  ///   tiene sesión pero debe validar el PIN.
-  /// - loginPin exitoso → true.
-  /// - setPin exitoso → true, porque venía de un login con contraseña.
-  final bool desbloqueado;
 }
 
 class AuthUnauthenticated extends AuthState {
@@ -67,12 +54,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final TokenStorage storage;
 
   /// Al arrancar la app, comprueba si hay sesión guardada.
-  /// Si hay tokens, llama a /auth/me para obtener pinEstablecido del servidor.
+  /// Si hay tokens, llama a /auth/me para validar la sesión.
   ///
   /// Guarda contra respuestas tardías: si el usuario loguea o sale antes de
-  /// que /auth/me responda, no se pisa el estado. Esto previene el bucle
-  /// pin-setup → pin-login → pin-setup que ocurría cuando checkSession
-  /// llegaba tarde con pinEstablecido=false y el router mandaba atrás.
+  /// que /auth/me responda, no se pisa el estado.
   Future<void> checkSession() async {
     final token = await storage.getAccessToken();
     final userId = await storage.getUserId();
@@ -106,7 +91,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
       final usuarioData = response.data as Map<String, dynamic>;
-      final pinEstablecido = (usuarioData['pinEstablecido'] as bool?) ?? false;
       state = AuthAuthenticated(
         usuario: UsuarioDto(
           id: usuarioData['id'] as String,
@@ -114,10 +98,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           telefono: usuarioData['telefono'] as String?,
           nombre: usuarioData['nombre'] as String,
           rol: usuarioData['rol'] as String,
-          pinEstablecido: pinEstablecido,
         ),
-        pinEstablecido: pinEstablecido,
-        desbloqueado: false, // Arranque en frío: tiene sesión pero debe validar PIN.
       );
     } catch (e) {
       // Si /auth/me falla, limpiar sesión y mandar a login — pero solo si
@@ -158,74 +139,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         name: loginResp.usuario.nombre,
       );
 
-      state = AuthAuthenticated(
-        usuario: loginResp.usuario,
-        pinEstablecido: loginResp.usuario.pinEstablecido,
-        desbloqueado: true, // Login con contraseña: acaba de probar su identidad.
-      );
-    } on DioException catch (e) {
-      final code = e.response?.data?['code'] as String?;
-      if (code == 'PIN_BLOQUEADO') {
-        state = const AuthError('PIN_BLOQUEADO');
-      } else {
-        // err.message ya viene traducido por ErrorInterceptor.
-        state = AuthError(
-          e.message ?? 'No pudimos conectar. Revisa tu conexión.',
-        );
-      }
-    } catch (e) {
-      state = const AuthError('Ocurrió un error inesperado.');
-    }
-  }
-
-  /// Reingreso con PIN (login-pin): usa refresh token + PIN para obtener nuevos tokens.
-  Future<void> loginPin(String pin) async {
-    state = const AuthLoading();
-    try {
-      final refreshToken = await storage.getRefreshToken();
-      if (refreshToken == null) {
-        state = const AuthError('No hay sesión guardada. Ingresa con tu contraseña.');
-        return;
-      }
-
-      final response = await dio.post(
-        '/auth/login-pin',
-        data: LoginPinRequest(refreshToken: refreshToken, pin: pin).toJson(),
-      );
-
-      final loginPinResp = LoginPinResponse.fromJson(
-        response.data as Map<String, dynamic>,
-      );
-
-      await storage.saveTokens(
-        accessToken: loginPinResp.accessToken,
-        refreshToken: loginPinResp.refreshToken,
-      );
-
-      // Tras loginPin exitoso, obtener datos actualizados del usuario.
-      // pinEstablecido viene como booleano explícito en la respuesta.
-      final meResponse = await dio.get('/auth/me');
-      final usuarioData = meResponse.data as Map<String, dynamic>;
-      final pinEstablecido = (usuarioData['pinEstablecido'] as bool?) ?? true;
-
-      await storage.saveSession(
-        userId: usuarioData['id'] as String,
-        role: usuarioData['rol'] as String,
-        name: usuarioData['nombre'] as String,
-      );
-
-      state = AuthAuthenticated(
-        usuario: UsuarioDto(
-          id: usuarioData['id'] as String,
-          email: usuarioData['email'] as String,
-          telefono: usuarioData['telefono'] as String?,
-          nombre: usuarioData['nombre'] as String,
-          rol: usuarioData['rol'] as String,
-          pinEstablecido: pinEstablecido,
-        ),
-        pinEstablecido: pinEstablecido,
-        desbloqueado: true, // PIN validado: probó su identidad.
-      );
+      state = AuthAuthenticated(usuario: loginResp.usuario);
     } on DioException catch (e) {
       // err.message ya viene traducido por ErrorInterceptor.
       state = AuthError(
@@ -233,42 +147,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
     } catch (e) {
       state = const AuthError('Ocurrió un error inesperado.');
-    }
-  }
-
-  /// Establecer PIN de 4 dígitos en el servidor.
-  Future<bool> setPin(String pin) async {
-    try {
-      await dio.post(
-        '/auth/pin',
-        data: SetPinRequest(pin: pin).toJson(),
-      );
-      // Tras setPin exitoso, actualizar estado para reflejar pinEstablecido=true.
-      // desbloqueado se mantiene true: venía de un login con contraseña.
-      final prev = state as AuthAuthenticated;
-      state = AuthAuthenticated(
-        usuario: prev.usuario,
-        pinEstablecido: true,
-        desbloqueado: prev.desbloqueado,
-      );
-      return true;
-    } on DioException catch (e) {
-      final statusCode = e.response?.statusCode;
-      final serverCode = e.response?.data?['code'] as String?;
-      final serverMessage = e.response?.data?['message'] as String?;
-      if (kDebugMode) {
-        debugPrint('[AuthState] setPin error: status=$statusCode code=$serverCode message=$serverMessage');
-      }
-      // El ErrorInterceptor ya traduce serverMessage, así que el estado AuthError
-      // tendrá el mensaje real del servidor.
-      state = AuthError(
-        serverMessage ?? e.message ?? 'No pudimos guardar el PIN.',
-      );
-      return false;
-    } catch (e) {
-      if (kDebugMode) debugPrint('[AuthState] setPin error: $e');
-      state = const AuthError('Ocurrió un error inesperado al guardar el PIN.');
-      return false;
     }
   }
 

@@ -7,9 +7,9 @@ import '../../theme/tav_text.dart';
 
 /// Pantalla de seguridad del cajero.
 ///
-/// PENDIENTE DE DEFINIR: el cambio de PIN y la verificación biométrica
-/// no están implementados en la API todavía. Esta pantalla muestra
-/// un estado vacío honesto.
+/// PENDIENTE DE DEFINIR: funcionalidad de seguridad adicional (sesiones activas,
+/// cambio de contraseña, verificación biométrica). Esta pantalla muestra un
+/// estado vacío honesto mientras se define.
 class SeguridadScreen extends StatelessWidget {
   const SeguridadScreen({super.key});
 
