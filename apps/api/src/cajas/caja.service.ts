@@ -633,6 +633,9 @@ export class CajaService {
         orderBy: { seq: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
+        include: {
+          registradoPor: { select: { id: true, nombre: true, email: true } },
+        },
       }),
       this.prisma.movimientoCaja.count({ where }),
     ]);

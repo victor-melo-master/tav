@@ -43,6 +43,7 @@ model Usuario {
   perfilCajero   PerfilCajero?
   perfilCobrador PerfilCobrador?
   perfilPagador  PerfilPagador?
+  movimientosCaja MovimientoCaja[]
 
   @@index([rol, activo])
 }
@@ -565,6 +566,7 @@ model MovimientoCaja {
   // las dos patas de una apertura comparten el mismo uuid.
   motivo          String? // obligatorio en reversos y ajustes
   registradoPorId String
+  registradoPor   Usuario @relation(fields: [registradoPorId], references: [id])
   creadoAt        DateTime @default(now())
 
   @@unique([cajaId, clientUuid])

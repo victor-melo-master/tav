@@ -340,6 +340,7 @@ export interface MovimientoCaja {
   clientUuid: string;
   motivo?: string | null;
   registradoPorId: string;
+  registradoPor?: { id: string; nombre: string; email: string } | null;
   creadoAt: string;
 }
 

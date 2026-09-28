@@ -339,7 +339,7 @@ function CajaCorredorCard({
           className="h-8 px-2 text-[11px]"
           onClick={() => setVerMovs(true)}
         >
-          Movs
+          Movimientos
         </Button>
         <Button
           size="sm"
@@ -655,13 +655,14 @@ function MovimientosDialog({
                 <TableHead className="text-right">Monto</TableHead>
                 <TableHead className="text-right">Saldo</TableHead>
                 <TableHead>Motivo</TableHead>
+                <TableHead>Registrado por</TableHead>
                 <TableHead>Fecha</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {movs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-tav-ink-3 py-6">
+                  <TableCell colSpan={6} className="text-center text-tav-ink-3 py-6">
                     Sin movimientos
                   </TableCell>
                 </TableRow>
@@ -683,6 +684,14 @@ function MovimientosDialog({
                   </TableCell>
                   <TableCell className="text-[12px] text-tav-ink-3">
                     {m.motivo ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-[12px] text-tav-ink-3">
+                    {m.registradoPor?.nombre ?? '—'}
+                    {m.registradoPor?.email && (
+                      <span className="block text-[11px] text-tav-ink-3/70">
+                        {m.registradoPor.email}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-[12px] text-tav-ink-3">
                     {formatFecha(m.creadoAt, true)}
