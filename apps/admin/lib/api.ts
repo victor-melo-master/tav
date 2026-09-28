@@ -26,6 +26,10 @@ import type {
   AperturaCajaRespuesta,
   AnulacionAperturaRespuesta,
   MovimientosDiarios,
+  Corredor,
+  CrearCorredorPayload,
+  EditarCorredorPayload,
+  CrearCajaPayload,
 } from './types';
 
 /**
@@ -376,6 +380,45 @@ export const api = {
 
   anularApertura(body: AnularAperturaPayload): Promise<AnulacionAperturaRespuesta> {
     return request<AnulacionAperturaRespuesta>('/cajas/anular-apertura', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  // ─────────────────────────── SERVICIOS (CORREDORES) ───────────────────────────
+
+  listarCorredores(): Promise<Corredor[]> {
+    return request<Corredor[]>('/corredores');
+  },
+
+  obtenerCorredor(id: string): Promise<Corredor> {
+    return request<Corredor>(`/corredores/${id}`);
+  },
+
+  crearCorredor(body: CrearCorredorPayload): Promise<Corredor> {
+    return request<Corredor>('/corredores', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  editarCorredor(id: string, body: EditarCorredorPayload): Promise<Corredor> {
+    return request<Corredor>(`/corredores/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
+
+  activarCorredor(id: string): Promise<Corredor> {
+    return request<Corredor>(`/corredores/${id}/activar`, { method: 'POST' });
+  },
+
+  desactivarCorredor(id: string): Promise<Corredor> {
+    return request<Corredor>(`/corredores/${id}/desactivar`, { method: 'POST' });
+  },
+
+  crearCaja(body: CrearCajaPayload): Promise<Caja> {
+    return request<Caja>('/cajas', {
       method: 'POST',
       body: JSON.stringify(body),
     });

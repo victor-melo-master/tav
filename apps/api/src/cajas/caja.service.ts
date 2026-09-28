@@ -513,6 +513,19 @@ export class CajaService {
     return caja;
   }
 
+  /** Crea una caja física (por defecto no es madre). */
+  async crearCaja(dto: { nombre: string; moneda: string; pais?: string | null; esMadre?: boolean }): Promise<Caja> {
+    return this.prisma.caja.create({
+      data: {
+        esMadre: dto.esMadre ?? false,
+        moneda: dto.moneda,
+        nombre: dto.nombre,
+        pais: dto.pais ?? null,
+        saldoCents: 0n,
+      },
+    });
+  }
+
   /** Todas las cajas (madre y de corredor), incluidas las de corredores desactivados. */
   async listarCajas(): Promise<Caja[]> {
     return this.prisma.caja.findMany({ orderBy: { creadaAt: 'asc' } });

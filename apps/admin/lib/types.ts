@@ -368,6 +368,55 @@ export interface AnulacionAperturaRespuesta {
   movimientoMadre: MovimientoCaja;
 }
 
+export interface CrearCajaPayload {
+  nombre: string;
+  moneda: string;
+  pais?: string;
+  esMadre?: boolean;
+}
+
+// ─────────────────────────── SERVICIOS (CORREDORES) ───────────────────────────
+
+export interface Corredor {
+  id: string;
+  activo: boolean;
+  pais: string;
+  paisNombre: string;
+  moneda: string;
+  monedaNombre: string;
+  formaEntrega: string;
+  formaEntregaNombre: string;
+  servicio: string;
+  servicioNombre: string;
+  cajaId: string;
+  caja?: Caja | null;
+  creadoPorId: string;
+  creadoAt: string;
+  desactivadoAt?: string | null;
+  desactivadoPorId?: string | null;
+}
+
+export interface CrearCorredorPayload {
+  pais: string;
+  paisNombre: string;
+  moneda: string;
+  monedaNombre: string;
+  formaEntrega: string;
+  formaEntregaNombre: string;
+  servicio: string;
+  servicioNombre: string;
+  cajaId: string;
+}
+
+export interface EditarCorredorPayload {
+  cajaId?: string;
+  formaEntrega?: string;
+  formaEntregaNombre?: string;
+  servicioNombre?: string;
+  moneda?: string;
+  monedaNombre?: string;
+}
+
 // ─────────────────────── MOVIMIENTOS DIARIOS ───────────────────────
 
 export interface MovimientoDiarioItem {

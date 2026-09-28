@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
@@ -53,8 +53,14 @@ type Pestana = 'movimientos' | 'operaciones' | 'ampliaciones' | 'precios';
 
 export default function FichaCajeroPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const pestanaInicial = (searchParams.get('tab') as Pestana | null) ?? 'movimientos';
   const { data, cargando, error, recargar } = useApi(() => api.fichaCajero(id), [id]);
-  const [pestana, setPestana] = React.useState<Pestana>('movimientos');
+  const [pestana, setPestana] = React.useState<Pestana>(
+    ['movimientos', 'operaciones', 'ampliaciones', 'precios'].includes(pestanaInicial)
+      ? pestanaInicial
+      : 'movimientos',
+  );
 
   if (cargando) return <CargandoPagina label="Cargando ficha…" />;
   if (error)

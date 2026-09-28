@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CajaService } from './caja.service';
 import { AbrirCajaHttpDto } from './dto/abrir-caja.dto';
+import { CrearCajaHttpDto } from './dto/crear-caja.dto';
 import { IngresarCajaMadreHttpDto } from './dto/ingresar-caja-madre.dto';
 import { AnularAperturaHttpDto } from './dto/anular-apertura.dto';
 import { PaginacionDto } from '../cajero/dto/paginacion.dto';
@@ -51,6 +52,18 @@ export class CajasController {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     return this.cajas.movimientosCaja(id, page, limit);
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Crea una caja física (no madre)' })
+  @ApiResponse({ status: 201, description: 'Caja creada' })
+  async crearCaja(@Body() dto: CrearCajaHttpDto) {
+    return this.cajas.crearCaja({
+      nombre: dto.nombre,
+      moneda: dto.moneda,
+      pais: dto.pais ?? null,
+      esMadre: dto.esMadre ?? false,
+    });
   }
 
   // ─────────────────────────── INGRESO A CAJA MADRE ───────────────────────────
