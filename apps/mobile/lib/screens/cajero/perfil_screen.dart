@@ -13,8 +13,8 @@ import '../../utils/labels.dart';
 
 /// Pantalla de perfil del cajero.
 ///
-/// Muestra al usuario, sus accesos (beneficiarios, estado de cuenta,
-/// seguridad, notificaciones, soporte) y el botón de cerrar sesión.
+/// Muestra al usuario, sus accesos (estado de cuenta, seguridad,
+/// notificaciones, soporte) y el botón de cerrar sesión.
 class PerfilScreen extends ConsumerWidget {
   const PerfilScreen({super.key});
 
@@ -94,13 +94,6 @@ class PerfilScreen extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: TavSpace.lg, vertical: 0),
                 child: Column(
                   children: [
-                    TavListRow(
-                      title: 'Mis beneficiarios',
-                      subtitle: 'Guarda tus contactos frecuentes',
-                      avatar: const Icon(Icons.group_outlined, color: TavColors.blue, size: 20),
-                      onTap: () => context.push('/cajero/beneficiarios'),
-                      showDivider: true,
-                    ),
                     TavListRow(
                       title: 'Estado de cuenta',
                       subtitle: 'Deuda, semáforo y movimientos',

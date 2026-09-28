@@ -403,9 +403,9 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
         children: [
           Expanded(
             child: _AccesoRapido(
-              icon: Icons.group_outlined,
-              label: 'Beneficiarios',
-              onTap: () => context.push('/cajero/beneficiarios'),
+              icon: Icons.history_outlined,
+              label: 'Historial',
+              onTap: () => context.push('/cajero/operaciones'),
             ),
           ),
           const SizedBox(width: 10),

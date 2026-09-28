@@ -169,6 +169,9 @@ topa su cupo en dos días. Por eso el orden de la lista de cobro lo encabezan lo
 - Volumen: **más de 20 al día**. El registro tiene que ser rápido.
 - Las cuentas destino de sus clientes **cambian casi siempre**: prioriza pegar y despachar
   por encima de mantener una libreta de beneficiarios guardados.
+  **Decisión de producto: no hay pantalla de beneficiarios guardados.** El cajero pega
+  los datos de destino en cada operación y no se retiene historial de cuentas.
+  El botón "Mis beneficiarios" se eliminó del inicio y del perfil.
 - Cada operación guarda la **tasa aplicada**.
 - La tasa la define el administrador manualmente.
 

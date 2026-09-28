@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 
 import '../screens/cajero/abono_screen.dart';
 import '../screens/cajero/ampliacion_screen.dart';
-import '../screens/cajero/beneficiarios_screen.dart';
 import '../screens/cajero/estado_cuenta_screen.dart';
 import '../screens/cajero/historial_screen.dart';
 import '../screens/cajero/inicio_screen.dart';
@@ -134,10 +133,6 @@ final tavRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/cajero/notificaciones',
         builder: (context, state) => const NotificacionesScreen(),
-      ),
-      GoRoute(
-        path: '/cajero/beneficiarios',
-        builder: (context, state) => const BeneficiariosScreen(),
       ),
       GoRoute(
         path: '/cajero/seguridad',

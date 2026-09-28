@@ -389,4 +389,91 @@ describe('Auth — logout real (tokenVersion)', () => {
   });
 });
 
+// ─────────────────────────── CAMBIAR CONTRASEÑA ───────────────────────────
+
+describe('Auth — cambiar contraseña', () => {
+  test('cambio correcto invalida tokens anteriores', async () => {
+    const u = await crearUsuario({
+      rol: 'cajero',
+      email: '0414-cambio1@tav.test',
+      password: 'clave-vieja',
+    });
+
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: u.email, password: 'clave-vieja' });
+
+    const res = await request(app.getHttpServer())
+      .post('/auth/cambiar-contrasena')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({
+        contrasenaActual: 'clave-vieja',
+        nuevaContrasena: 'clave-nueva',
+        confirmarContrasena: 'clave-nueva',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.ok).toBe(true);
+
+    // access token anterior aún puede vivir hasta expirar, pero el refresh
+    // con la versión anterior debe fallar porque tokenVersion cambió.
+    const refresh = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: login.body.refreshToken });
+    expect(refresh.status).toBe(401);
+
+    // login con la nueva contraseña funciona
+    const nuevoLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: u.email, password: 'clave-nueva' });
+    expect(nuevoLogin.status).toBe(201);
+  });
+
+  test('contraseña actual incorrecta devuelve 401', async () => {
+    const u = await crearUsuario({
+      rol: 'cajero',
+      email: '0414-cambio2@tav.test',
+      password: 'clave-vieja',
+    });
+
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: u.email, password: 'clave-vieja' });
+
+    const res = await request(app.getHttpServer())
+      .post('/auth/cambiar-contrasena')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({
+        contrasenaActual: 'clave-incorrecta',
+        nuevaContrasena: 'clave-nueva',
+        confirmarContrasena: 'clave-nueva',
+      });
+
+    expect(res.status).toBe(401);
+  });
+
+  test('confirmación distinta devuelve 400', async () => {
+    const u = await crearUsuario({
+      rol: 'cajero',
+      email: '0414-cambio3@tav.test',
+      password: 'clave-vieja',
+    });
+
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: u.email, password: 'clave-vieja' });
+
+    const res = await request(app.getHttpServer())
+      .post('/auth/cambiar-contrasena')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({
+        contrasenaActual: 'clave-vieja',
+        nuevaContrasena: 'clave-nueva',
+        confirmarContrasena: 'clave-distinta',
+      });
+
+    expect(res.status).toBe(400);
+  });
+});
+
 

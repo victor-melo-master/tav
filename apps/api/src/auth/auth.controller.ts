@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthenticatedRequest } from './auth.types';
 import { LoginDto, RefreshDto } from './dto/login.dto';
+import { CambiarContrasenaDto } from './dto/cambiar-contrasena.dto';
 import { Public } from './public.decorator';
 
 @Controller('auth')
@@ -28,6 +29,14 @@ export class AuthController {
   @Post('logout-all')
   async logoutAll(@Req() req: AuthenticatedRequest) {
     return this.auth.logoutAll(req.user.sub);
+  }
+
+  @Post('cambiar-contrasena')
+  async cambiarContrasena(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: CambiarContrasenaDto,
+  ) {
+    return this.auth.cambiarContrasena(req.user.sub, dto);
   }
 
   @Get('me')

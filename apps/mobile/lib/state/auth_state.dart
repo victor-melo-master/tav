@@ -160,6 +160,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await storage.clearAll();
     state = const AuthUnauthenticated();
   }
+
+  /// Cambia la contraseña del usuario autenticado.
+  ///
+  /// No toca el estado ni la sesión local: la pantalla llora decide cuándo
+  /// cerrar la sesión (el servidor ya incrementó tokenVersion, así que los
+  /// tokens guardados quedan invalidados tras el cambio).
+  Future<String?> cambiarContrasena({
+    required String contrasenaActual,
+    required String nuevaContrasena,
+    required String confirmarContrasena,
+  }) async {
+    if (nuevaContrasena.isEmpty) {
+      return 'La nueva contraseña no puede estar vacía';
+    }
+    if (nuevaContrasena != confirmarContrasena) {
+      return 'La confirmación no coincide';
+    }
+
+    try {
+      await dio.post(
+        '/auth/cambiar-contrasena',
+        data: CambiarContrasenaRequest(
+          contrasenaActual: contrasenaActual,
+          nuevaContrasena: nuevaContrasena,
+          confirmarContrasena: confirmarContrasena,
+        ).toJson(),
+      );
+      return null;
+    } on DioException catch (e) {
+      return e.message ?? 'No se pudo cambiar la contraseña';
+    } catch (e) {
+      return 'Ocurrió un error inesperado';
+    }
+  }
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {

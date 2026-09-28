@@ -70,6 +70,24 @@ class RefreshRequest {
   Map<String, dynamic> toJson() => {'refreshToken': refreshToken};
 }
 
+class CambiarContrasenaRequest {
+  const CambiarContrasenaRequest({
+    required this.contrasenaActual,
+    required this.nuevaContrasena,
+    required this.confirmarContrasena,
+  });
+
+  final String contrasenaActual;
+  final String nuevaContrasena;
+  final String confirmarContrasena;
+
+  Map<String, dynamic> toJson() => {
+        'contrasenaActual': contrasenaActual,
+        'nuevaContrasena': nuevaContrasena,
+        'confirmarContrasena': confirmarContrasena,
+      };
+}
+
 /// Decodifica el JWT para extraer el rol sin verificar la firma.
 /// La verificación la hace el servidor; esto es solo para enrutado.
 String extractRoleFromJwt(String jwt) {

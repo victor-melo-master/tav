@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -8,6 +9,7 @@ import argon2 from 'argon2';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto, RefreshDto } from './dto/login.dto';
+import { CambiarContrasenaDto } from './dto/cambiar-contrasena.dto';
 import { JwtPayload } from './auth.types';
 import type { StringValue } from 'ms';
 
@@ -106,6 +108,43 @@ export class AuthService {
       include: { perfilCajero: true, perfilCobrador: true },
     });
     return this.perfilPublico(usuario);
+  }
+
+  // ─────────────────────────── CAMBIAR CONTRASEÑA ───────────────────────────
+
+  /**
+   * Cambia la contraseña del usuario autenticado.
+   *
+   * Valida la contraseña actual, aplica la misma regla mínima que al crear
+   * usuarios (no vacía) y, al guardar el nuevo hash, incrementa tokenVersion
+   * para invalidar todos los tokens emitidos previamente.
+   */
+  async cambiarContrasena(
+    userId: string,
+    dto: CambiarContrasenaDto,
+  ): Promise<{ ok: true }> {
+    if (dto.nuevaContrasena.trim().length === 0) {
+      throw new BadRequestException('La nueva contraseña no puede estar vacía');
+    }
+    if (dto.nuevaContrasena !== dto.confirmarContrasena) {
+      throw new BadRequestException('La confirmación no coincide con la nueva contraseña');
+    }
+
+    const usuario = await this.prisma.usuario.findUnique({ where: { id: userId } });
+    if (!usuario) throw new UnauthorizedException('Usuario no válido');
+
+    const ok = await argon2.verify(usuario.passwordHash, dto.contrasenaActual);
+    if (!ok) throw new UnauthorizedException('Contraseña actual incorrecta');
+
+    const nuevoHash = await argon2.hash(dto.nuevaContrasena);
+    await this.prisma.usuario.update({
+      where: { id: userId },
+      data: {
+        passwordHash: nuevoHash,
+        tokenVersion: { increment: 1 },
+      },
+    });
+    return { ok: true };
   }
 
   // ─────────────────────────── HELPERS ───────────────────────────
