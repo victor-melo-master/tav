@@ -105,12 +105,12 @@ class _PreciosScreenState extends ConsumerState<PreciosScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    c.servicioNombre,
+                    '${c.monedaNombre} ${c.servicioNombre}',
                     style: TavText.label.copyWith(color: TavColors.ink),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${c.paisNombre} · ${c.formaEntregaNombre}',
+                    c.paisNombre,
                     style: TavText.caption.copyWith(color: TavColors.ink3),
                   ),
                 ],

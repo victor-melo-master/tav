@@ -370,8 +370,8 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
                   ),
                   if (primero != null)
                     Text(
-                      '${primero.servicioNombre}: ${formatGydDecimal(primero.precioGyd)}'
-                          '${segundo != null ? ' · ${segundo.servicioNombre}: ${formatGydDecimal(segundo.precioGyd)}' : ''}',
+                      '${primero.monedaNombre} ${primero.servicioNombre}: ${formatGydDecimal(primero.precioGyd)}'
+                          '${segundo != null ? ' · ${segundo.monedaNombre} ${segundo.servicioNombre}: ${formatGydDecimal(segundo.precioGyd)}' : ''}',
                       style: TavText.h2.copyWith(
                         fontSize: 16,
                         color: TavColors.ink,
@@ -592,10 +592,12 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
   }
 
   String _servicioLabel(OperacionDto op) {
-    if (op.corredorPaisNombre != null && op.corredorServicioNombre != null) {
-      return '${op.corredorPaisNombre} · ${op.corredorServicioNombre}';
-    }
-    return 'Operación';
+    final servicio = op.corredorMonedaNombre != null && op.corredorServicioNombre != null
+        ? '${op.corredorMonedaNombre} ${op.corredorServicioNombre}'
+        : null;
+    final pais = op.corredorPaisNombre;
+    if (servicio != null && pais != null) return '$servicio · $pais';
+    return servicio ?? pais ?? 'Operación';
   }
 }
 

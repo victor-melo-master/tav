@@ -112,6 +112,7 @@ class OperacionDto {
     required this.motivoAnulacion,
     this.corredorPaisNombre,
     this.corredorServicioNombre,
+    this.corredorMonedaNombre,
   });
 
   final String id;
@@ -130,6 +131,7 @@ class OperacionDto {
   final String? motivoAnulacion;
   final String? corredorPaisNombre;
   final String? corredorServicioNombre;
+  final String? corredorMonedaNombre;
 
   factory OperacionDto.fromJson(Map<String, dynamic> json) {
     return OperacionDto(
@@ -153,6 +155,7 @@ class OperacionDto {
       motivoAnulacion: json['motivoAnulacion'] as String?,
       corredorPaisNombre: json['corredor']?['paisNombre'] as String?,
       corredorServicioNombre: json['corredor']?['servicioNombre'] as String?,
+      corredorMonedaNombre: json['corredor']?['monedaNombre'] as String?,
     );
   }
 }

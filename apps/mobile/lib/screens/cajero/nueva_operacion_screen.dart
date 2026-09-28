@@ -530,7 +530,13 @@ class _NuevaOperacionScreenState extends ConsumerState<NuevaOperacionScreen> {
           TavCard(
             child: Column(
               children: [
-                _kvRow('Destino', _corredor?.paisNombre ?? '—'),
+                _kvRow(
+                  'Servicio',
+                  _corredor != null
+                      ? '${_corredor!.monedaNombre} ${_corredor!.servicioNombre}'
+                      : '—',
+                ),
+                _kvRow('País', _corredor?.paisNombre ?? '—'),
                 _kvRow('Entrega', _corredor?.formaEntregaNombre ?? '—'),
                 _kvRow('Precio', 'G\$ ${_formatPrecio(_precioGyd)} / USD'),
               ],
@@ -791,12 +797,12 @@ class _CorredorCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${corredor.paisNombre} · ${corredor.monedaNombre}',
+                    '${corredor.monedaNombre} ${corredor.servicioNombre}',
                     style: TavText.h2.copyWith(fontSize: 15),
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    corredor.formaEntregaNombre,
+                    corredor.paisNombre,
                     style: TavText.body2.copyWith(color: TavColors.ink3, height: 1.5),
                   ),
                   const SizedBox(height: 9),

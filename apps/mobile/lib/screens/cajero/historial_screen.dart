@@ -236,9 +236,11 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
       };
 
   String _servicioLabel(OperacionDto op) {
-    if (op.corredorPaisNombre != null && op.corredorServicioNombre != null) {
-      return '${op.corredorPaisNombre} · ${op.corredorServicioNombre}';
-    }
-    return 'Operación';
+    final servicio = op.corredorMonedaNombre != null && op.corredorServicioNombre != null
+        ? '${op.corredorMonedaNombre} ${op.corredorServicioNombre}'
+        : null;
+    final pais = op.corredorPaisNombre;
+    if (servicio != null && pais != null) return '$servicio · $pais';
+    return servicio ?? pais ?? 'Operación';
   }
 }

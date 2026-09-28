@@ -175,10 +175,11 @@ class _OperacionDetailScreenState extends ConsumerState<OperacionDetailScreen> {
               children: [
                 _kvRow(
                   'Servicio',
-                  op.corredorPaisNombre != null && op.corredorServicioNombre != null
-                      ? '${op.corredorPaisNombre} · ${op.corredorServicioNombre}'
+                  op.corredorMonedaNombre != null && op.corredorServicioNombre != null
+                      ? '${op.corredorMonedaNombre} ${op.corredorServicioNombre}'
                       : '—',
                 ),
+                _kvRow('País', op.corredorPaisNombre ?? '—'),
                 _kvRow('Precio', 'G\$ ${formatGydDecimal(op.tasaAplicada)} por dólar'),
                 _kvRow('Fecha y hora', _fechaHora(op.creadaAt)),
                 const Divider(height: 16),
