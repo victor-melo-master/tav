@@ -13,12 +13,13 @@ import '../../data/pagador_api.dart';
 import '../../theme/tav_colors.dart';
 import '../../theme/tav_space.dart';
 import '../../theme/tav_text.dart';
+import '../../utils/labels.dart';
 import '../../utils/uuid_gen.dart';
 
 /// Pantalla de ejecución de pago del pagador.
 ///
 /// El pagador ve el pedido (monto en dólares, datos del beneficiario) y
-/// anota cuántos bolívares entregó, a qué tasa y de qué forma. La captura
+/// anota cuánto entregó en moneda local, a qué tasa y de qué forma. La captura
 /// del pago es obligatoria.
 class PagadorOperacionScreen extends ConsumerStatefulWidget {
   const PagadorOperacionScreen({super.key, required this.operacionId});
@@ -132,7 +133,7 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
     final montoDestino = _montoDestinoCtrl.text.trim();
 
     if (montoDestino.isEmpty) {
-      _toast('Falta cuánto recibió el beneficiario (bolívares)');
+      _toast('Falta cuánto recibió el beneficiario (${item.corredor.monedaNombre})');
       return;
     }
     if (tasa.isEmpty) {
@@ -151,8 +152,8 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
     final confirmado = await _confirmarSiHayDescuadre(item, montoDestino, tasa);
     if (!confirmado) return;
 
-    final montoDestinoBs = _parseBolivares(montoDestino);
-    final montoDestinoCents = (montoDestinoBs * 100).round();
+    final montoDestinoValor = _parseMontoDestino(montoDestino);
+    final montoDestinoCents = (montoDestinoValor * 100).round();
 
     setState(() => _enviando = true);
     try {
@@ -270,9 +271,9 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
           ),
           const SizedBox(height: TavSpace.md),
 
-          // Bolívares entregados
+          // Monto entregado en moneda destino
           TavField(
-            label: 'Bolívares entregados',
+            label: '${item.corredor.monedaNombre} entregados',
             hint: 'Cuánto recibió el beneficiario',
             controller: _montoDestinoCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -282,7 +283,7 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
           // Tasa de ejecución
           TavField(
             label: 'Tasa de ejecución',
-            hint: 'A cómo se ejecutó el cambio (240, 244, 250...)',
+            hint: 'A cómo se ejecutó el cambio',
             controller: _tasaCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
@@ -370,7 +371,7 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
     _toast('Datos copiados');
   }
 
-  double _parseBolivares(String texto) {
+  double _parseMontoDestino(String texto) {
     return double.tryParse(texto.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
   }
 
@@ -382,14 +383,14 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
     final tasaNum = double.tryParse(tasa.replaceAll(',', '.'));
     if (tasaNum == null || tasaNum <= 0) return true;
 
-    final entregadoBs = _parseBolivares(montoDestino);
-    if (entregadoBs <= 0) return true;
+    final entregadoDestino = _parseMontoDestino(montoDestino);
+    if (entregadoDestino <= 0) return true;
 
     final montoUsd = item.montoOrigenCents / 100.0;
-    final esperadoBs = montoUsd * tasaNum;
-    if (esperadoBs <= 0) return true;
+    final esperadoDestino = montoUsd * tasaNum;
+    if (esperadoDestino <= 0) return true;
 
-    final diferencia = (entregadoBs - esperadoBs).abs() / esperadoBs;
+    final diferencia = (entregadoDestino - esperadoDestino).abs() / esperadoDestino;
     if (diferencia <= 0.02) return true;
 
     final formatter = NumberFormat.currency(
@@ -397,14 +398,15 @@ class _PagadorOperacionScreenState extends ConsumerState<PagadorOperacionScreen>
       symbol: '',
       decimalDigits: 2,
     );
+    final simbolo = simboloMoneda(item.corredor.moneda);
 
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Revisa los números'),
             content: Text(
-              'Según la tasa y el monto enviado, el beneficiario debería haber recibido aproximadamente Bs ${formatter.format(esperadoBs)}.\n\n'
-              'Tú anotaste Bs ${formatter.format(entregadoBs)}.\n\n'
+              'Según la tasa y el monto enviado, el beneficiario debería haber recibido aproximadamente $simbolo${formatter.format(esperadoDestino)}.\n\n'
+              'Tú anotaste $simbolo${formatter.format(entregadoDestino)}.\n\n'
               'La diferencia es mayor al 2% — puede deberse a una comisión o redondeo. ¿Quieres continuar?',
             ),
             actions: [
