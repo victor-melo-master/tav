@@ -293,6 +293,51 @@ class CrearAvisoAbonoRequest {
       };
 }
 
+/// Notificación del sistema o manual del cobrador.
+class AvisoNotificacionDto {
+  const AvisoNotificacionDto({
+    required this.id,
+    required this.cajeroId,
+    required this.tipo,
+    required this.titulo,
+    required this.cuerpo,
+    required this.enviadoAt,
+    required this.leidoAt,
+    required this.resueltoAt,
+    required this.enviadoPorId,
+  });
+
+  final String id;
+  final String cajeroId;
+  final String tipo;
+  final String titulo;
+  final String cuerpo;
+  final DateTime enviadoAt;
+  final DateTime? leidoAt;
+  final DateTime? resueltoAt;
+  final String? enviadoPorId;
+
+  bool get leido => leidoAt != null;
+
+  factory AvisoNotificacionDto.fromJson(Map<String, dynamic> json) {
+    return AvisoNotificacionDto(
+      id: json['id'] as String,
+      cajeroId: json['cajeroId'] as String,
+      tipo: json['tipo'] as String,
+      titulo: json['titulo'] as String,
+      cuerpo: json['cuerpo'] as String,
+      enviadoAt: DateTime.parse(json['enviadoAt'] as String),
+      leidoAt: json['leidoAt'] == null
+          ? null
+          : DateTime.parse(json['leidoAt'] as String),
+      resueltoAt: json['resueltoAt'] == null
+          ? null
+          : DateTime.parse(json['resueltoAt'] as String),
+      enviadoPorId: json['enviadoPorId'] as String?,
+    );
+  }
+}
+
 class AmpliacionDto {
   const AmpliacionDto({
     required this.id,
@@ -547,6 +592,18 @@ class CajeroApi {
   Future<AvisoAbonoDto> cancelarAvisoAbono(String id) async {
     final r = await dio.post('/cajero/avisos-abono/$id/cancelar', data: {});
     return AvisoAbonoDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
+  Future<List<AvisoNotificacionDto>> listarNotificaciones() async {
+    final r = await dio.get('/cajero/avisos');
+    return (r.data as List<dynamic>)
+        .map((e) => AvisoNotificacionDto.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<AvisoNotificacionDto> marcarNotificacionLeida(String id) async {
+    final r = await dio.post('/cajero/avisos/$id/leer', data: {});
+    return AvisoNotificacionDto.fromJson(r.data as Map<String, dynamic>);
   }
 }
 

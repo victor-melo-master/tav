@@ -161,6 +161,9 @@ topa su cupo en dos días. Por eso el orden de la lista de cobro lo encabezan lo
 - El cobrador puede además enviar un **aviso manual**.
 - Debe registrarse si el cajero **leyó** el aviso. El admin necesita saberlo.
 - Alerta cuando un cajero **no se conecta desde hace 3 días**.
+- **Limitación conocida:** no hay notificaciones push. El aviso se evalúa y se
+  muestra cuando el usuario abre la app o el panel; no suena ni llega en
+  segundo plano.
 
 ---
 

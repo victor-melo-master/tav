@@ -57,13 +57,14 @@ model PerfilCajero {
   direccion   String?
   notas       String?
 
-  operaciones  Operacion[]
-  cobros       Cobro[]
-  movimientos  Movimiento[]
-  ampliaciones AmpliacionCredito[]
-  atenciones   Atencion[]
-  avisos       Aviso[]
-  precios      PrecioCajeroServicio[]
+  operaciones   Operacion[]
+  cobros        Cobro[]
+  movimientos   Movimiento[]
+  ampliaciones  AmpliacionCredito[]
+  atenciones    Atencion[]
+  avisos        Aviso[]
+  avisosAbono   AvisoAbono[]
+  precios       PrecioCajeroServicio[]
 }
 
 model PerfilCobrador {
@@ -362,6 +363,7 @@ enum TipoAviso {
   sin_cupo
   vencido
   ampliacion_resuelta
+  sin_conexion
 }
 
 model Aviso {
@@ -373,9 +375,39 @@ model Aviso {
   cuerpo       String
   enviadoAt    DateTime     @default(now())
   leidoAt      DateTime? // el admin necesita saber si lo leyó
+  resueltoAt   DateTime? // cierra el episodio: condición desapareció o se atendió
   enviadoPorId String? // null si lo generó el sistema
 
+  @@index([cajeroId, resueltoAt])
   @@index([cajeroId, leidoAt])
+}
+
+// ─────────────────────────── AVISOS DE ABONO ───────────────────────────
+//
+// El cajero avisa que tiene plata lista para que el cobrador la recoja.
+// NO es un pago: no toca el ledger, no baja la deuda ni libera cupo.
+// Solo se cierra cuando un cobrador registra un cobro real, o si el cajero
+// lo cancela, o si pasa más de 24h (caducado).
+
+enum EstadoAvisoAbono {
+  enviado
+  atendido
+  cancelado
+  caducado
+}
+
+model AvisoAbono {
+  id          String             @id @default(uuid())
+  cajeroId    String
+  cajero      PerfilCajero       @relation(fields: [cajeroId], references: [usuarioId])
+  montoCents  BigInt // GYD, en centavos. Es una intención, no dinero real.
+  nota        String?
+  estado      EstadoAvisoAbono   @default(enviado)
+  creadoAt    DateTime           @default(now())
+  actualizadoAt DateTime         @updatedAt
+
+  @@index([cajeroId, estado])
+  @@index([creadoAt])
 }
 
 // ─────────────────────────── AUDITORÍA ───────────────────────────

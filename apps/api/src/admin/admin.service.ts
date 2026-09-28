@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { SemaforoService } from '../ledger/semaforo.service';
 import { AvisosAbonoService } from '../avisos-abono/avisos-abono.service';
+import { AvisosService } from '../avisos/avisos.service';
 import { fechaCaracasHoy } from '../ledger/fecha-caracas';
 import { NoEncontradoException } from '../ledger/ledger.exceptions';
 import argon2 from 'argon2';
@@ -41,6 +42,7 @@ export class AdminService {
     private readonly ledger: LedgerService,
     private readonly semaforo: SemaforoService,
     private readonly avisosAbono: AvisosAbonoService,
+    private readonly avisos: AvisosService,
   ) {}
 
   // ─────────────────────────── USUARIOS ───────────────────────────
@@ -214,7 +216,7 @@ export class AdminService {
     });
     if (!perfil) throw new NoEncontradoException('cajero', cajeroId);
 
-    const [sem, movimientos, operaciones, ampliaciones, aviso] = await Promise.all([
+    const [sem, movimientos, operaciones, ampliaciones, aviso, avisos] = await Promise.all([
       this.semaforo.calcular(cajeroId),
       this.prisma.movimiento.findMany({
         where: { cajeroId },
@@ -231,6 +233,7 @@ export class AdminService {
         orderBy: { solicitadaAt: 'desc' },
       }),
       this.avisosAbono.obtenerActivo(cajeroId),
+      this.avisos.listarPorCajeroAdmin(cajeroId),
     ]);
 
     const { passwordHash: _ph, ...usuarioSinPassword } = perfil.usuario;
@@ -261,6 +264,7 @@ export class AdminService {
             creadoAt: aviso.creadoAt,
           }
         : null,
+      avisos,
       usuario: usuarioSinPassword,
     };
   }

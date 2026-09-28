@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { SemaforoService } from '../ledger/semaforo.service';
 import { AvisosAbonoService } from '../avisos-abono/avisos-abono.service';
+import { AvisosService } from '../avisos/avisos.service';
 import { fechaCaracasHoy } from '../ledger/fecha-caracas';
 import {
   NoEncontradoException,
@@ -27,6 +28,7 @@ export class CobradorService {
     private readonly ledger: LedgerService,
     private readonly semaforo: SemaforoService,
     private readonly avisosAbono: AvisosAbonoService,
+    private readonly avisos: AvisosService,
   ) {}
 
   // ─────────────────────────── CAJEROS ───────────────────────────
@@ -331,19 +333,6 @@ export class CobradorService {
    * El sistema genera avisos automáticos; este es el manual del cobrador.
    */
   async enviarAviso(cobradorId: string, dto: CrearAvisoDto) {
-    const cajero = await this.prisma.perfilCajero.findUnique({
-      where: { usuarioId: dto.cajeroId },
-    });
-    if (!cajero) throw new NoEncontradoException('cajero', dto.cajeroId);
-
-    return this.prisma.aviso.create({
-      data: {
-        cajeroId: dto.cajeroId,
-        tipo: 'cobro_manual',
-        titulo: dto.titulo,
-        cuerpo: dto.cuerpo,
-        enviadoPorId: cobradorId,
-      },
-    });
+    return this.avisos.crearManual(cobradorId, dto);
   }
 }

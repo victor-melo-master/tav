@@ -193,6 +193,47 @@ export default function FichaCajeroPage() {
           </Card>
         )}
 
+        {/* Avisos / notificaciones */}
+        {data.avisos.length > 0 && (
+          <Card>
+            <CardContent className="p-4">
+              <h3 className="mb-3 text-[13px] font-semibold text-tav-ink">
+                Avisos activos
+              </h3>
+              <div className="flex flex-col gap-3">
+                {data.avisos.map((a) => (
+                  <div
+                    key={a.id}
+                    className={cn(
+                      'rounded-lg border p-3',
+                      a.leidoAt
+                        ? 'border-tav-line bg-tav-surface'
+                        : 'border-tav-blue-200 bg-tav-blue-50',
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[13px] font-semibold text-tav-ink">
+                          {a.titulo}
+                        </p>
+                        <p className="mt-0.5 text-[12.5px] text-tav-ink-2">
+                          {a.cuerpo}
+                        </p>
+                      </div>
+                      <Badge variant={a.leidoAt ? 'outline' : 'navy'}>
+                        {a.leidoAt ? 'Leído' : 'Sin leer'}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-[11.5px] text-tav-ink-3">
+                      {formatFecha(a.enviadoAt)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Datos del perfil */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Dato label="Zona" valor={data.zona || '—'} />

@@ -36,6 +36,8 @@ class CajeroInicioScreen extends ConsumerStatefulWidget {
 }
 
 class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
+  int _noLeidas = 0;
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +45,7 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
       ref.read(resumenProvider.notifier).cargar();
       ref.read(corredoresProvider.notifier).cargar();
       ref.read(operacionesProvider.notifier).cargar();
+      _cargarNotificaciones();
     });
   }
 
@@ -50,6 +53,26 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
     ref.read(resumenProvider.notifier).cargar();
     ref.read(corredoresProvider.notifier).cargar();
     ref.read(operacionesProvider.notifier).cargar();
+    _cargarNotificaciones();
+  }
+
+  Future<void> _cargarNotificaciones() async {
+    try {
+      final api = ref.read(cajeroApiProvider);
+      final lista = await api.listarNotificaciones();
+      if (!mounted) return;
+      setState(() {
+        _noLeidas = lista.where((a) => !a.leido).length;
+      });
+    } catch (_) {
+      // No bloquear la pantalla si falla el contador.
+    }
+  }
+
+  Future<void> _abrirNotificaciones() async {
+    await context.push('/cajero/notificaciones');
+    if (!mounted) return;
+    await _cargarNotificaciones();
   }
 
   @override
@@ -144,11 +167,39 @@ class _CajeroInicioScreenState extends ConsumerState<CajeroInicioScreen> {
             ),
           ),
           GestureDetector(
-            onTap: () => context.push('/cajero/notificaciones'),
-            child: const Icon(
-              Icons.notifications_outlined,
-              color: TavColors.ink2,
-              size: 24,
+            onTap: _abrirNotificaciones,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(
+                  Icons.notifications_outlined,
+                  color: TavColors.ink2,
+                  size: 24,
+                ),
+                if (_noLeidas > 0)
+                  Positioned(
+                    right: -6,
+                    top: -6,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: TavColors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                      child: Center(
+                        child: Text(
+                          _noLeidas > 9 ? '9+' : '$_noLeidas',
+                          style: TavText.caption.copyWith(
+                            color: TavColors.surface,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],

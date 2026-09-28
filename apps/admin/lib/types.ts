@@ -149,6 +149,27 @@ export interface AvisoAbono {
   creadoAt: string;
 }
 
+export type TipoAviso =
+  | 'cobro_automatico'
+  | 'cobro_manual'
+  | 'cerca_del_limite'
+  | 'sin_cupo'
+  | 'vencido'
+  | 'ampliacion_resuelta'
+  | 'sin_conexion';
+
+export interface Aviso {
+  id: string;
+  cajeroId: string;
+  tipo: TipoAviso;
+  titulo: string;
+  cuerpo: string;
+  enviadoAt: string;
+  leidoAt?: string | null;
+  resueltoAt?: string | null;
+  enviadoPorId?: string | null;
+}
+
 export interface FichaCajero {
   id: string;
   nombre: string;
@@ -168,6 +189,7 @@ export interface FichaCajero {
   operaciones: Operacion[];
   ampliaciones: AmpliacionCredito[];
   avisoAbono: AvisoAbono | null;
+  avisos: Aviso[];
 }
 
 // ─────────────────────────── CIERRES ───────────────────────────
