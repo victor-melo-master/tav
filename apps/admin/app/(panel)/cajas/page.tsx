@@ -322,11 +322,11 @@ function CajaCorredorCard({
         {formatoMoneda(caja.saldoCents, caja.moneda)}
       </div>
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 grid grid-cols-2 gap-2">
         <Button
           size="sm"
           variant="default"
-          className="h-8"
+          className="h-8 px-2 text-[11px]"
           onClick={() => setAbierta(true)}
           disabled={!madreId}
         >
@@ -336,15 +336,15 @@ function CajaCorredorCard({
         <Button
           size="sm"
           variant="outline"
-          className="h-8"
+          className="h-8 px-2 text-[11px]"
           onClick={() => setVerMovs(true)}
         >
-          Movimientos
+          Movs
         </Button>
         <Button
           size="sm"
           variant="outline"
-          className="h-8"
+          className="h-8 px-2 text-[11px]"
           onClick={() => setRetiroAbierto(true)}
         >
           <MinusCircle className="mr-1 h-3.5 w-3.5" />
@@ -353,7 +353,7 @@ function CajaCorredorCard({
         <Button
           size="sm"
           variant="outline"
-          className="h-8"
+          className="h-8 px-2 text-[11px]"
           onClick={() => setDepositoAbierto(true)}
         >
           <PlusCircle className="mr-1 h-3.5 w-3.5" />
