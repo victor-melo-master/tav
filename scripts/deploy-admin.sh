@@ -21,6 +21,10 @@ REMOTE_DIR="/opt/tav"
 COMPOSE_FILE="docker-compose.prod.yml"
 HEALTH_LOCAL="http://127.0.0.1:3002/"
 ADMIN_LOG_LINES=30
+# El build --no-cache del admin es el que más espacio consume (reconstruye
+# todas las capas en cada deploy). Con menos de 20 GB libres el build muere
+# a la mitad y puede dejar el disco en 0 y Postgres tumbado (ya pasó).
+MIN_FREE_KB=$((20 * 1024 * 1024)) # 20 GB en bloques de 1K
 
 # Colores para salida (solo si es terminal).
 if [ -t 1 ]; then
@@ -62,6 +66,21 @@ rsync -avz \
 
 ok "Código sincronizado."
 
+# ─────────────────── 1.5. Verificar espacio en disco antes de construir ───────────────────
+
+FREE_KB=$(ssh "$REMOTE" "df -Pk / | awk 'NR==2 {print \$4}'")
+if [ "${FREE_KB:-0}" -lt "$MIN_FREE_KB" ]; then
+  FREE_GB=$(awk "BEGIN { printf \"%.1f\", ${FREE_KB:-0} / 1048576 }")
+  fail "Quedan ${FREE_GB} GB libres en $REMOTE (mínimo: 20 GB)."
+  fail "El build moriría a la mitad y puede tumbar Postgres."
+  fail "Limpia primero: ssh $REMOTE 'docker image prune -f && docker builder prune -f'"
+  fail "NUNCA limpies volúmenes: ahí viven la base de datos y los comprobantes."
+  exit 1
+fi
+
+FREE_GB=$(awk "BEGIN { printf \"%.1f\", $FREE_KB / 1048576 }")
+ok "Espacio libre en $REMOTE: ${FREE_GB} GB."
+
 # ─────────────────── 2. Reconstruir y levantar el contenedor admin ───────────────────
 
 log "Reconstruyendo el contenedor admin en $REMOTE..."
@@ -94,7 +113,16 @@ done
 
 ok "Panel responde localmente en ${WAITED}s."
 
-# ─────────────────── 4. Resumen ───────────────────
+# ─────────────────── 4. Limpiar imágenes viejas y caché de build ───────────────────
+
+# Cada build --no-cache deja capas e imágenes huérfanas; sin limpieza llenan
+# el disco (ya tumbó Postgres una vez). NUNCA se podan volúmenes: ahí viven
+# la base de datos y los comprobantes subidos.
+log "Limpiando imágenes sin usar y caché de build en $REMOTE..."
+ssh "$REMOTE" "docker image prune -f >/dev/null && docker builder prune -f >/dev/null" || true
+ok "Limpieza hecha (volúmenes intactos)."
+
+# ─────────────────── 5. Resumen ───────────────────
 
 echo ""
 ok "Despliegue del panel completo."

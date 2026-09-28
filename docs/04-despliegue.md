@@ -184,22 +184,65 @@ Qué hace, paso a paso:
    a `/opt/tav/`. Excluye `node_modules`, `dist`, `.env`, `.env.*`, `.git`,
    `coverage` y `*.log`. **Nunca toca `.env.prod` del servidor**: los secretos
    de producción viven ahí y no se sincronizan desde fuera.
-2. **`docker compose up -d --build`** en el servidor, con `--env-file .env.prod`.
+2. **Verifica el espacio libre en disco del servidor.** Si quedan menos de
+   20 GB, aborta con código 1 y explica cómo limpiar, en vez de empezar un
+   build que moriría a la mitad y dejaría el disco en 0 con Postgres tumbado
+   (ya pasó una vez: ver "Espacio en disco" abajo).
+3. **`docker compose up -d --build`** en el servidor, con `--env-file .env.prod`.
    El `prisma migrate deploy` del CMD aplica migraciones nuevas al arrancar.
-3. **Espera a que la API responda** en `http://127.0.0.1:3001/health` (hasta 60s).
+4. **Espera a que la API responda** en `http://127.0.0.1:3001/health` (hasta 60s).
    Si no responde, aborta con código 2 y muestra los últimos 30 renglones del
    log del contenedor `api`.
-4. **Verifica el endpoint público** `https://api.tav.rolapro.com/health`. Si no
+5. **Verifica el endpoint público** `https://api.tav.rolapro.com/health`. Si no
    responde, aborta con código 3 y muestra los logs.
+6. **Limpieza de Docker**: corre `docker image prune -f` y
+   `docker builder prune -f` en el servidor para borrar imágenes huérfanas y
+   la caché de build que cada deploy genera. **Nunca poda volúmenes**: ahí
+   viven la base de datos y los comprobantes subidos.
 
 Códigos de salida:
 
 | Código | Qué pasó |
 |--------|----------|
 | 0 | Despliegue OK, `/health` responde local y público. |
-| 1 | Error en rsync o build. |
+| 1 | Error en rsync o build, o menos de 20 GB libres en el servidor. |
 | 2 | La API no respondió en 60s tras el build. |
 | 3 | El endpoint público no responde tras el build. |
+
+### `scripts/deploy-admin.sh`
+
+Sincroniza `apps/admin` y `docker-compose.prod.yml`, reconstruye **solo el
+contenedor `admin`** (`build --no-cache` + `up -d admin`), y verifica que el
+panel responde en `http://127.0.0.1:3002/` (hasta 60s; aborta con código 2 si
+no).
+
+```bash
+./scripts/deploy-admin.sh
+```
+
+Aplica la misma verificación de espacio libre (20 GB mínimo) antes de
+construir y la misma limpieza de imágenes y caché de build al terminar,
+sin tocar nunca los volúmenes.
+
+### Espacio en disco
+
+Cada deploy crea capas e imágenes huérfanas y caché de build que Docker
+**no limpia solo**: con el tiempo llenan el disco y Postgres se cae
+(ocurrió el 28/09/2026 — 145 GB de 150 GB usados, todos recuperables en
+Docker). Por eso:
+
+- Ambos scripts **abortan antes de construir** si hay menos de 20 GB libres.
+- Ambos scripts **limpian al final** (`image prune` + `builder prune`), solo
+  si el despliegue salió bien.
+- **Los volúmenes nunca se podan.** `docker volume prune` está prohibido en
+  este servidor: ahí viven `pgdata` y la carpeta de comprobantes.
+
+Si aun así hace falta limpiar a mano:
+
+```bash
+ssh tav "df -h / && docker system df"
+ssh tav "docker image prune -f && docker builder prune -f"
+```
 
 ### `scripts/logs.sh`
 
