@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Loader2, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Plus, RotateCcw } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Plus, PlusCircle, RotateCcw, MinusCircle } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
 import { formatoMoneda, formatFecha, formatTasa } from '@/lib/format';
@@ -11,6 +11,8 @@ import type {
   MovimientoCaja,
   IngresoCajaMadreRespuesta,
   AperturaCajaRespuesta,
+  RetiroDepositoPayload,
+  RetiroDepositoRespuesta,
 } from '@/lib/types';
 import { PageHeader, PageContent } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -106,6 +108,35 @@ export default function CajasPage() {
       </PageContent>
     </>
   );
+}
+
+// ─────────────────────────── Helpers ───────────────────────────
+
+function variantTipoMovimiento(tipo: string): { label: string; variant: React.ComponentProps<typeof Badge>['variant'] } {
+  switch (tipo) {
+    case 'apertura':
+      return { label: 'Apertura', variant: 'navy' };
+    case 'recarga':
+      return { label: 'Recarga', variant: 'navy' };
+    case 'ingreso':
+      return { label: 'Ingreso', variant: 'verde' };
+    case 'transferencia':
+      return { label: 'Transferencia', variant: 'outline' };
+    case 'pago':
+      return { label: 'Pago', variant: 'default' };
+    case 'retiro':
+      return { label: 'Retiro', variant: 'rojo' };
+    case 'deposito':
+      return { label: 'Depósito', variant: 'verde' };
+    case 'reverso_apertura':
+      return { label: 'Reverso', variant: 'ambar' };
+    case 'reverso_pago':
+      return { label: 'Reverso pago', variant: 'ambar' };
+    case 'ajuste':
+      return { label: 'Ajuste', variant: 'outline' };
+    default:
+      return { label: tipo, variant: 'outline' };
+  }
 }
 
 // ─────────────────────────── Caja madre ───────────────────────────
@@ -263,6 +294,8 @@ function CajaCorredorCard({
   onCambio: () => void;
 }) {
   const [abierta, setAbierta] = React.useState(false);
+  const [retiroAbierto, setRetiroAbierto] = React.useState(false);
+  const [depositoAbierto, setDepositoAbierto] = React.useState(false);
   const [verMovs, setVerMovs] = React.useState(false);
 
   return (
@@ -308,7 +341,40 @@ function CajaCorredorCard({
         >
           Movimientos
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8"
+          onClick={() => setRetiroAbierto(true)}
+        >
+          <MinusCircle className="mr-1 h-3.5 w-3.5" />
+          Retiro
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8"
+          onClick={() => setDepositoAbierto(true)}
+        >
+          <PlusCircle className="mr-1 h-3.5 w-3.5" />
+          Depósito
+        </Button>
       </div>
+
+      <RetiroDepositoDialog
+        abierta={retiroAbierto}
+        setAbierta={setRetiroAbierto}
+        modo="retiro"
+        caja={caja}
+        onCambio={onCambio}
+      />
+      <RetiroDepositoDialog
+        abierta={depositoAbierto}
+        setAbierta={setDepositoAbierto}
+        modo="deposito"
+        caja={caja}
+        onCambio={onCambio}
+      />
 
       {madreId && (
         <AbrirRecargarDialog
@@ -445,6 +511,109 @@ function AbrirRecargarDialog({
   );
 }
 
+// ─────────────────────────── Diálogo retiro / depósito ───────────────────────────
+
+function RetiroDepositoDialog({
+  abierta,
+  setAbierta,
+  modo,
+  caja,
+  onCambio,
+}: {
+  abierta: boolean;
+  setAbierta: (v: boolean) => void;
+  modo: 'retiro' | 'deposito';
+  caja: Caja;
+  onCambio: () => void;
+}) {
+  const [monto, setMonto] = React.useState('');
+  const [motivo, setMotivo] = React.useState('');
+  const [enviando, setEnviando] = React.useState(false);
+
+  async function ejecutar() {
+    const cents = monto.replace(/[.,\s]/g, '');
+    if (!cents || !motivo.trim()) {
+      toast.error('Faltan el monto o el motivo');
+      return;
+    }
+    setEnviando(true);
+    try {
+      const payload: RetiroDepositoPayload = {
+        clientUuid: crypto.randomUUID(),
+        cajaId: caja.id,
+        montoCents: cents,
+        motivo: motivo.trim(),
+      };
+      const res: RetiroDepositoRespuesta =
+        modo === 'retiro'
+          ? await api.retirarCaja(payload)
+          : await api.depositarCaja(payload);
+      toast.success(modo === 'retiro' ? 'Retiro registrado' : 'Depósito registrado', {
+        description: `Nuevo saldo: ${formatoMoneda(res.caja.saldoCents, caja.moneda)}`,
+      });
+      setAbierta(false);
+      setMonto('');
+      setMotivo('');
+      onCambio();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'No se pudo registrar el movimiento');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <Dialog open={abierta} onOpenChange={setAbierta}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {modo === 'retiro' ? 'Registrar retiro' : 'Registrar depósito'} · {caja.moneda}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4 py-2">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`monto-${modo}`}>Monto ({caja.moneda}, centavos)</Label>
+            <Input
+              id={`monto-${modo}`}
+              inputMode="numeric"
+              placeholder="100000"
+              value={monto}
+              onChange={(e) => setMonto(e.target.value)}
+              className="font-mono tabular-nums"
+            />
+            <span className="text-[12px] text-tav-ink-3">
+              En centavos de {caja.moneda}.
+            </span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`motivo-${modo}`}>Motivo (obligatorio)</Label>
+            <Input
+              id={`motivo-${modo}`}
+              placeholder={
+                modo === 'retiro'
+                  ? 'Gasto bancario, traslado a otra cuenta...'
+                  : 'Depósito de cliente, transferencia recibida...'
+              }
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+            />
+            <span className="text-[12px] text-tav-ink-3">
+              Este motivo queda en el historial para auditoría.
+            </span>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setAbierta(false)}>Cancelar</Button>
+          <Button onClick={ejecutar} disabled={enviando}>
+            {enviando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+            Registrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─────────────────────────── Diálogo movimientos ───────────────────────────
 
 function MovimientosDialog({
@@ -500,7 +669,9 @@ function MovimientosDialog({
               {movs.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell>
-                    <Badge variant="outline">{m.tipo}</Badge>
+                    <Badge variant={variantTipoMovimiento(m.tipo).variant}>
+                      {variantTipoMovimiento(m.tipo).label}
+                    </Badge>
                   </TableCell>
                   <TableCell className={`text-right font-mono tabular-nums ${
                     BigInt(m.montoCents) < 0n ? 'text-tav-red-700' : 'text-tav-green-600'

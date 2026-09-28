@@ -251,6 +251,11 @@ lo que falta está en "Repreguntas pendientes" más abajo.
   su tasa.
 - **Una caja sin fondos solo alerta**, no frena las operaciones hacia ese destino.
   Esto abarata mucho la fase: las cajas son un tablero, no un mecanismo de control.
+- **Retiro y depósito manuales:** el admin puede registrar una salida (`retiro`)
+  o una entrada (`deposito`) en cualquier caja, con motivo obligatorio. Son
+  movimientos de una sola pata: la contraparte está fuera del sistema. Nunca se
+  mezclan con `ajuste`, que es solo para correcciones. Pueden dejar la caja en
+  negativo; no bloquean, solo alertan. No entran en el cálculo de margen del día.
 - **La conversión de un cobro hecho en moneda distinta a la deuda es manual.**
 
 Confirmado también el 1/9/2026, en la repregunta:

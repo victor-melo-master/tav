@@ -25,6 +25,8 @@ import type {
   IngresoCajaMadreRespuesta,
   AperturaCajaRespuesta,
   AnulacionAperturaRespuesta,
+  RetiroDepositoPayload,
+  RetiroDepositoRespuesta,
   MovimientosDiarios,
   Corredor,
   CrearCorredorPayload,
@@ -373,6 +375,20 @@ export const api = {
 
   recargarCaja(body: AbrirCajaPayload): Promise<AperturaCajaRespuesta> {
     return request<AperturaCajaRespuesta>('/cajas/recargar', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  retirarCaja(body: RetiroDepositoPayload): Promise<RetiroDepositoRespuesta> {
+    return request<RetiroDepositoRespuesta>('/cajas/retiro', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  depositarCaja(body: RetiroDepositoPayload): Promise<RetiroDepositoRespuesta> {
+    return request<RetiroDepositoRespuesta>('/cajas/deposito', {
       method: 'POST',
       body: JSON.stringify(body),
     });

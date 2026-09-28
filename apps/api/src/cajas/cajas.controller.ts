@@ -5,6 +5,8 @@ import { AbrirCajaHttpDto } from './dto/abrir-caja.dto';
 import { CrearCajaHttpDto } from './dto/crear-caja.dto';
 import { IngresarCajaMadreHttpDto } from './dto/ingresar-caja-madre.dto';
 import { AnularAperturaHttpDto } from './dto/anular-apertura.dto';
+import { RetirarCajaHttpDto } from './dto/retirar-caja.dto';
+import { DepositarCajaHttpDto } from './dto/depositar-caja.dto';
 import { PaginacionDto } from '../cajero/dto/paginacion.dto';
 import { Roles } from '../auth/roles.decorator';
 import { AuthenticatedRequest } from '../auth/auth.types';
@@ -115,6 +117,34 @@ export class CajasController {
       registradoPorId: req.user.sub,
     });
     return res;
+  }
+
+  // ─────────────────────────── RETIRO / DEPÓSITO MANUAL ───────────────────────────
+
+  @Post('retiro')
+  @ApiOperation({ summary: 'Retira plata de una caja para un gasto o traslado externo' })
+  @ApiResponse({ status: 201, description: 'Retiro registrado' })
+  async retirarCaja(@Body() dto: RetirarCajaHttpDto, @Req() req: AuthenticatedRequest) {
+    return this.cajas.retirarCaja({
+      clientUuid: dto.clientUuid,
+      cajaId: dto.cajaId,
+      montoCents: BigInt(dto.montoCents),
+      motivo: dto.motivo,
+      registradoPorId: req.user.sub,
+    });
+  }
+
+  @Post('deposito')
+  @ApiOperation({ summary: 'Deposita plata en una caja desde un origen externo' })
+  @ApiResponse({ status: 201, description: 'Depósito registrado' })
+  async depositarCaja(@Body() dto: DepositarCajaHttpDto, @Req() req: AuthenticatedRequest) {
+    return this.cajas.depositarCaja({
+      clientUuid: dto.clientUuid,
+      cajaId: dto.cajaId,
+      montoCents: BigInt(dto.montoCents),
+      motivo: dto.motivo,
+      registradoPorId: req.user.sub,
+    });
   }
 
   // ─────────────────────────── ANULAR APERTURA ───────────────────────────

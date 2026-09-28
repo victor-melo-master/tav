@@ -529,6 +529,8 @@ enum TipoMovimientoCaja {
   ingreso // entra USDT (o efectivo) al negocio; sube saldo de la caja MADRE
   transferencia // débito de la caja MADRE hacia una caja de corredor (contrapartida de apertura/recarga)
   pago // el pagador ejecuta una operación; baja saldo de la caja del corredor
+  retiro // admin retira plata de una caja para un gasto/traslado ajeno a operaciones; baja saldo
+  deposito // admin deposita plata en una caja desde un origen externo; sube saldo
   reverso_apertura // anulación de apertura/recarga (reversa crédito destino + débito madre)
   reverso_pago // anulación de un pago ya ejecutado
   ajuste // corrección manual del admin, siempre con motivo
@@ -557,7 +559,7 @@ model MovimientoCaja {
   // ningún ingreso antes. En `apertura`, `recarga`, `pago` y `ajuste` va null.
   precioCompraGyd Decimal? @db.Decimal(18, 6)
 
-  origenTipo      String // "apertura" | "recarga" | "ingreso" | "pago" | "ajuste"
+  origenTipo      String // "apertura" | "recarga" | "ingreso" | "pago" | "retiro" | "deposito" | "ajuste"
   origenId        String // operacionId cuando es un pago
   clientUuid      String // IDEMPOTENCIA — único POR CAJA (ver @@unique abajo):
   // las dos patas de una apertura comparten el mismo uuid.

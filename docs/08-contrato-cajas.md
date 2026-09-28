@@ -8,7 +8,7 @@ el contrato está mal, no el test.
 Servicios NestJS exportados:
 
 - `CorredorService` — `crear`, `desactivar`, `activar`, `listar`, `listarActivos`, `obtener`
-- `CajaService` — `ingresarCajaMadre`, `abrirCaja`, `recargarCaja`, `ejecutarPago`, `anularApertura`, `anularPago`, `obtenerCaja`, `listarCajas`, `saldoCaja`, `alertasCaja`
+- `CajaService` — `ingresarCajaMadre`, `abrirCaja`, `recargarCaja`, `retirarCaja`, `depositarCaja`, `ejecutarPago`, `anularApertura`, `anularPago`, `obtenerCaja`, `listarCajas`, `saldoCaja`, `alertasCaja`
 
 Ambos reciben `PrismaService` por constructor, así que pueden instanciarse a
 mano contra una base de prueba: `new CajaService(prisma)`.
@@ -69,6 +69,22 @@ interface EjecutarPagoDto {
   formaPago: string;             // "pago_movil" | "transferencia" | "efectivo" | ...
   nombreCliente: string;         // el nombre del cliente que recibió
   registradoPorId: string;       // el pagador
+}
+
+interface RetiroCajaDto {
+  clientUuid: string;            // idempotencia
+  cajaId: string;                // la caja afectada
+  montoCents: bigint;            // en centavos de la moneda de la caja
+  motivo: string;                // obligatorio: gasto, traslado, etc.
+  registradoPorId: string;       // el admin
+}
+
+interface DepositoCajaDto {
+  clientUuid: string;            // idempotencia
+  cajaId: string;                // la caja afectada
+  montoCents: bigint;            // en centavos de la moneda de la caja
+  motivo: string;                // obligatorio
+  registradoPorId: string;       // el admin
 }
 
 interface AnularAperturaDto {
@@ -385,6 +401,43 @@ incoherentes); los tests del DTO HTTP sí.
   por `origenId`.
 
 ---
+
+## `CajaService.retirarCaja(dto): Promise<CajaResultado>`
+
+Retira plata de una caja para un gasto, traslado o cualquier motivo externo
+a las operaciones. Es una sola pata: la contraparte está fuera del sistema.
+
+### Precondiciones
+- `dto.cajaId` existe. Si no: `CajaNoEncontradaException`.
+- `dto.montoCents > 0n`. Si no: `MontoInvalidoException`.
+- `dto.motivo` no vacío. Si no: `MotivoRequeridoException`.
+
+### Comportamiento
+1. **Idempotencia primero** por `(cajaId, clientUuid)`.
+2. En transacción con `FOR UPDATE` sobre la fila de la `Caja`:
+   - Re-verifica idempotencia.
+   - Inserta `MovimientoCaja` con `tipo: 'retiro'`, `montoCents: −dto.montoCents`,
+     `origenTipo: 'retiro'`, `origenId: movimientoId`, motivo y `clientUuid`.
+   - Actualiza `caja.saldoCents = saldo − dto.montoCents`.
+3. Puede dejar la caja en negativo; no se rechaza. `alertasCaja()` lo reporta.
+
+## `CajaService.depositarCaja(dto): Promise<CajaResultado>`
+
+Deposita plata en una caja desde un origen externo que no es la caja madre.
+Una sola pata.
+
+### Precondiciones
+- `dto.cajaId` existe. Si no: `CajaNoEncontradaException`.
+- `dto.montoCents > 0n`. Si no: `MontoInvalidoException`.
+- `dto.motivo` no vacío. Si no: `MotivoRequeridoException`.
+
+### Comportamiento
+1. **Idempotencia primero** por `(cajaId, clientUuid)`.
+2. En transacción con `FOR UPDATE` sobre la fila de la `Caja`:
+   - Re-verifica idempotencia.
+   - Inserta `MovimientoCaja` con `tipo: 'deposito'`, `montoCents: +dto.montoCents`,
+     `origenTipo: 'deposito'`, `origenId: movimientoId`, motivo y `clientUuid`.
+   - Actualiza `caja.saldoCents = saldo + dto.montoCents`.
 
 ## `CajaService.ejecutarPago(dto): Promise<PagoResultado>`
 

@@ -15,9 +15,11 @@ import {
   AnularPagoDto,
   AperturaResultado,
   CajaResultado,
+  DepositoCajaDto,
   EjecutarPagoDto,
   IngresarCajaMadreDto,
   PagoResultado,
+  RetiroCajaDto,
 } from './cajas.dto';
 import {
   CajaCorredorMismatchException,
@@ -129,6 +131,84 @@ export class CajaService {
       }, TX_OPTS);
     } catch (e) {
       const existente = await this.recuperarPorUnique(e, dto.cajaMadreId, dto.clientUuid);
+      if (existente) return this.resultadoExistente(existente);
+      throw e;
+    }
+  }
+
+  // ──────────────────────── RETIRO / DEPÓSITO MANUAL ────────────────────────
+
+  /**
+   * Retira plata de una caja para un gasto o traslado externo al sistema.
+   * Una sola pata: la contraparte está fuera del sistema. Motivo obligatorio.
+   * Puede dejar la caja en negativo (alerta, no bloqueo).
+   */
+  async retirarCaja(dto: RetiroCajaDto): Promise<CajaResultado> {
+    return this.movimientoUnaPata(dto, TipoMovimientoCaja.retiro, -dto.montoCents);
+  }
+
+  /**
+   * Deposita plata en una caja desde un origen externo (que no es caja madre).
+   * Una sola pata. Motivo obligatorio.
+   */
+  async depositarCaja(dto: DepositoCajaDto): Promise<CajaResultado> {
+    return this.movimientoUnaPata(dto, TipoMovimientoCaja.deposito, dto.montoCents);
+  }
+
+  private async movimientoUnaPata(
+    dto: RetiroCajaDto | DepositoCajaDto,
+    tipo: typeof TipoMovimientoCaja.retiro | typeof TipoMovimientoCaja.deposito,
+    montoMovimiento: bigint,
+  ): Promise<CajaResultado> {
+    // 1. Idempotencia primero.
+    const previo = await this.buscarPorClientUuid(dto.cajaId, dto.clientUuid);
+    if (previo) return this.resultadoExistente(previo);
+
+    // 2. Validación de input.
+    if (dto.montoCents <= 0n) throw new MontoInvalidoException('montoCents', dto.montoCents);
+    if (!dto.motivo?.trim()) throw new MotivoRequeridoException();
+
+    // 3. Existencia.
+    const caja = await this.prisma.caja.findUnique({ where: { id: dto.cajaId } });
+    if (!caja) throw new CajaNoEncontradaException(dto.cajaId);
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const cajaLock = await this.lockCaja(tx, dto.cajaId);
+
+        // Re-verifica idempotencia dentro de la transacción.
+        const yaEnTx = await tx.movimientoCaja.findFirst({
+          where: { cajaId: dto.cajaId, clientUuid: dto.clientUuid },
+        });
+        if (yaEnTx) return this.resultadoExistenteTx(tx, yaEnTx);
+
+        const movimientoId = randomUUID();
+        const saldoDespues = cajaLock.saldoCents + montoMovimiento;
+
+        const movimiento = await tx.movimientoCaja.create({
+          data: {
+            id: movimientoId,
+            cajaId: cajaLock.id,
+            tipo,
+            montoCents: montoMovimiento,
+            saldoDespues,
+            origenTipo: tipo === TipoMovimientoCaja.retiro ? 'retiro' : 'deposito',
+            origenId: movimientoId,
+            clientUuid: dto.clientUuid,
+            motivo: dto.motivo.trim(),
+            registradoPorId: dto.registradoPorId,
+          },
+        });
+
+        const cajaActualizada = await tx.caja.update({
+          where: { id: cajaLock.id },
+          data: { saldoCents: saldoDespues },
+        });
+
+        return { caja: cajaActualizada, movimiento, yaExistia: false };
+      }, TX_OPTS);
+    } catch (e) {
+      const existente = await this.recuperarPorUnique(e, dto.cajaId, dto.clientUuid);
       if (existente) return this.resultadoExistente(existente);
       throw e;
     }

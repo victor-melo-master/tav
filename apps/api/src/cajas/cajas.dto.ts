@@ -55,6 +55,30 @@ export interface AnularPagoDto {
   actorId: string;
 }
 
+/**
+ * Retiro manual de una caja. Sale plata para un gasto, traslado u otro motivo
+ * ajeno a operaciones. Contraparte fuera del sistema.
+ */
+export interface RetiroCajaDto {
+  clientUuid: string; // idempotencia
+  cajaId: string;
+  montoCents: bigint; // en centavos de la moneda de la caja
+  motivo: string; // obligatorio
+  registradoPorId: string; // el admin
+}
+
+/**
+ * Depósito manual en una caja. Entra plata desde un origen que no es la caja
+ * madre. Contraparte fuera del sistema.
+ */
+export interface DepositoCajaDto {
+  clientUuid: string; // idempotencia
+  cajaId: string;
+  montoCents: bigint; // en centavos de la moneda de la caja
+  motivo: string; // obligatorio
+  registradoPorId: string; // el admin
+}
+
 export interface CrearCorredorDto {
   pais: string; // código ISO-3: "VEN", "BRA", ...
   paisNombre: string; // "Venezuela"

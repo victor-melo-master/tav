@@ -474,6 +474,134 @@ describe('Fase 9 Bloque 4 — Cajas (tesorería)', () => {
   });
 });
 
+// ─────────────────────── RETIRO Y DEPÓSITO MANUAL ───────────────────────
+
+describe('CajaService — retiro y depósito manual', () => {
+  test('un retiro baja el saldo y queda con su motivo', async () => {
+    const admin = await crearAdmin('admin-retiro-1@tav.test');
+    const token = await login(admin.email, admin.password);
+    const { cajaBsId } = await crearCajas();
+
+    // Depósito inicial para tener saldo.
+    await request(app.getHttpServer())
+      .post('/cajas/deposito')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaId: cajaBsId,
+        montoCents: '1000000',
+        motivo: 'Apertura externa',
+      });
+
+    const retiro = await request(app.getHttpServer())
+      .post('/cajas/retiro')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaId: cajaBsId,
+        montoCents: '350000',
+        motivo: 'Gasto bancario',
+      });
+    expect(retiro.status).toBe(201);
+    expect(retiro.body.movimiento.tipo).toBe('retiro');
+    expect(retiro.body.movimiento.montoCents).toBe('-350000');
+    expect(retiro.body.movimiento.motivo).toBe('Gasto bancario');
+    expect(retiro.body.caja.saldoCents).toBe('650000');
+  });
+
+  test('un retiro que deja la caja en negativo pasa y alerta', async () => {
+    const admin = await crearAdmin('admin-retiro-2@tav.test');
+    const token = await login(admin.email, admin.password);
+    const { cajaBsId } = await crearCajas();
+
+    const retiro = await request(app.getHttpServer())
+      .post('/cajas/retiro')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaId: cajaBsId,
+        montoCents: '500000',
+        motivo: 'Retiro sin fondos suficientes',
+      });
+    expect(retiro.status).toBe(201);
+    expect(retiro.body.caja.saldoCents).toBe('-500000');
+
+    const alertas = await request(app.getHttpServer())
+      .get('/cajas/alertas')
+      .set('Authorization', `Bearer ${token}`);
+    expect(alertas.status).toBe(200);
+    const alerta = alertas.body.find((a: { cajaId: string }) => a.cajaId === cajaBsId);
+    expect(alerta).toBeTruthy();
+    expect(alerta.tipo).toBe('saldo_negativo');
+  });
+
+  test('db:verify cuadra después de retiro y depósito', async () => {
+    const admin = await crearAdmin('admin-retiro-3@tav.test');
+    const token = await login(admin.email, admin.password);
+    const { cajaBsId } = await crearCajas();
+
+    await request(app.getHttpServer())
+      .post('/cajas/deposito')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaId: cajaBsId,
+        montoCents: '2000000',
+        motivo: 'Depósito test',
+      });
+    await request(app.getHttpServer())
+      .post('/cajas/retiro')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaId: cajaBsId,
+        montoCents: '750000',
+        motivo: 'Retiro test',
+      });
+
+    const cajas = await prisma.caja.findMany({ include: { movimientos: { orderBy: { seq: 'asc' } } } });
+    for (const caja of cajas) {
+      const suma = caja.movimientos.reduce((acc, m) => acc + m.montoCents, 0n);
+      expect(caja.saldoCents).toBe(suma);
+    }
+  });
+
+  test('un retiro no contamina el reporte de movimientos diarios', async () => {
+    const admin = await crearAdmin('admin-retiro-4@tav.test');
+    const token = await login(admin.email, admin.password);
+    const { cajaBsId } = await crearCajas();
+
+    await request(app.getHttpServer())
+      .post('/cajas/deposito')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaId: cajaBsId,
+        montoCents: '1000000',
+        motivo: 'Depósito margen',
+      });
+    await request(app.getHttpServer())
+      .post('/cajas/retiro')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clientUuid: crypto.randomUUID(),
+        cajaId: cajaBsId,
+        montoCents: '300000',
+        motivo: 'Retiro margen',
+      });
+
+    const hoyCaracas = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Caracas',
+    }).format(new Date());
+    const res = await request(app.getHttpServer())
+      .get(`/admin/movimientos-diarios?fecha=${hoyCaracas}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.operaciones).toHaveLength(0);
+    expect(res.body.totales.operaciones).toBe(0);
+  });
+});
+
 // ─────────────────────── PRECIO DE COMPRA DEL USDT ───────────────────────
 
 describe('CajaService — precio de compra del USDT', () => {

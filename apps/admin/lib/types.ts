@@ -376,6 +376,19 @@ export interface AbrirCajaPayload {
   tasaConversion: string;
 }
 
+export interface RetiroDepositoPayload {
+  clientUuid: string;
+  cajaId: string;
+  montoCents: string;
+  motivo: string;
+}
+
+export interface RetiroDepositoRespuesta {
+  caja: Caja;
+  movimiento: MovimientoCaja;
+  yaExistia: boolean;
+}
+
 export interface AnularAperturaPayload {
   movimientoCajaId: string;
   motivo: string;
