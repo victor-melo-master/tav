@@ -141,10 +141,21 @@ fi
 
 if [ "$PUB_CHUNKS" != "$LOC_CHUNKS" ]; then
   echo "ERROR: el HTML público referencia chunks distintos al build local." >&2
+  echo "Es la señal de un HTML viejo cacheado apuntando a chunks que ya no existen." >&2
   echo "--- Solo en público ---" >&2
   comm -23 <(echo "$PUB_CHUNKS") <(echo "$LOC_CHUNKS") >&2
   echo "--- Solo en local ---" >&2
   comm -13 <(echo "$PUB_CHUNKS") <(echo "$LOC_CHUNKS") >&2
+  exit 1
+fi
+
+# El HTML del panel depende de la sesión: un proxy compartido no debe
+# guardarlo. Si vuelve a aparecer s-maxage con vida larga, el HTML queda
+# cacheado un año y cualquier deploy futuro vuelve a servirse viejo.
+PUB_HEADERS=$(curl -sI "$PUBLIC/tablero")
+if printf '%s' "$PUB_HEADERS" | grep -i 'cache-control' | grep -qi 's-maxage=[0-9]'; then
+  echo "ERROR: el público sigue mandando cache-control con s-maxage de vida larga." >&2
+  printf '%s\n' "$PUB_HEADERS" | grep -i 'cache-control\|x-cache\|age:' >&2
   exit 1
 fi
 

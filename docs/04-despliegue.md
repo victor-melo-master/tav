@@ -230,7 +230,19 @@ y el contenedor local:
 - El md5 de **cada** chunk debe coincidir.
 
 Si hay diferencia — HTML cacheado en nginx, chunks viejos o contenedor sin
-la imagen nueva — aborta con código 3 y no reporta éxito.
+la imagen nueva — aborta con código 3 y no reporta éxito. También verifica
+que la respuesta pública no mande `cache-control: s-maxage` de vida larga:
+eso permitiría a un proxy compartido retener el HTML un año. El HTML del
+panel sale con `Cache-Control: private, no-cache, no-store` (definido en
+`apps/admin/next.config.mjs`); solo los assets `/_next/static/` — que llevan
+hash en el nombre — son cacheables.
+
+En el servidor, el `proxy.conf` global de aaPanel activa `proxy_cache
+cache_one` para **todos** los sitios. Los vhosts de `panel.tav.rolapro.com`
+y `api.tav.rolapro.com` llevan `proxy_cache off;` en su `location` para
+anularla: cachear HTML/API con sesiones de usuario es un riesgo de servir
+a un usuario páginas generadas para otro. Si aaPanel regenera esos vhosts
+y pierde la directiva, hay que volver a añadirla.
 
 Aplica la misma verificación de espacio libre (20 GB mínimo) antes de
 construir y la misma limpieza de imágenes y caché de build al terminar,
