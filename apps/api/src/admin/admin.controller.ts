@@ -21,6 +21,7 @@ import { Roles } from '../auth/roles.decorator';
 import { AuthenticatedRequest } from '../auth/auth.types';
 import { PrecioCajeroService } from '../precio-cajero/precio-cajero.service';
 import { FijarPrecioCajeroDto } from '../precio-cajero/dto/fijar-precio.dto';
+import { FijarPrecioMasivoDto } from '../precio-cajero/dto/fijar-precio-masivo.dto';
 import { fechaCaracasYmd } from '../ledger/fecha-caracas';
 
 /**
@@ -242,6 +243,27 @@ export class AdminController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.precioCajero.fijarPrecio(id, dto.servicioId, dto.precioGyd, req.user.sub);
+  }
+
+  @Post('servicios/:servicioId/precios')
+  @ApiOperation({
+    summary:
+      'Fija el mismo precio para varios cajeros a la vez. Sobreescribe el vigente de cada uno (inserta filas nuevas; transacción única)',
+  })
+  @ApiResponse({ status: 201, description: 'Precio aplicado a todos los cajeros seleccionados' })
+  @ApiResponse({ status: 400, description: 'Precio inválido, servicio desactivado o cajero inexistente' })
+  @ApiResponse({ status: 404, description: 'Servicio no encontrado' })
+  async fijarPrecioMasivo(
+    @Param('servicioId') servicioId: string,
+    @Body() dto: FijarPrecioMasivoDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.precioCajero.fijarPrecioMasivo(
+      servicioId,
+      dto.precioGyd,
+      dto.cajeroIds,
+      req.user.sub,
+    );
   }
 
   @Get('cajeros/:id/precios/historial')

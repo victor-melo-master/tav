@@ -517,3 +517,92 @@ describe('GET /cajero/corredores — servicios ofrecibles', () => {
     expect(res.body).toHaveLength(2);
   });
 });
+
+// ──────────────────── PRECIO MASIVO (varios cajeros a la vez) ────────────────────
+
+describe('POST /admin/servicios/:id/precios — precio masivo', () => {
+  test('aplica el mismo precio a varios cajeros de una vez', async () => {
+    const admin = await crearAdmin('admin@tav.test');
+    const c1 = await crearCajero('c1@tav.test');
+    const c2 = await crearCajero('c2@tav.test');
+    const c3 = await crearCajero('c3@tav.test');
+
+    const token = await login(app, admin.email, admin.password);
+    const res = await request(app.getHttpServer())
+      .post(`/admin/servicios/${corredorBsId}/precios`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ precioGyd: '240', cajeroIds: [c1.id, c2.id] });
+    expect(res.status).toBe(201);
+    expect(res.body.cajerosAfectados).toBe(2);
+
+    expect((await precioCajeroService.precioVigente(c1.id, corredorBsId))?.toString()).toBe('240');
+    expect((await precioCajeroService.precioVigente(c2.id, corredorBsId))?.toString()).toBe('240');
+    // El no seleccionado sigue sin precio.
+    expect(await precioCajeroService.precioVigente(c3.id, corredorBsId)).toBeNull();
+  });
+
+  test('sobreescribe el precio vigente insertando una fila nueva', async () => {
+    const admin = await crearAdmin('admin@tav.test');
+    const caj = await crearCajero('c1@tav.test');
+    await precioCajeroService.fijarPrecio(caj.id, corredorBsId, '240', admin.id);
+
+    const token = await login(app, admin.email, admin.password);
+    const res = await request(app.getHttpServer())
+      .post(`/admin/servicios/${corredorBsId}/precios`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ precioGyd: '250', cajeroIds: [caj.id] });
+    expect(res.status).toBe(201);
+
+    expect((await precioCajeroService.precioVigente(caj.id, corredorBsId))?.toString()).toBe('250');
+    const historial = await precioCajeroService.historial(caj.id, corredorBsId);
+    expect(historial).toHaveLength(2);
+    expect(historial[0].precioGyd.toString()).toBe('250');
+    expect(historial[1].precioGyd.toString()).toBe('240');
+  });
+
+  test('es transaccional: si un cajero no existe, no se aplica a ninguno', async () => {
+    const admin = await crearAdmin('admin@tav.test');
+    const caj = await crearCajero('c1@tav.test');
+
+    const token = await login(app, admin.email, admin.password);
+    const res = await request(app.getHttpServer())
+      .post(`/admin/servicios/${corredorBsId}/precios`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ precioGyd: '240', cajeroIds: [caj.id, 'no-existe'] });
+    expect(res.status).toBe(400);
+    expect(await precioCajeroService.precioVigente(caj.id, corredorBsId)).toBeNull();
+  });
+
+  test('falla con servicio desactivado', async () => {
+    const admin = await crearAdmin('admin@tav.test');
+    const caj = await crearCajero('c1@tav.test');
+
+    const token = await login(app, admin.email, admin.password);
+    const res = await request(app.getHttpServer())
+      .post(`/admin/servicios/${corredorDesactivadoId}/precios`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ precioGyd: '240', cajeroIds: [caj.id] });
+    expect(res.status).toBe(400);
+  });
+
+  test('deja una entrada de auditoría por cajero', async () => {
+    const admin = await crearAdmin('admin@tav.test');
+    const c1 = await crearCajero('c1@tav.test');
+    const c2 = await crearCajero('c2@tav.test');
+
+    const token = await login(app, admin.email, admin.password);
+    await request(app.getHttpServer())
+      .post(`/admin/servicios/${corredorBsId}/precios`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ precioGyd: '240', cajeroIds: [c1.id, c2.id] });
+
+    const logs = await prisma.auditLog.findMany({
+      where: { accion: 'precio_cajero.fijar', actorId: admin.id },
+    });
+    expect(logs).toHaveLength(2);
+    const cajerosAuditados = logs
+      .map((l) => (l.despues as { cajeroId?: string }).cajeroId)
+      .sort();
+    expect(cajerosAuditados).toEqual([c1.id, c2.id].sort());
+  });
+});

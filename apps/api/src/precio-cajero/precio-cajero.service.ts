@@ -106,6 +106,77 @@ export class PrecioCajeroService {
   }
 
   /**
+   * Fija el mismo precio para varios cajeros a la vez. "Aplicar a todos" es
+   * una foto del momento: el frontend manda la lista explícita de cajeros;
+   * un cajero que se cree después no hereda nada.
+   *
+   * Sobreescribe siempre: por cada cajero se inserta una fila nueva que pasa
+   * a ser la vigente, aunque ya tuviera precio. La tabla sigue siendo solo
+   * inserción. Todo va en una transacción: si un cajero no existe o el
+   * servicio está desactivado, no se aplica a ninguno.
+   *
+   * Escribe una entrada de auditoría por cajero para que el cambio aparezca
+   * en el historial de cada ficha.
+   */
+  async fijarPrecioMasivo(
+    servicioId: string,
+    precioGyd: string,
+    cajeroIds: string[],
+    fijadoPorId: string,
+  ) {
+    const precio = new Prisma.Decimal(precioGyd.replace(',', '.'));
+    if (!precio.isPositive() || precio.isZero()) {
+      throw new BadRequestException('precioGyd debe ser positivo');
+    }
+
+    const servicio = await this.prisma.corredor.findUnique({ where: { id: servicioId } });
+    if (!servicio) throw new NotFoundException(`El servicio ${servicioId} no existe`);
+    if (!servicio.activo) {
+      throw new BadRequestException(
+        `El servicio ${servicio.paisNombre} (${servicio.formaEntregaNombre}) está desactivado`,
+      );
+    }
+
+    const ids = [...new Set(cajeroIds)];
+    const perfiles = await this.prisma.perfilCajero.findMany({
+      where: { usuarioId: { in: ids } },
+      select: { usuarioId: true },
+    });
+    const existentes = new Set(perfiles.map((p) => p.usuarioId));
+    const faltantes = ids.filter((id) => !existentes.has(id));
+    if (faltantes.length > 0) {
+      throw new BadRequestException(
+        `No existen perfiles de cajero para: ${faltantes.join(', ')}`,
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const filas = [];
+      for (const cajeroId of ids) {
+        const fila = await tx.precioCajeroServicio.create({
+          data: { cajeroId, servicioId, precioGyd: precio, fijadoPorId },
+        });
+        filas.push(fila);
+
+        await this.audit.crear(tx, {
+          actorId: fijadoPorId,
+          accion: 'precio_cajero.fijar',
+          entidad: 'PrecioCajeroServicio',
+          entidadId: fila.id,
+          despues: {
+            cajeroId,
+            servicioId,
+            servicioNombre: servicio.servicioNombre,
+            precioGyd: precio.toString(),
+            masivo: true,
+          },
+        });
+      }
+      return { servicioId, precioGyd: precio.toString(), cajerosAfectados: filas.length };
+    });
+  }
+
+  /**
    * Precio vigente de un servicio para un cajero, o null si no tiene ninguno
    * fijado. Un servicio sin precio para el cajero no es ofrecible: el cajero
    * no puede operar contra él.

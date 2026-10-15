@@ -305,6 +305,16 @@ export const api = {
     return request<PrecioCajeroHistorial[]>(`/admin/cajeros/${id}/precios/historial${qs({ servicioId })}`);
   },
 
+  fijarPrecioMasivo(
+    servicioId: string,
+    body: { precioGyd: string; cajeroIds: string[] },
+  ): Promise<{ servicioId: string; precioGyd: string; cajerosAfectados: number }> {
+    return request(`/admin/servicios/${servicioId}/precios`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
   // ─────────────────────────── COBROS ADMIN ───────────────────────────
 
   registrarCobro(body: RegistrarCobroAdminPayload): Promise<CobroAdminRespuesta> {

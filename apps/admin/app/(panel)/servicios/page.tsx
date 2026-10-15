@@ -2,10 +2,10 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Plus, Power, PowerOff, RefreshCw } from 'lucide-react';
+import { Loader2, Plus, Power, PowerOff, RefreshCw, Users } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
-import type { Caja, Corredor } from '@/lib/types';
+import type { Caja, Corredor, UsuarioPublico } from '@/lib/types';
 import { PageHeader, PageContent } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +52,13 @@ export default function ServiciosPage() {
   const [formaEntregaNombre, setFormaEntregaNombre] = React.useState('');
   const [servicio, setServicio] = React.useState('');
   const [servicioNombre, setServicioNombre] = React.useState('');
+
+  // Diálogo "Precio a cajeros": aplica un precio a varios cajeros de una vez.
+  const [servicioPrecio, setServicioPrecio] = React.useState<Corredor | null>(null);
+  const [cajerosLista, setCajerosLista] = React.useState<UsuarioPublico[] | null>(null);
+  const [seleccionados, setSeleccionados] = React.useState<Set<string>>(new Set());
+  const [precioMasivo, setPrecioMasivo] = React.useState('');
+  const [guardandoPrecio, setGuardandoPrecio] = React.useState(false);
 
   const cajasFisicas = React.useMemo(() => (cajas ?? []).filter((c) => !c.esMadre), [cajas]);
 
@@ -145,6 +152,57 @@ export default function ServiciosPage() {
     }
   }
 
+  async function abrirPrecioDialogo(s: Corredor) {
+    setServicioPrecio(s);
+    setPrecioMasivo('');
+    setSeleccionados(new Set());
+    setCajerosLista(null);
+    try {
+      const pagina = await api.listarUsuarios({ rol: 'cajero', limit: 200 });
+      setCajerosLista(pagina.items);
+      setSeleccionados(new Set(pagina.items.filter((u) => u.activo).map((u) => u.id)));
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'No se pudo cargar la lista de cajeros');
+      setServicioPrecio(null);
+    }
+  }
+
+  function toggleSeleccion(id: string) {
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function aplicarPrecioMasivo() {
+    if (!servicioPrecio) return;
+    if (!precioMasivo.trim()) {
+      toast.error('Escribe el precio en GYD por dólar');
+      return;
+    }
+    if (seleccionados.size === 0) {
+      toast.error('Selecciona al menos un cajero');
+      return;
+    }
+    setGuardandoPrecio(true);
+    try {
+      const r = await api.fijarPrecioMasivo(servicioPrecio.id, {
+        precioGyd: precioMasivo.trim(),
+        cajeroIds: [...seleccionados],
+      });
+      toast.success('Precio aplicado', {
+        description: `G$ ${precioMasivo} por dólar para ${r.cajerosAfectados} cajero(s) en ${servicioPrecio.servicioNombre}.`,
+      });
+      setServicioPrecio(null);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'No se pudo aplicar el precio');
+    } finally {
+      setGuardandoPrecio(false);
+    }
+  }
+
   async function toggleActivo(s: Corredor) {
     try {
       if (s.activo) {
@@ -202,7 +260,12 @@ export default function ServiciosPage() {
                 ) : (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {activos.map((s) => (
-                      <ServicioCard key={s.id} servicio={s} onToggle={() => toggleActivo(s)} />
+                      <ServicioCard
+                        key={s.id}
+                        servicio={s}
+                        onToggle={() => toggleActivo(s)}
+                        onPrecio={() => abrirPrecioDialogo(s)}
+                      />
                     ))}
                   </div>
                 )}
@@ -399,6 +462,102 @@ export default function ServiciosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Precio a varios cajeros de una vez. Sobreescribe el vigente de cada
+          seleccionado: inserta una fila nueva que pasa a ser la vigente. */}
+      <Dialog open={!!servicioPrecio} onOpenChange={(open) => !open && setServicioPrecio(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Precio a cajeros — {servicioPrecio?.servicioNombre}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="precio-masivo">Precio en GYD por dólar</Label>
+              <Input
+                id="precio-masivo"
+                value={precioMasivo}
+                onChange={(e) => setPrecioMasivo(e.target.value)}
+                placeholder="240"
+              />
+            </div>
+
+            {cajerosLista === null ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-tav-ink-3" />
+              </div>
+            ) : cajerosLista.length === 0 ? (
+              <p className="py-6 text-center text-sm text-tav-ink-3">No hay cajeros registrados</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-tav-ink">
+                    {seleccionados.size} de {cajerosLista.length} seleccionados
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[12px]"
+                      onClick={() => setSeleccionados(new Set(cajerosLista.map((u) => u.id)))}
+                    >
+                      Todos
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[12px]"
+                      onClick={() => setSeleccionados(new Set())}
+                    >
+                      Ninguno
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="max-h-64 overflow-y-auto rounded-lg border border-tav-line">
+                  {cajerosLista.map((u) => (
+                    <label
+                      key={u.id}
+                      className="flex cursor-pointer items-center gap-3 border-b border-tav-line-2 px-3 py-2.5 last:border-b-0 hover:bg-tav-bg"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-tav-blue"
+                        checked={seleccionados.has(u.id)}
+                        onChange={() => toggleSeleccion(u.id)}
+                      />
+                      <span className="flex-1">
+                        <span className="block text-[13px] font-medium text-tav-ink">{u.nombre}</span>
+                        <span className="block text-[12px] text-tav-ink-3">{u.email}</span>
+                      </span>
+                      {!u.activo && <Badge variant="outline">Inactivo</Badge>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="rounded-lg bg-tav-gold-50 px-3 py-2 text-[12px] text-tav-gold-700">
+              Se sobreescribe el precio vigente de cada cajero seleccionado. Los cambios quedan
+              en el historial de cada cajero; las operaciones ya registradas no se alteran.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setServicioPrecio(null)} disabled={guardandoPrecio}>
+              Cancelar
+            </Button>
+            <Button onClick={aplicarPrecioMasivo} disabled={guardandoPrecio || seleccionados.size === 0}>
+              {guardandoPrecio && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+              Aplicar a {seleccionados.size} cajero{seleccionados.size === 1 ? '' : 's'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -406,9 +565,11 @@ export default function ServiciosPage() {
 function ServicioCard({
   servicio,
   onToggle,
+  onPrecio,
 }: {
   servicio: Corredor;
   onToggle: () => void;
+  onPrecio?: () => void;
 }) {
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-tav-line bg-tav-surface p-4 shadow-tav">
@@ -430,22 +591,29 @@ function ServicioCard({
         Caja: {servicio.caja?.nombre ?? '—'} · {servicio.caja?.moneda ?? servicio.moneda}
       </div>
 
-      <Button
-        variant={servicio.activo ? 'outline' : 'default'}
-        size="sm"
-        className="h-8"
-        onClick={onToggle}
-      >
-        {servicio.activo ? (
-          <>
-            <PowerOff className="mr-1.5 h-3.5 w-3.5" /> Desactivar
-          </>
-        ) : (
-          <>
-            <Power className="mr-1.5 h-3.5 w-3.5" /> Activar
-          </>
+      <div className="flex gap-2">
+        <Button
+          variant={servicio.activo ? 'outline' : 'default'}
+          size="sm"
+          className="h-8 flex-1"
+          onClick={onToggle}
+        >
+          {servicio.activo ? (
+            <>
+              <PowerOff className="mr-1.5 h-3.5 w-3.5" /> Desactivar
+            </>
+          ) : (
+            <>
+              <Power className="mr-1.5 h-3.5 w-3.5" /> Activar
+            </>
+          )}
+        </Button>
+        {onPrecio && (
+          <Button variant="default" size="sm" className="h-8 flex-1" onClick={onPrecio}>
+            <Users className="mr-1.5 h-3.5 w-3.5" /> Precio a cajeros
+          </Button>
         )}
-      </Button>
+      </div>
     </div>
   );
 }
